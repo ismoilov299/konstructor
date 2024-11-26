@@ -1,0 +1,39 @@
+<!--{% extends 'admin-wrap-lite-master/html/create_bot.html' %}-->
+
+<!--{% block content %}-->
+<!--<style>-->
+<!--    .hello {-->
+<!--        color:red-->
+<!--    }-->
+<!--</style>-->
+<!--<div id="custom-botSettingsModal" class="custom-modal">-->
+<!--        <div class="custom-modal-content">-->
+<!--            <span class="custom-close">&times;</span>-->
+<!--            <h2>Настройка вашего бота</h2>-->
+<!--            <form id="custom-botSettingsForm" action="{% url 'update_bot_settings' %}" method="post"-->
+<!--                  enctype="multipart/form-data">-->
+<!--                {% csrf_token %}-->
+<!--                {% for item in all_user_bot%}-->
+<!--                <label for="custom-botToken">Ваш токен</label>-->
+<!--                <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}">-->
+
+<!--                <label for="custom-module">Модуль заработка</label>-->
+<!--                <select id="custom-module" name="module">-->
+<!--        <option value="no_module" class="hello">Нет модуля</option>-->
+<!--        <option value="leo" {% if item.module == 'leo' %}selected{% endif %}>Дайвинчик</option>-->
+<!--        <option value="refs" {% if item.module == 'refs' %}selected{% endif %}>Реферальный бот</option>-->
+<!--        <option value="chat_gpt" {% if item.module == 'chat_gpt' %}selected{% endif %}>Chat-gpt бот</option>-->
+<!--        <option value="kino" {% if item.module == 'kino' %}selected{% endif %}>Кино бот</option>-->
+<!--        <option value="download" {% if item.module == 'download' %}selected{% endif %}>All save бот</option>-->
+<!--    </select>-->
+
+<!--                <div class="custom-button-group">-->
+<!--                    <button type="button" id="custom-archiveBtn" data-token="{{ item.token }}">Удалить</button>-->
+<!--                    <button type="button" id="custom-disableBtn">{% if item.bot_enable %}Выключить{% else %}Включить{% endif %}</button>-->
+<!--                    <button type="submit" id="custom-saveSettingsBtn">Сохранить настройки</button>-->
+<!--                </div>-->
+<!--                {% endfor %}-->
+<!--            </form>-->
+<!--        </div>-->
+<!--    </div>-->
+<!--{% endblock %}-->
