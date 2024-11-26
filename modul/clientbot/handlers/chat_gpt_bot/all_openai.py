@@ -1,6 +1,9 @@
-from openai import OpenAI
+import os
 
-client = OpenAI(api_key="sk-vSq3Jgfsyx_G4rHwe3mvHUniY0m2BvxUy0Itd9vD7JT3BlbkFJfk7dZkM-yJcvKHxknwZwzDmY0gOS-L3uYFUZ6cQ-EA")
+from openai import OpenAI
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.1,
