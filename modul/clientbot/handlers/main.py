@@ -1,4 +1,3 @@
-import logging
 from contextlib import suppress
 from datetime import datetime, timedelta
 import math
@@ -15,7 +14,6 @@ from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.handlers.bot import start_kino_bot
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
 from modul.clientbot.keyboards import inline_kb, reply_kb
-from modul.clientbot.shortcuts import increase_referral
 from modul.clientbot.utils.exceptions import UserNotFound
 # from modul.clientbot.utils.order import paginate_orders
 from modul import models
@@ -26,7 +24,6 @@ from modul.loader import client_bot_router, bot_session
 from aiogram.fsm.context import FSMContext
 import sys
 import traceback
-logger = logging.getLogger(__name__)
 
 from django.db import transaction
 from asgiref.sync import sync_to_async
@@ -38,11 +35,9 @@ from modul.models import UserTG
 @sync_to_async
 @transaction.atomic
 def save_user(u, bot: Bot, link=None, inviter=None):
-    logger.info(f"Saving user {u.id} with inviter {inviter}")
     bot = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
     user = models.UserTG.objects.filter(uid=u.id).first()
     current_ai_limit = 12
-
     if not user:
         user = models.UserTG.objects.create(
             uid=u.id,
@@ -56,24 +51,15 @@ def save_user(u, bot: Bot, link=None, inviter=None):
 
     client_user = models.ClientBotUser.objects.filter(uid=u.id, bot=bot).first()
     if client_user:
-        logger.info(f"User {u.id} already exists in ClientBotUser")
         return client_user
 
-    logger.info(f"Creating new ClientBotUser for {u.id} with inviter {inviter}")
     client_user = models.ClientBotUser.objects.create(
         uid=u.id,
         user=user,
         bot=bot,
-        inviter=inviter,  # Bu yerda inviter obyekti saqlanayapti
+        inviter=inviter,
         current_ai_limit=current_ai_limit
     )
-
-    # Inviter mavjud bo'lsa referral countni oshiramiz
-    if inviter:
-        inviter.referral_count = models.F('referral_count') + 1
-        inviter.save()
-        logger.info(f"Increased referral count for inviter {inviter.uid}")
-
     return client_user
 
 
@@ -113,74 +99,48 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     await message.answer(text, **kwargs)
 
 @sync_to_async
-def get_user(uid: int, bot: Bot = None):
-    """Get UserTG instance by uid"""
-    try:
-        user = UserTG.objects.filter(uid=uid).first()
-        if bot and user:
-            # Also get ClientBotUser if bot is provided
-            client_user = models.ClientBotUser.objects.filter(
-                uid=uid,
-                bot__token=bot.token
-            ).first()
-            return client_user
-        return user
-    except Exception as e:
-        print(f"Error in get_user: {str(e)}")
-        return None
+def get_user(uid: int, username: str, first_name: str = None, last_name: str = None):
+    user = UserTG.objects.get_or_create(uid=uid, username=username, first_name=first_name, last_name=last_name)
+    return user
 
 
 def start_bot_client():
     @client_bot_router.message(CommandStart())
+    @flags.rate_limit(key="on_start")
     async def on_start(message: Message, command: CommandObject, state: FSMContext, bot: Bot):
-        logger.info(f"Client bot start command from user: {message.from_user.id}")
-        try:
-            # Get or create user
-            info = await get_user(
-                uid=message.from_user.id,
-                username=message.from_user.username,
-                first_name=message.from_user.first_name if message.from_user.first_name else None,
-                last_name=message.from_user.last_name if message.from_user.last_name else None
-            )
+        print(message.from_user.id)
+        info = await get_user(uid=message.from_user.id, username=message.from_user.username,
+                              first_name=message.from_user.first_name if message.from_user.first_name else None,
+                              last_name=message.from_user.last_name if message.from_user.last_name else None)
+        await state.clear()
+        commands = await bot.get_my_commands()
+        bot_commands = [
+            BotCommand(command="/start", description="Меню"),
+        ]
+        print('command start')
+        if commands != bot_commands:
+            await bot.set_my_commands(bot_commands)
+        referral = command.args
+        uid = message.from_user.id
+        user = await shortcuts.get_user(uid, bot)
 
-            # Clear state
-            await state.clear()
-
-            # Set bot commands
-            commands = await bot.get_my_commands()
-            bot_commands = [
-                BotCommand(command="/start", description="Меню"),
-            ]
-
-            if commands != bot_commands:
-                await bot.set_my_commands(bot_commands)
-
-            # Handle referral
-            referral = command.args
-            uid = message.from_user.id
-            user = await get_user(uid, bot)
-
-            if not user:
-                if referral and referral.isdigit():
-                    inviter = await get_user(int(referral))
-                    if inviter:
-                        await increase_referral(inviter)
-                        with suppress(TelegramForbiddenError):
-                            user_link = html.link('реферал', f'tg://user?id={uid}')
-                            await bot.send_message(
-                                chat_id=referral,
-                                text=('new_referral').format(user_link=user_link)
+        if not user:
+            if referral and referral.isdigit():
+                inviter = await shortcuts.get_user(int(referral))
+                if inviter:
+                    await shortcuts.increase_referral(inviter)
+                    with suppress(TelegramForbiddenError):
+                        user_link = html.link('реферал', f'tg://user?id={uid}')
+                        await bot.send_message(
+                            chat_id=referral,
+                            text=('new_referral').format(
+                                user_link=user_link,
                             )
-                else:
-                    inviter = None
-                await save_user(u=message.from_user, inviter=inviter, bot=bot)
-
-            # Start main menu
-            await start(message, state, bot)
-
-        except Exception as e:
-            logger.error(f"Error in client bot start: {e}")
-            await message.answer("Произошла ошибка. Пожалуйста, попробуйте позже.")
+                        )
+            else:
+                inviter = None
+            await save_user(u=message.from_user, inviter=inviter, bot=bot)
+        await start(message, state, bot)
 
 
 @client_bot_router.message(CommandStart())
@@ -219,6 +179,107 @@ async def on_start(message: Message, command: CommandObject, state: FSMContext, 
             inviter = None
         await save_user(u=message.from_user, inviter=inviter, bot=bot)
     await start(message, state, bot)
+
+
+# @client_bot_router.message(text=__("🌍 Поменять язык"))
+# async def change_language(message: types.Message):
+#     user = await shortcuts.get_base_user(message.from_user.id)
+#     user.language_code = 'ru' if user.language_code == 'en' else 'en'
+#     await user.save()
+#     await message.answer(
+#         _("Вы поменяли язык на {lang}").format(lang=("Русский" if user.language_code == 'ru' else "English")))
+
+
+# @client_bot_router.message(text=__("💰 Баланс"))
+# @flags.rate_limit(key="balance")
+# async def balance_menu(message: Message):
+#     user = await shortcuts.get_user(message.from_user.id)
+#     await message.answer(_("💲 Ваш баланс: {balance}₽\n🏷 Ваш id: <code>{user_id}</code>").format(balance=user.balance,
+#                                                                                                 user_id=message.from_user.id),
+#                          reply_markup=inline_kb.balance_menu())
+
+
+# @client_bot_router.message(text=__("✨ Список наших ботов"))
+# @flags.rate_limit(key="our-bots")
+# async def balance_menu(message: Message):
+#     bot_db = await shortcuts.get_bot()
+#     owner = await bot_db.owner
+#     bots = await models.Bot.filter(owner=owner, unauthorized=False)
+#     text = _("✨ Список наших ботов:\n")
+#     for bot in bots:
+#         try:
+#             b = Bot(bot.token, bot_session)
+#             info = await b.get_me()
+#             text += f"🤖 @{bot.username} - {info.full_name}\n"
+#         except Exception as e:
+#             pass
+#     await message.answer(text)
+
+
+# @client_bot_router.message(text=__("📋 Мои заказы"))
+# @flags.rate_limit(key="user_orders")
+# async def user_orders(message: Message):
+#     await Bot.get_current().send_chat_action(message.from_user.id, "typing")
+#     try:
+#         text, reply_markup = await paginate_orders(message.from_user.id)
+#     except UserNotFound:
+#         await save_user(message.from_user)
+#         text, reply_markup = await paginate_orders(message.from_user.id)
+#     if text:
+#         await message.answer(text, reply_markup=reply_markup, disable_web_page_preview=True)
+#     else:
+#         await message.answer(_("⛔️ У вас еще нет заказов"))
+
+#
+# @client_bot_router.message(text=__("👤 Реферальная система"))
+# @flags.rate_limit(key="partners")
+# async def partners(message: Message):
+#     username = (await Bot.get_current().get_me()).username
+#     uid = message.from_user.id
+#     await message.answer(
+#         text=strings.PARTNERS_INFO.format(
+#             await shortcuts.referral_count(uid),
+#             await shortcuts.referral_balance(uid),
+#             username,
+#             uid
+#         ),
+#         reply_markup=inline_kb.transfer_keyboard()
+#     )
+
+
+# @client_bot_router.message(text=__("⭐️ Социальные сети"))
+# @flags.rate_limit(key='social_networks')
+# async def social_networks(message: Message):
+#     await message.answer(
+#         text=strings.CHOOSE_SOCIAL,
+#         reply_markup=await inline_kb.social_networks()
+#     )
+
+
+# @client_bot_router.message(text=__("👮‍♂️ Связаться с администратором"))
+# @client_bot_router.message(text=__("ℹ️ Информация"))
+# @flags.rate_limit(key="information")
+# async def information_menu(message: types.Message, bot: Bot):
+#     bot_obj = await shortcuts.get_bot()
+#     owner: models.MainBotUser = bot_obj.owner
+#     try:
+#         await message.answer(strings.INFO.format(username=f"@{bot_obj.username}"), reply_markup=inline_kb.info_menu(
+#             support=bot_obj.support or owner.uid,
+#             channel_link=bot_obj.news_channel
+#         ))
+#     except TelegramBadRequest as e:
+#         if "BUTTON_USER_INVALID" in e.message:
+#             await bot.send_message(owner.uid, _("⚠️ Измените ид поддержки бота. Текущий недействителен."))
+#         try:
+#             await message.answer(strings.INFO.format(username=f"@{bot_obj.username}"), reply_markup=inline_kb.info_menu(
+#                 support=owner.uid,
+#                 channel_link=bot_obj.news_channel
+#             ))
+#         except TelegramBadRequest:
+#             await bot.send_message(owner.uid, _("Неправильный хост URL. Пожалуйста, измените ссылку на канал"))
+#             await message.answer(strings.INFO.format(username=f"@{bot_obj.username}"), reply_markup=inline_kb.info_menu(
+#                 support=owner.uid,
+#             ))
 
 
 @client_bot_router.callback_query(MainMenuCallbackData.filter())

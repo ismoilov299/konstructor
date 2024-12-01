@@ -1,12 +1,10 @@
 import re
-from typing import Optional
-
 from aiogram import F, Bot
 from aiogram.filters import CommandStart, Filter
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, BotCommand, CallbackQuery, LabeledPrice
-from aiogram import Dispatcher
+
 from modul.clientbot import shortcuts
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in, payment_keyboard, main_menu_bt, cancel_in, \
     again_in, payment_amount_keyboard, greeting_in, link_in
@@ -14,7 +12,7 @@ from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link
-from modul.loader import client_bot_router, logger
+from modul.loader import client_bot_router
 
 
 async def check_channels(message):
@@ -51,67 +49,52 @@ async def payment(message, amount):
 async def start(message: Message, state: FSMContext, command: BotCommand = None):
     channels_checker = await check_channels(message)
     checker = await check_user(message.from_user.id)
-
-    # Foydalanuvchi uchun link yaratish funksiyasi
-    async def create_user_link(user_id: int) -> str:
-        new_link = await create_start_link(message.bot, str(user_id), encode=True)
-        return new_link[new_link.index("=") + 1:]
-
     if not channels_checker:
         if not checker:
-            link_for_db = await create_user_link(message.from_user.id)
+            new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+            link_for_db = new_link[new_link.index("=") + 1:]
             await add_user(message.from_user, link_for_db)
     else:
         if not checker:
-            link_for_db = await create_user_link(message.from_user.id)
+            new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+            link_for_db = new_link[new_link.index("=") + 1:]
+            print(link_for_db)
             await add_user(message.from_user, link_for_db)
 
         if command.args:
             if not checker:
-                await message.bot.send_message(
-                    chat_id=message.from_user.id,
-                    text="Добро пожаловать в анонимный чат!",
-                    reply_markup=await main_menu_bt()
-                )
-
+                new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+                link_for_db = new_link[new_link.index("=") + 1:]
+                await message.bot.send_message(chat_id=message.from_user.id, text="Добро пожаловать в анонимный чат!",
+                                               reply_markup=await main_menu_bt())
             link_user = await get_user_by_link(command.args)
             if link_user:
                 await add_link_statistic(link_user)
                 greeting = await get_greeting(link_user)
-                await message.bot.send_message(
-                    chat_id=message.from_user.id,
-                    text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>, который опубликовал "
-                         "эту ссылку.\n\n"
-                         "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-                         "получит ваше сообщение, но не будет знать от кого.\n\n"
-                         "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-                         "(кружки), а также стикеры.\n\n"
-                         "⚠️<b> Это полностью анонимно!</b>",
-                    reply_markup=await cancel_in(),
-                    parse_mode="html"
-                )
+                await message.bot.send_message(chat_id=message.from_user.id,
+                                               text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>, который опубликовал "
+                                                    "эту ссылку.\n\n"
+                                                    "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+                                                    "получит ваше сообщение, но не будет знать от кого.\n\n"
+                                                    "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+                                                    "(кружки), а также стикеры.\n\n"
+                                                    "⚠️<b> Это полностью анонимно!</b>", reply_markup=await cancel_in(),
+                                               parse_mode="html")
                 if greeting:
                     await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
                 await state.set_state(Links.send_st)
                 await state.set_data({"link_user": link_user})
-        else:
-            # Foydalanuvchining shaxsiy linkini olish
+        if not command.args:
             user_link = await get_user_link(message.from_user.id)
-            if not user_link:  # Agar link topilmasa
-                user_link = await create_user_link(message.from_user.id)
-                await update_user_link(message.from_user.id, user_link)
-
+            print(user_link)
             link = await create_start_link(message.bot, user_link)
-            await message.bot.send_message(
-                chat_id=message.from_user.id,
-                text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-                     f"Твоя личная ссылка:\n👉{link}\n\n"
-                     f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-                     f"других соц сетях, чтобы начать получать сообщения 💬",
-                parse_mode="html",
-                reply_markup=await main_menu_bt()
-            )
-
+            await message.bot.send_message(chat_id=message.from_user.id,
+                                           text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+                                                f"Твоя личная ссылка:\n👉{link}\n\n"
+                                                f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+                                                f"других соц сетях, чтобы начать получать сообщения 💬",
+                                           parse_mode="html",
+                                           reply_markup=await main_menu_bt())
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",
@@ -154,160 +137,107 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
                                      reply_markup=await main_menu_bt())
 
 
-
 @client_bot_router.callback_query(lambda call: "again_" in call.data)
 async def again(query: CallbackQuery, state: FSMContext):
-    try:
-        link_user = int(query.data.replace("again_", ""))
-        await query.bot.send_message(
-            chat_id=query.from_user.id,
-            text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>, который опубликовал "
-                 "эту ссылку.\n\n"
-                 "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-                 "получит ваше сообщение, но не будет знать от кого.\n\n"
-                 "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-                 "(кружки), а также стикеры.\n\n"
-                 "⚠️<b> Это полностью анонимно!</b>",
-            reply_markup=await cancel_in(),
-            parse_mode="html"
-        )
-        await state.set_state(Links.send_st)
-        await state.set_data({"link_user": link_user})
-    except Exception as e:
-        print(f"Again callback error: {e}")
-        await query.answer("Произошла ошибка при обработке запроса")
-
-
-async def send_anonymous_message(message: Message, receiver_id: int) -> Optional[Message]:
-    """Helper function to send anonymous message with proper formatting"""
-    try:
-        text1 = "<b>У тебя новое анонимное сообщение!</b>\n\n"
-        text2 = "↩️<i> Свайпни для ответа.</i>"
-        caption = message.caption or ""
-
-        if message.voice:
-            return await message.copy_to(
-                chat_id=receiver_id,
-                caption=text1 + text2,
-                parse_mode="html"
-            )
-        elif message.video_note or message.sticker:
-            # Для видеосообщений и стикеров отправляем отдельное текстовое сообщение
-            return await message.bot.send_message(
-                chat_id=receiver_id,
-                text=text1 + text2,
-                parse_mode="html"
-            )
-        elif message.video or message.photo or message.document:
-            return await message.copy_to(
-                chat_id=receiver_id,
-                caption=text1 + caption + "\n\n" + text2,
-                parse_mode="html"
-            )
-        elif message.text:
-            return await message.bot.send_message(
-                chat_id=receiver_id,
-                text=text1 + message.text + "\n\n" + text2,
-                parse_mode="html"
-            )
-        return None
-    except Exception as e:
-        logger.error(f"Error sending anonymous message: {e}", exc_info=True)
-        return None
+    link_user = int(query.data.replace("again_", ""))
+    await query.bot.send_message(chat_id=query.from_user.id,
+                                 text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>, который опубликовал "
+                                      "эту ссылку.\n\n"
+                                      "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+                                      "получит ваше сообщение, но не будет знать от кого.\n\n"
+                                      "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+                                      "(кружки), а также стикеры.\n\n"
+                                      "⚠️<b> Это полностью анонимно!</b>", reply_markup=await cancel_in(),
+                                 parse_mode="html")
+    await state.set_state(Links.send_st)
+    await state.set_data({"link_user": link_user})
 
 
 @client_bot_router.message(Links.send_st)
 async def anon_mes(message: Message, state: FSMContext):
-    """Handle anonymous message sending"""
+    get_link = await state.get_data()
+    receiver = get_link.get("link_user")
+    sender_message_id = message.message_id
+    text1 = "<b>У тебя новое анонимное сообщение!</b>\n\n"
+    text2 = "↩️<i> Свайпни для ответа.</i>"
+    caption = ""
+    if message.caption:
+        caption = message.caption + "\n\n"
     try:
-        # Проверяем тип контента
-        if message.content_type not in ['text', 'photo', 'video', 'voice', 'video_note', 'sticker', 'document']:
-            await message.answer(
-                "️️❗Ошибка. Неподдерживаемый формат сообщения",
-                reply_markup=await main_menu_bt()
-            )
+        if message.voice:
+            receiver_message = await message.bot.copy_message(chat_id=receiver, from_chat_id=message.from_user.id,
+                                                              message_id=message.message_id,
+                                                              caption="<b>У тебя новое анонимное сообщение!</b>\n\n"
+                                                                      "↩️<i>Свайпни для ответа.</i>",
+                                                              parse_mode="html")
+            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
+                                           reply_markup=await again_in(receiver))
+            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
+                                    sender_message_id=sender_message_id,
+                                    receiver_message_id=receiver_message.message_id)
             await state.clear()
-            return
-
-        # Получаем данные получателя
-        data = await state.get_data()
-        receiver = data.get("link_user")
-
-        if not receiver:
-            logger.error("Receiver ID not found in state data")
-            await message.answer(
-                "️️❗Ошибка. Получатель сообщения не найден",
-                reply_markup=await main_menu_bt()
-            )
+        elif message.video_note or message.sticker:
+            await message.bot.copy_message(chat_id=receiver, from_chat_id=message.from_user.id,
+                                           message_id=message.message_id)
+            receiver_message = await message.bot.send_message(chat_id=receiver,
+                                                              text="<b>У тебя новое анонимное сообщение!</b>\n\n"
+                                                                   "↩️<i>Свайпни для ответа.</i>", parse_mode="html")
+            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
+                                           reply_markup=await again_in(receiver))
+            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
+                                    sender_message_id=sender_message_id,
+                                    receiver_message_id=receiver_message.message_id)
             await state.clear()
-            return
-
-        # Отправляем анонимное сообщение
-        receiver_message = await send_anonymous_message(message, receiver)
-
-        if not receiver_message:
-            await message.answer(
-                "️️❗Ошибка при отправке сообщения. Пожалуйста, попробуйте позже",
-                reply_markup=await main_menu_bt()
-            )
+        elif message.video or message.photo or message.document:
+            receiver_message = await message.bot.copy_message(chat_id=receiver, from_chat_id=message.from_user.id,
+                                                              message_id=message.message_id,
+                                                              caption=text1 + caption + text2,
+                                                              parse_mode="html")
+            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
+                                           reply_markup=await again_in(receiver))
+            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
+                                    sender_message_id=sender_message_id,
+                                    receiver_message_id=receiver_message.message_id)
             await state.clear()
-            return
-
-        # Сохраняем информацию о сообщении
-        await add_messages_info(
-            sender_id=message.from_user.id,
-            receiver_id=receiver,
-            sender_message_id=message.message_id,
-            receiver_message_id=receiver_message.message_id
-        )
-
-        # Отправляем подтверждение
-        await message.answer(
-            "Сообщение отправлено, ожидайте ответ!",
-            reply_markup=await again_in(receiver)
-        )
-
-        await state.clear()
-
-    except Exception as e:
-        error_msg = f"Error in anon_mes: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-
-        await message.answer(
-            "️️❗Произошла ошибка при отправке сообщения. Пожалуйста, попробуйте позже",
-            reply_markup=await main_menu_bt()
-        )
+        elif message.text:
+            receiver_message = await message.bot.send_message(chat_id=receiver,
+                                                              text=text1 + message.text + "\n\n" + text2,
+                                                              parse_mode="html")
+            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
+                                           reply_markup=await again_in(receiver))
+            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
+                                    sender_message_id=sender_message_id,
+                                    receiver_message_id=receiver_message.message_id)
+            await state.clear()
+        else:
+            await message.bot.send_message(message.from_user.id, "️️❗Ошибка. Неподдерживаемый формат",
+                                           reply_markup=await main_menu_bt())
+            await state.clear()
+    except:
+        await message.bot.send_message(message.from_user.id, "️️❗Ошибка. Не удалось отправить сообщение",
+                                       reply_markup=await main_menu_bt())
         await state.clear()
 
 
 @client_bot_router.message(Links.change_greeting)
 async def change_greeting(message: Message, state: FSMContext):
-    try:
-        if not message.text:
-            await message.answer(
-                "Ошибка! 👋Приветствие может состоять только из символов и эмодзи",
-                reply_markup=await main_menu_bt()
-            )
-            await state.clear()
-            return
-
+    if message.text:
         new_greeting = "👋" + message.text
         if 4 < len(new_greeting) < 301:
-            await message.answer(
-                text=f"Отлично!\n\nВаше новое приветсвие: {new_greeting}",
-                reply_markup=await main_menu_bt()
-            )
-            change_greeting_user(message.from_user.id, new_greeting)
+            await message.bot.send_message(chat_id=message.from_user.id,
+                                           text="👋 Приветствие не может быть короче 5 и длиннее 300 символов.\n"
+                                                "Пожалуйста, попробуйте заново.", reply_markup=await main_menu_bt())
+            await state.clear()
         else:
-            await message.answer(
-                "👋 Приветствие не может быть короче 5 и длиннее 300 символов.\n"
-                "Пожалуйста, попробуйте заново.",
-                reply_markup=await main_menu_bt()
-            )
-        await state.clear()
-    except Exception as e:
-        print(f"Change greeting error: {e}")
-        await message.answer("Произошла ошибка при изменении приветствия", reply_markup=await main_menu_bt())
+            await message.bot.send_message(chat_id=message.from_user.id, text=f"Отлично!\n\n"
+                                                                              f"Ваше новое приветсвие: {new_greeting}",
+                                           reply_markup=await main_menu_bt())
+            change_greeting_user(message.from_user.id, new_greeting)
+            await state.clear()
+    else:
+        await message.bot.send_message(chat_id=message.from_user.id,
+                                       text="Ошибка! 👋Приветствие может состоять только из символов и эмодзи",
+                                       reply_markup=await main_menu_bt())
         await state.clear()
 
 

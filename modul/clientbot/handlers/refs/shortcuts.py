@@ -1,11 +1,7 @@
-import logging
-
 from asgiref.sync import sync_to_async
 from django.db.models import F, Sum
 from django.utils import timezone
-
-from modul import models
-from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot
+from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels
 
 
 @sync_to_async
@@ -34,68 +30,13 @@ def check_ban(tg_id):
     user = UserTG.objects.filter(uid=tg_id).first()
     return user.banned if user else False
 
-logger = logging.getLogger(__name__)
-
 
 @sync_to_async
-def get_user_info_db(tg_id: int, bot: Bot):  # bot parametrini qo'shamiz
-    try:
-        logger.info(f"Getting user info for user {tg_id}")
-
-        # bot token bo'yicha filter qo'shamiz
-        user = models.ClientBotUser.objects.select_related(
-            'user',
-            'inviter',
-            'inviter__user',
-            'bot'
-        ).get(
-            uid=tg_id,
-            bot__token=bot.token  # Joriy bot uchun filter
-        )
-
-        inviter_name = "Никто"
-        if user.inviter:
-            inviter_name = user.inviter.user.username or user.inviter.user.first_name or str(user.inviter.uid)
-
-        return [
-            user.user.username or user.user.first_name,
-            user.uid,
-            user.balance + user.referral_balance,
-            user.referral_count,
-            inviter_name
-        ]
-
-    except models.ClientBotUser.DoesNotExist:
-        logger.error(f"User {tg_id} not found for current bot")
-        return None
-    except models.ClientBotUser.MultipleObjectsReturned:
-        logger.error(f"Multiple users found for {tg_id}, using first one")
-        user = models.ClientBotUser.objects.select_related(
-            'user',
-            'inviter',
-            'inviter__user',
-            'bot'
-        ).filter(
-            uid=tg_id,
-            bot__token=bot.token
-        ).first()
-
-        if user:
-            inviter_name = "Никто"
-            if user.inviter:
-                inviter_name = user.inviter.user.username or user.inviter.user.first_name or str(user.inviter.uid)
-
-            return [
-                user.user.username or user.user.first_name,
-                user.uid,
-                user.balance + user.referral_balance,
-                user.referral_count,
-                inviter_name
-            ]
-        return None
-    except Exception as e:
-        logger.error(f"Error getting user info: {e}", exc_info=True)
-        return None
+def get_user_info_db(tg_id):
+    user = UserTG.objects.filter(uid=tg_id).first()
+    if user:
+        return [user.username, user.uid, user.balance, user.refs, user.invited, user.paid]
+    return None
 
 
 @sync_to_async

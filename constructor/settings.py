@@ -23,28 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-ar$$pdw25+#px0g++38=*+$u8yk!++v0uzplya3ribl432fol2'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-APPEND_SLASH = False
+DEBUG = False
 
-ALLOWED_HOSTS = ['*','84.252.74.138']
-
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
-
-CORS_ALLOWED_ORIGINS = [
-    "https://590a-213-230-118-68.ngrok-free.app",
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://590a-213-230-118-68.ngrok-free.app",
-]
-
-import asyncio
-try:
-    loop = asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -56,12 +37,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'modul',
-    'bot_api',
-    'corsheaders',
+    'bot_api'
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Eng yuqorida bo'lishi kerak
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -91,7 +70,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'constructor.wsgi.application'
-# CSRF_TRUSTED_ORIGINS = ['https://test.telier.uz']
+CSRF_TRUSTED_ORIGINS = ['https://test.telier.uz']
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
@@ -102,9 +81,6 @@ WSGI_APPLICATION = 'constructor.wsgi.application'
 #       'NAME': BASE_DIR / 'db.sqlite3',
 #   }
 #}
-
-
-
 
 DATABASES = {
       'default': {
@@ -185,12 +161,3 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-ASGI_APPLICATION = 'constructor.asgi.application'
-
-# Bot related settings
-BOT_SETTINGS = {
-    'webhook_max_connections': 100,
-    'webhook_timeout': 60,
-    'event_loop_policy': 'default'
-}
-

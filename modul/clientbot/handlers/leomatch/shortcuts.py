@@ -12,8 +12,7 @@ from modul.clientbot import shortcuts
 from modul.config import settings_conf
 from modul.loader import bot_session
 from asgiref.sync import sync_to_async
-from random import sample
-from typing import List
+
 
 @sync_to_async
 def get_client(uid: int):
@@ -38,12 +37,8 @@ async def get_leo(uid: int):
 
 
 @sync_to_async
-def filter_leos_sync(kwargs, age_range, sex, leo_me_id) -> List[LeoMatchModel]:
-    """
-    Filter and return random LeoMatch users
-    """
-    # Get base queryset
-    queryset = LeoMatchModel.objects.filter(
+def filter_leos_sync(kwargs, age_range, sex, leo_me_id):
+    return LeoMatchModel.objects.filter(
         blocked=False,
         age__range=age_range,
         search=True,
@@ -51,16 +46,7 @@ def filter_leos_sync(kwargs, age_range, sex, leo_me_id) -> List[LeoMatchModel]:
         **kwargs
     ).exclude(
         Q(which_search__in=[sex, SexEnum.ANY.value]) | Q(id=leo_me_id)
-    )
-
-    # Get all matching users
-    users = list(queryset)
-
-    # Return random sample if we have more than 50 users
-    if len(users) > 50:
-        return sample(users, 50)
-
-    return users
+    ).annotate(order=F('random')).order_by('order')[:50]
 
 @sync_to_async
 def get_user_uid_sync(leo):
@@ -68,29 +54,16 @@ def get_user_uid_sync(leo):
 
 
 async def get_leos_id(me: int):
-    """Get list of user IDs that match search criteria"""
     users_id = []
     leo_me = await get_leo(me)
-
-    if not leo_me:
-        return users_id
-
     kwargs = {}
     if leo_me.which_search != SexEnum.ANY.value:
         kwargs['sex'] = leo_me.which_search
-
     age_range = (leo_me.age - 3, leo_me.age + 3)
-
-    try:
-        leos = await filter_leos_sync(kwargs, age_range, leo_me.sex, leo_me.id)
-
-        for leo in leos:
-            user_uid = await get_user_uid_sync(leo)
-            users_id.append(user_uid)
-
-    except Exception as e:
-        print(f"Error in get_leos_id: {str(e)}")
-
+    leos = await filter_leos_sync(kwargs, age_range, leo_me.sex, leo_me.id)
+    for leo in leos:
+        user_uid = await get_user_uid_sync(leo)
+        users_id.append(user_uid)
     return users_id
 
 

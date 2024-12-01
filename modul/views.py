@@ -42,46 +42,52 @@ def index(request):
 
 def web_main(request):
     if request.user.is_authenticated:
-        try:
-            current_date = timezone.now().date()
-            first_day_of_current_month = current_date.replace(day=1)
+        current_date = timezone.now().date()
+        first_day_of_current_month = current_date.replace(day=1)
 
-            user_tg = request.user.tg_profile
-            user_data = UserTG.objects.filter(
-                id=user_tg.id,
-                created_at__lt=first_day_of_current_month
-            ).annotate(
-                month=TruncMonth('created_at')
-            ).values('month').annotate(
-                count=Count('id')
-            ).order_by('month')
+        # Получаем UserTG текущего пользователя
+        user_tg = request.user
+        print(user_tg)
+        user_data = UserTG.objects.filter(
+            id=user_tg.uid,
+            created_at__lt=first_day_of_current_month
+        ).annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(
+            count=Count('id')
+        ).order_by('month')
 
-            user_data_count = UserTG.objects.filter(
-                id=user_tg.id,
-                interaction_count__gt=1
-            ).annotate(
-                month=TruncMonth('created_at')
-            ).values('month').annotate(
-                count=Count('id')
-            ).order_by('month')
+        user_data_count = UserTG.objects.filter(
+            id=user_tg.uid,
+            interaction_count__gt=1
+        ).annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(
+            count=Count('id')
+        ).order_by('month')
 
-            formatted_user_data = [
-                {'month': item['month'].strftime('%Y-%m-%d'), 'count': item['count']}
-                for item in user_data
-            ]
-            formatted_user_data_count = [
-                {'month': item['month'].strftime('%Y-%m-%d'), 'count': item['count']}
-                for item in user_data_count
-            ]
-
-            context = {
-                'user_data': json.dumps(formatted_user_data),
-                'user_data_count': json.dumps(formatted_user_data_count),
+        # Форматируем данные для JavaScript
+        formatted_user_data = [
+            {
+                'month': item['month'].strftime('%Y-%m-%d'),
+                'count': item['count']
             }
-            return render(request, 'admin-wrap-lite-master/html/index.html', context)
-        except Exception as e:
-            logger.error(f"Error getting user data: {str(e)}")
-            # Show an error message to the user or handle the exception in another way
+            for item in user_data
+        ]
+        formatted_user_data_count = [
+            {
+                'month': item['month'].strftime('%Y-%m-%d'),
+                'count': item['count']
+            }
+            for item in user_data_count
+        ]
+
+        context = {
+            'user_data': json.dumps(formatted_user_data),
+            'user_data_count': json.dumps(formatted_user_data_count),
+        }
+
+        return render(request, 'admin-wrap-lite-master/html/index.html', context)
     return redirect('index')
 
 
@@ -140,20 +146,17 @@ def error_404(request):
 
 def get_bot_username(bot_token):
     url = f"https://api.telegram.org/bot{bot_token}/getMe"
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-            if data['ok']:
-                bot_username = data['result']['username']
-                return bot_username
-            else:
-                logger.error(f"Error getting bot username: {data['description']}")
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+        if data['ok']:
+            bot_username = data['result']['username']
+            return bot_username
         else:
-            logger.error(f"Failed to connect to Telegram API.")
-    except Exception as e:
-        logger.error(f"Error getting bot username: {str(e)}")
-    return None
+            print("Error:", data['description'])
+    else:
+        print("Failed to connect to Telegram API.")
 
 
 logger = logging.getLogger(__name__)
@@ -268,11 +271,28 @@ async def delete_webhook_async(token):
 @require_POST
 def toggle_bot(request):
     bot_token = request.POST.get('bot_token')
-    action = request.POST.get('action')  # 'on' or 'off'
+    action = request.POST.get('action')  # 'on' или 'off'
 
     bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
 
-    if action == 'off':
+    if action == 'on':
+        url = settings_conf.WEBHOOK_URL.format(token=bot_token)
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response = loop.run_until_complete(set_webhook_async(bot_token, url))
+            loop.close()
+
+            if response.get('ok'):
+                bot.bot_enable = True
+                bot.save()
+                return JsonResponse({'status': 'success', 'message': 'Бот включен', 'new_status': 'on'})
+            else:
+                return JsonResponse(
+                    {'status': 'error', 'message': f'Ошибка при включении бота: {response.get("description")}'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Ошибка при включении бота: {str(e)}'})
+    elif action == 'off':
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -282,15 +302,15 @@ def toggle_bot(request):
             if response.get('ok'):
                 bot.bot_enable = False
                 bot.save()
-                return JsonResponse({'status': 'success', 'message': 'Bot disabled', 'new_status': 'off'})
+                return JsonResponse({'status': 'success', 'message': 'Бот выключен', 'new_status': 'off'})
             else:
                 return JsonResponse(
-                    {'status': 'error', 'message': f'Error disabling bot: {response.get("description")}'})
+                    {'status': 'error', 'message': f'Ошибка при выключении бота: {response.get("description")}'})
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Error disabling bot: {str(e)}'})
-    # On action is handled in the original code
+            return JsonResponse({'status': 'error', 'message': f'Ошибка при выключении бота: {str(e)}'})
     else:
-        return JsonResponse({'status': 'error', 'message': 'Invalid action. Please try again'})
+        return JsonResponse({'status': 'error', 'message': 'Неверное действие. Попробуйте ещё раз'})
+
 
 @login_required
 @csrf_exempt

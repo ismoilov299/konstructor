@@ -48,7 +48,6 @@ class CustomUserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     uid = models.BigIntegerField(unique=True, null=True, default=random.randint(1000000000, 9999999999))
-    photo_url = models.URLField(max_length=255, null=True, blank=True)
     username = models.CharField(max_length=255, null=True, blank=True, unique=True)
     first_name = models.CharField(max_length=255, null=True, blank=True)
     last_name = models.CharField(max_length=255, null=True, blank=True)
@@ -120,7 +119,7 @@ class Bot(models.Model):
 
 class UserTG(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tg_profile',
-                               null=True, blank=True)
+                                null=True, blank=True)
     uid = models.BigIntegerField(unique=True)
     username = models.CharField(max_length=255, null=True, blank=True)
     first_name = models.CharField(max_length=255)
@@ -131,14 +130,14 @@ class UserTG(models.Model):
     invited = models.CharField(max_length=255, default="Никто")
     invited_id = models.IntegerField(null=True, default=None)
     banned = models.BooleanField(default=False)
-    last_interaction = models.DateTimeField(null=True, blank=True)
+    last_interaction = models.DateTimeField(null=True, blank=True, default=datetime.now(tz=utc))
     interaction_count = models.IntegerField(null=True, blank=True, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     user_link = models.CharField(unique=True, null=True, max_length=2056)
-    greeting = models.CharField(max_length=255, default="Добро пожаловать!", null=True)  # Qo'shilgan qator
+    greeting = models.CharField(default="Добро пожаловать!", max_length=255, null=True)
 
-    class Meta:
-        db_table = 'modul_usertg'
+    def __str__(self):
+        return self.username or f'User {self.uid}'
 
 
 class ClientBotUser(models.Model):

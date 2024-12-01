@@ -1,11 +1,6 @@
 from asgiref.sync import sync_to_async
 from django.db.models import Count, F
 from django.utils import timezone
-
-from bot_api import models
-import logging
-
-logger = logging.getLogger(__name__)
 from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today
 import pytz
 
@@ -88,19 +83,15 @@ def change_link_db(uid, new_link):
 
 @sync_to_async
 def add_rating_today(uid):
-    try:
-        current_date = timezone.now().astimezone(moscow_timezone).date()
-        user = UserTG.objects.get(uid=uid)
-
-        Rating_today.objects.update_or_create(
-            user=user,
-            reg_date=current_date,
-            defaults={'amount': models.F('amount') + 1}
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Error in add_rating_today: {str(e)}", exc_info=True)
-        return False
+    actual_date = timezone.now().astimezone(moscow_timezone).date()
+    rating, created = Rating_today.objects.get_or_create(
+        user_id=uid,
+        reg_date=actual_date,
+        defaults={'amount': 1}
+    )
+    if not created:
+        rating.amount = F('amount') + 1
+        rating.save()
 
 
 @sync_to_async
@@ -116,29 +107,12 @@ def add_rating_overall(uid):
 
 @sync_to_async
 def add_link_statistic(uid):
-    try:
-        current_date = timezone.now().astimezone(moscow_timezone).date()
-
-        # Get or create user instance first
-        user = UserTG.objects.get(uid=uid)
-
-        # Create link statistic with proper foreign key reference
-        Link_statistic.objects.create(
-            user=user,  # Use user instance instead of just ID
-            reg_date=current_date
-        )
-
-        # Add ratings
-        add_rating_today(uid)
-        add_rating_overall(uid)
-        return True
-
-    except UserTG.DoesNotExist:
-        logger.error(f"User {uid} not found when adding link statistic")
-        return False
-    except Exception as e:
-        logger.error(f"Error in add_link_statistic: {str(e)}", exc_info=True)
-        return False
+    Link_statistic.objects.create(
+        user_id=uid,
+        reg_date=timezone.now().astimezone(moscow_timezone).date()
+    )
+    add_rating_today(uid)
+    add_rating_overall(uid)
 
 
 @sync_to_async

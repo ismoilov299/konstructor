@@ -6,27 +6,26 @@ from contextlib import suppress
 from io import BytesIO
 
 from aiogram import types, F, Bot, html
-# from aiogram.dispatcher.fsm.context import FSMContext
+from aiogram.dispatcher.fsm.context import FSMContext
 from aiogram.exceptions import (
     TelegramBadRequest,
     TelegramForbiddenError,
     TelegramNotFound,
     TelegramRetryAfter
 )
-from aiogram.fsm.context import FSMContext
 from aiogram.utils.i18n import gettext as _
 
 from tortoise.exceptions import IntegrityError
 
-from modul.clientbot import strings, shortcuts
-from modul.clientbot.data.callback_datas import (
+from clientbot import strings, shortcuts
+from clientbot.data.callback_datas import (
     AdminPanelCallbackData,
     BroadcastCallbackData,
     MandatorySubscription,
     Promocodes,
     Switch,
 )
-from modul.clientbot.data.states import (
+from clientbot.data.states import (
     BroadcastState,
     ChangePhoto,
     ChangeChannelLink,
@@ -36,17 +35,17 @@ from modul.clientbot.data.states import (
     AddSubscriptionChat,
     PromocodeState
 )
-from modul.clientbot.filters.IsAdmin import IsAdminFilter
-from modul.clientbot.handlers.horoscope.functs.statistic import get_horoscope_data, get_statistic
-from modul.clientbot.keyboards import inline_kb, reply_kb
-from modul.config import settings, scheduler
-from modul.clientbot.handlers.leomatch.shortcuts import get_analitics
-from modul import models
-from modul.models import GPTTypeEnum, MainBotUser, PromocodesModel
-from modul.clientbot.handlers.anon.handlers.statistic import get_anon_analitics, get_anon_data
+from clientbot.filters.IsAdmin import IsAdminFilter
+from clientbot.handlers.horoscope.functs.statistic import get_horoscope_data, get_statistic
+from clientbot.keyboards import inline_kb, reply_kb
+from config import settings, scheduler
+from clientbot.handlers.leomatch.shortcuts import get_analitics
+from db import models
+from db.models import GPTTypeEnum, MainBotUser, PromocodesModel
+from clientbot.handlers.anon.handlers.statistic import get_anon_analitics, get_anon_data
 from general.inline_kbrd import percents
-from modul.loader import client_bot_router
-# from modul.shortcuts import add_broadcast, collect_and_run_broadcast
+from loader import client_bot_router
+from mainbot.shortcuts import add_broadcast, collect_and_run_broadcast
 from utils.analitics import AnaliticData, AnaliticInfoData, gen_data, make_analitic, make_analitic_graph
 from utils.functions import get_call_method, check_url
 from tortoise.functions import Sum

@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from contextlib import suppress
 
 from aiogram import Bot, F, html
@@ -24,13 +23,10 @@ from modul.clientbot.handlers.kino_bot.api import *
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
-from modul.clientbot.handlers.refs.handlers.bot import start_ref, banned, check_channels
-from modul.clientbot.handlers.refs.shortcuts import get_actual_price
+from modul.clientbot.handlers.refs.handlers.bot import start_ref
 from modul.clientbot.keyboards import reply_kb
-from modul.clientbot.shortcuts import get_all_users, get_users_count, get_all_users_list, increase_referral, \
-    get_user_info_db
+from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
-logger = logging.getLogger(__name__)
 
 
 class SearchFilmForm(StatesGroup):
@@ -162,37 +158,20 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 
 
 @client_bot_router.message(SendMessagesForm.message, F.content_type.in_({'any'}))
-async def admin_send_message_msg(message: Message, state: FSMContext, bot: Bot):
-    try:
-        await state.clear()
-        # Foydalanuvchilar listini olamiz
-        users = await get_all_users_list(bot)
+async def admin_send_message_msg(message: Message, state: FSMContext):
+    await state.clear()
 
-        if users:
-            await asyncio.create_task(send_message(message, users))
-            await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
-        else:
-            await message.answer("Пользователи не найдены")
+    users = await get_all_users()
 
-    except Exception as e:
-        logger.error(f"Error in admin_send_message_msg: {e}", exc_info=True)
-        await message.answer("Произошла ошибка при начале рассылки")
+    await asyncio.create_task(send_message(message, users))
+
+    await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
 
 
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
-async def admin_get_stats(call: CallbackQuery, bot: Bot):
-    try:
-        # Foydalanuvchilar sonini olamiz
-        users_count = await get_users_count(bot)
-        logger.info(f"Got users count: {users_count}")
-
-        await call.message.edit_text(
-            f'<b>Количество пользователей в боте:</b> {users_count}',
-            reply_markup=admin_kb
-        )
-    except Exception as e:
-        logger.error(f"Error in admin_get_stats: {e}", exc_info=True)
-        await call.message.edit_text("Произошла ошибка при получении статистики")
+async def admin_get_stats(call: CallbackQuery):
+    users = await get_all_users()
+    await call.message.edit_text(f'<b>Количество пользователей в боте:</b> {len(users)}', reply_markup=admin_kb)
 
 
 @client_bot_router.callback_query(F.data == 'cancel', StateFilter('*'))
@@ -239,7 +218,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     sub_status = await check_subs(message.from_user.id, bot)
     if not sub_status:
-        kb = await get_subs_kb(bot)  # bot parametrini qo'shdik
+        kb = await get_subs_kb()
         await message.answer('<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>', reply_markup=kb)
         return
     await state.set_state(SearchFilmForm.query)
@@ -257,50 +236,32 @@ def get_user(uid: int, username: str, first_name: str = None, last_name: str = N
 @sync_to_async
 @transaction.atomic
 def save_user(u, bot: Bot, link=None, inviter=None):
-    logger.info(f"Saving user {u.id} with inviter {inviter}")
-
-    try:
-        # Get or create Bot instance
-        bot_instance = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
-
-        # Get or create UserTG
-        user, created = models.UserTG.objects.get_or_create(
+    bot = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
+    user = models.UserTG.objects.filter(uid=u.id).first()
+    current_ai_limit = 12
+    if not user:
+        user = models.UserTG.objects.create(
             uid=u.id,
-            defaults={
-                'username': u.username,
-                'first_name': u.first_name,
-                'last_name': u.last_name,
-                'user_link': link
-            }
+            username=u.username,
+            first_name=u.first_name,
+            last_name=u.last_name,
+            user_link=link
         )
+    else:
+        current_ai_limit = 0
 
-        # Check if ClientBotUser exists
-        client_user = models.ClientBotUser.objects.filter(uid=u.id, bot=bot_instance).first()
-
-        if not client_user:
-            # Create new ClientBotUser with inviter if provided
-            client_user = models.ClientBotUser.objects.create(
-                uid=u.id,
-                user=user,
-                bot=bot_instance,
-                inviter=inviter,
-                current_ai_limit=12 if not user else 0,
-                balance=0,
-                referral_balance=0
-            )
-
-            # If there's an inviter and they haven't gotten the bonus yet
-            if inviter and not inviter.inviter_got_bonus:
-                inviter.referral_count += 1
-                inviter.inviter_got_bonus = True
-                inviter.save()
-                logger.info(f"Updated inviter {inviter.uid} referral count to {inviter.referral_count}")
-
+    client_user = models.ClientBotUser.objects.filter(uid=u.id, bot=bot).first()
+    if client_user:
         return client_user
 
-    except Exception as e:
-        logger.error(f"Error in save_user: {e}", exc_info=True)
-        raise
+    client_user = models.ClientBotUser.objects.create(
+        uid=u.id,
+        user=user,
+        bot=bot,
+        inviter=inviter,
+        current_ai_limit=current_ai_limit
+    )
+    return client_user
 
 
 class NonChatGptFilter(Filter):
@@ -310,132 +271,82 @@ class NonChatGptFilter(Filter):
 
 
 async def start(message: Message, state: FSMContext, bot: Bot):
-    try:
-        logger.info(f"Starting start function for user {message.from_user.id}")
-        bot_db = await shortcuts.get_bot(bot)
-        uid = message.from_user.id
-        text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
-        kwargs = {}
+    bot_db = await shortcuts.get_bot(bot)
+    uid = message.from_user.id
+    text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
+    kwargs = {}
+    if shortcuts.have_one_module(bot_db, "download"):
+        builder = ReplyKeyboardBuilder()
+        builder.button(text='💸Заработать')
+        text = ("🤖 Привет, {full_name}! Я бот-загрузчик.\r\n\r\n"
+                "Я могу скачать фото/видео/аудио/файлы/архивы с *Youtube, Instagram, TikTok, Facebook, SoundCloud, Vimeo, Вконтакте, Twitter и 1000+ аудио/видео/файловых хостингов*. Просто пришли мне URL на публикацию с медиа или прямую ссылку на файл.").format(
+            full_name=message.from_user.full_name)
+        await state.set_state(Download.download)
+        kwargs['parse_mode'] = "Markdown"
+        kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
+    elif shortcuts.have_one_module(bot_db, "refs"):
+        await start_ref(message)
+    elif shortcuts.have_one_module(bot_db, "kino"):
+        await start_kino_bot(message, state)
+        kwargs['parse_mode'] = "HTML"
+    elif shortcuts.have_one_module(bot_db, "chatgpt"):
+        builder = InlineKeyboardBuilder()
+        builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
+        builder.button(text='☁ Чат с GPT-3.5', callback_data='chat_3')
+        builder.button(text='🆘 Помощь', callback_data='helper')
+        builder.button(text='⚙️ Настройки', callback_data='settings')
+        builder.button(text='💸Заработать', callback_data='ref')
+        builder.adjust(2, 1, 1, 1, 1, 1, 2)
+        result = await get_info_db(uid)
+        print(result)
+        text = f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}'
+        kwargs['reply_markup'] = builder.as_markup()
+    else:
+        kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
+    await message.answer(text, **kwargs)
 
-        # Modullarni tekshiramiz
-        modules = []
-        for module in ["download", "refs", "kino", "chatgpt"]:
-            if shortcuts.have_one_module(bot_db, module):
-                modules.append(module)
-                logger.info(f"Module {module} is enabled for bot {bot_db.token}")
-
-        logger.info(f"Active modules for user {uid}: {modules}")
-
-        if "kino" in modules:
-            logger.info(f"Starting kino module for user {uid}")
-            await start_kino_bot(message, state, bot)
-
-        if "refs" in modules:
-            logger.info(f"Starting refs module for user {uid}")
-            link = await create_start_link(message.bot, str(message.from_user.id), encode=False)
-            price = await get_actual_price()
-            await message.answer(
-                f"👥  Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-                f"🔗 Ваша ссылка для приглашений:\n {link}"
-            )
-
-        elif "download" in modules:
-            builder = ReplyKeyboardBuilder()
-            builder.button(text='💸Заработать')
-            text = ("🤖 Привет, {full_name}! Я бот-загрузчик...").format(
-                full_name=message.from_user.full_name)
-            await state.set_state(Download.download)
-            kwargs.update({
-                'parse_mode': "Markdown",
-                'reply_markup': builder.as_markup(resize_keyboard=True)
-            })
-            await message.answer(text, **kwargs)
-
-        elif "chatgpt" in modules:
-            builder = InlineKeyboardBuilder()
-            builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
-            builder.button(text='☁ Чат с GPT-3.5', callback_data='chat_3')
-            builder.button(text='🆘 Помощь', callback_data='helper')
-            builder.button(text='⚙️ Настройки', callback_data='settings')
-            builder.button(text='💸Заработать', callback_data='ref')
-            builder.adjust(2, 1, 1, 1, 1, 1, 2)
-
-            user_info = await get_user_info_db(uid, bot)
-            logger.info(f"Got user info for {uid}: {user_info}")
-
-            if user_info:
-                text = f'Привет {message.from_user.username}\nВаш баланс - {user_info[2]}'
-            kwargs['reply_markup'] = builder.as_markup()
-            await message.answer(text, **kwargs)
-
-        else:
-            kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
-            await message.answer(text, **kwargs)
-
-    except Exception as e:
-        logger.error(f"Error in start: {e}", exc_info=True)
-        await message.answer("Произошла ошибка. Попробуйте позже.")
-
+# print(client_bot_router.message.handlers)
+# client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства")
 
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
-    try:
-        logger.info(f"Starting bot for user {message.from_user.id}")
-        bot_db = await shortcuts.get_bot(bot)
+    bot_db = await shortcuts.get_bot(bot)
 
-        referral = command.args
-        uid = message.from_user.id
-        user = await shortcuts.get_user(uid=uid, bot=bot)
-        logger.info(f"Current user data: {user}")
+    info = await get_user(uid=message.from_user.id, username=message.from_user.username,
+                          first_name=message.from_user.first_name if message.from_user.first_name else None,
+                          last_name=message.from_user.last_name if message.from_user.last_name else None)
+    await state.clear()
+    commands = await bot.get_my_commands()
+    bot_commands = [
+        BotCommand(command="/start", description="Меню"),
+    ]
+    print('command start')
+    if commands != bot_commands:
+        await bot.set_my_commands(bot_commands)
+    referral = command.args
+    uid = message.from_user.id
+    user = await shortcuts.get_user(uid, bot)
 
-        if not user:
-            inviter = None
-            if referral and referral.isdigit():
-                inviter = await shortcuts.get_user(uid=int(referral), bot=bot)
-                logger.info(f"Found inviter: {inviter} for referral {referral}")
-
-                if inviter:
-                    logger.info(
-                        f"Inviter before update - balance: {inviter.referral_balance}, count: {inviter.referral_count}")
-
-                    # Создаём нового пользователя
-                    new_user = await save_user(
-                        u=message.from_user,
-                        inviter=inviter,
-                        bot=bot,
-                        link=None
+    if not user:
+        if referral and referral.isdigit():
+            inviter = await shortcuts.get_user(int(referral))
+            if inviter:
+                await shortcuts.increase_referral(inviter)
+                with suppress(TelegramForbiddenError):
+                    user_link = html.link('реферал', f'tg://user?id={uid}')
+                    await bot.send_message(
+                        chat_id=referral,
+                        text=('new_referral').format(
+                            user_link=user_link,
+                        )
                     )
-                    logger.info(f"Created new user: {new_user}")
-
-                    # Добавляем бонус инвайтеру
-                    success = await increase_referral(inviter)
-                    logger.info(f"Increase referral result: {success}")
-
-                    # Проверяем обновлённые данные
-                    updated_inviter = await shortcuts.get_user(uid=int(referral), bot=bot)
-                    logger.info(
-                        f"Inviter after update - balance: {updated_inviter.referral_balance}, count: {updated_inviter.referral_count}")
-
-                    if success:
-                        with suppress(TelegramForbiddenError):
-                            user_link = html.link('реферал', f'tg://user?id={uid}')
-                            await bot.send_message(
-                                chat_id=referral,
-                                text=f"🎉 Вы пригласили нового друга! {user_link}\nВы получили бонус 4.0₽!",
-                                parse_mode='HTML'
-                            )
-                    else:
-                        logger.error(f"Failed to add referral bonus for inviter {inviter.uid}")
-
-            if not inviter:
-                logger.info(f"Creating new user without inviter: {uid}")
-                await save_user(u=message.from_user, bot=bot)
-
-        await start(message, state, bot)
-
-    except Exception as e:
-        logger.error(f"Error in start_on: {e}", exc_info=True)
-        await message.answer("Произошла ошибка. Попробуйте позже.")
+        else:
+            inviter = None
+        new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+        link_for_db = new_link[new_link.index("=") + 1:]
+        await save_user(u=message.from_user, inviter=inviter, bot=bot, link=link_for_db)
+    await start(message, state, bot)
+    return
 
 
 @client_bot_router.callback_query(F.data == 'start_search')

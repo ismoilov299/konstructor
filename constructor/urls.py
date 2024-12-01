@@ -9,7 +9,7 @@ urlpatterns = [
     path('', include('modul.urls')),
 #    path('bot/', include('bot_api.urls'))
 ]
-#
+
 #if settings.DEBUG:
 #    import debug_toolbar
 #    urlpatterns = [

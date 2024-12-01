@@ -1,12 +1,11 @@
-# bot_api/apps.py
 from django.apps import AppConfig
-import asyncio
+from django.core.signals import request_started
+
 
 class BotApiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'bot_api'
 
-    def ready(self):
-        if asyncio._get_running_loop() is None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+    def ready(self, ):
+        from . import views
+        request_started.connect(views.startup_signal)

@@ -1,9 +1,6 @@
-import os
-
 from openai import OpenAI
-OPENAI_API_KEY = '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'
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key="sk-vSq3Jgfsyx_G4rHwe3mvHUniY0m2BvxUy0Itd9vD7JT3BlbkFJfk7dZkM-yJcvKHxknwZwzDmY0gOS-L3uYFUZ6cQ-EA")
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.1,
