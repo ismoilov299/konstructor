@@ -126,23 +126,36 @@ def shutdown():
     logger.info("Application shutdown completed")
 
 
+
 async def set_webhook():
     logger.info("Setting webhook")
     try:
-        # Ensure webhook URL ends with slash
         webhook_url = settings_conf.WEBHOOK_URL.format(token=main_bot.token)
-        if not webhook_url.endswith('/'):
-            webhook_url += '/'
-
         webhook_info = await main_bot.get_webhook_info()
         if webhook_info.url != webhook_url:
             await main_bot.set_webhook(webhook_url, allowed_updates=settings_conf.USED_UPDATE_TYPES)
             logger.info(f"Webhook set to {webhook_url}")
-        else:
-            logger.info("Webhook already set correctly")
-    except RuntimeError as e:
-        if str(e) == "Event loop is closed":
-            logger.warning("Event loop was closed, creating a new one")
-            asyncio.set_event_loop(asyncio.new_event_loop())
-        else:
-            logger.error(f"Error setting webhook: {e}", exc_info=True)
+
+    except:
+        pass
+
+# async def set_webhook():
+#     logger.info("Setting webhook")
+#     try:
+#         # Ensure webhook URL ends with slash
+#         webhook_url = settings_conf.WEBHOOK_URL.format(token=main_bot.token)
+#         if not webhook_url.endswith('/'):
+#             webhook_url += '/'
+#
+#         webhook_info = await main_bot.get_webhook_info()
+#         if webhook_info.url != webhook_url:
+#             await main_bot.set_webhook(webhook_url, allowed_updates=settings_conf.USED_UPDATE_TYPES)
+#             logger.info(f"Webhook set to {webhook_url}")
+#         else:
+#             logger.info("Webhook already set correctly")
+#     except RuntimeError as e:
+#         if str(e) == "Event loop is closed":
+#             logger.warning("Event loop was closed, creating a new one")
+#             asyncio.set_event_loop(asyncio.new_event_loop())
+#         else:
+#             logger.error(f"Error setting webhook: {e}", exc_info=True)
