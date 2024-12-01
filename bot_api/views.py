@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 def setup_routers():
-    logger.info("Setting up routers")
+    logger.info("Setting up routers")#
     if not hasattr(dp, 'routers_setup'):
         chat_gpt_bot_handlers()
         start_bot_client()
