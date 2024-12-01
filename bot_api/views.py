@@ -57,10 +57,12 @@ def telegram_webhook(request, token):
     logger.info(f"Received webhook for token: {token}")
     logger.info(f"Request path: {request.path}")
     logger.info(f"Request method: {request.method}")
+    logger.info(f"Request body: {request.body.decode()}")
 
     if request.method == 'POST':
         try:
             bot = async_to_sync(get_bot_by_token)(token)
+            logger.info(f"Bot object: {bot}")
             if token == settings_conf.BOT_TOKEN or bot:
                 update = Update.parse_raw(request.body.decode())
                 async_to_sync(feed_update)(token, update.dict())

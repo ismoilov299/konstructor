@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.conf.urls.static import static
 
 urlpatterns = [
-    path('bot', include('bot_api.urls')),
+    path('bot/', include('bot_api.urls')),
     path('admin/', admin.site.urls),
     path('', include('modul.urls')),
 #    path('bot/', include('bot_api.urls'))
