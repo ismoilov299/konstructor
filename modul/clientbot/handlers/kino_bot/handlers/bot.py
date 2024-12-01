@@ -14,7 +14,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from django.db import transaction
 from django.utils import timezone
 
-from bot_api.views import logger
+
 from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
@@ -30,6 +30,12 @@ from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
 
+import logging
+import time
+
+# Настройка логгера
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class SearchFilmForm(StatesGroup):
     query = State()
