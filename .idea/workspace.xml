@@ -6,18 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="703cb133-094c-4fbb-b47c-2aee762a8e0e" name="Changes" comment="qwe">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot_api/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot_api/urls.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot_api/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot_api/views.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/constructor/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/constructor/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/constructor/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/constructor/urls.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/bot/main_bot/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/bot/main_bot/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/annon_bot/handlers/bot.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/annon_bot/handlers/bot.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/annon_bot/userservice.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/annon_bot/userservice.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/chat_gpt_bot/all_openai.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/chat_gpt_bot/all_openai.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/profile.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/profile.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/registration.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/registration.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/start.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/start.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modul/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/config.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

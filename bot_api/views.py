@@ -53,21 +53,28 @@ def setup_routers():
 
 @csrf_exempt
 def telegram_webhook(request, token):
-    start_time = time.time()
-    logger.info(f"Received webhook for token: {token}")
+    """Handle incoming webhook updates"""
     if request.method == 'POST':
-        bot = async_to_sync(get_bot_by_token)(token)
-        if token == settings_conf.BOT_TOKEN or bot:
+        try:
             update = Update.parse_raw(request.body.decode())
-            async_to_sync(feed_update)(token, update.dict())
-            end_time = time.time()
-            logger.info(f"Webhook processed in {end_time - start_time:.4f} seconds")
-            return HttpResponse(status=202)
-        logger.warning(f"Unauthorized webhook attempt for token: {token}")
-        return HttpResponse(status=401)
-    logger.warning(f"Invalid method for webhook: {request.method}")
-    return HttpResponse(status=405)
 
+            async def process_update():
+                try:
+                    bot = main_bot if token == settings_conf.BOT_TOKEN else bot_session.get_bot(token)
+                    async with bot.context() as bot:
+                        await dp.feed_raw_update(bot, update.dict())
+                        return True
+                except Exception as e:
+                    logger.error(f"Error processing bot update: {e}", exc_info=True)
+                    return False
+
+            success = bot_session.run_async(process_update())
+            return HttpResponse(status=200 if success else 500)
+
+        except Exception as e:
+            logger.error(f"Webhook handler error: {e}", exc_info=True)
+            return HttpResponse(status=500)
+    return HttpResponse(status=405)
 
 async def feed_update(token, update):
     start_time = time.time()
@@ -83,9 +90,23 @@ async def feed_update(token, update):
 
 @receiver(request_started)
 def startup_signal(sender, **kwargs):
-    logger.info("Application startup signal received")
-    async_to_sync(startup)()
+    """Handle application startup"""
+    logger.info("Starting bot application...")
 
+    async def startup():
+        try:
+            setup_routers()
+            await set_webhook()
+            logger.info("Bot startup completed successfully")
+        except Exception as e:
+            logger.error(f"Bot startup error: {e}")
+            raise
+
+    try:
+        # Use run_async instead of run_until_complete
+        bot_session.run_async(startup())
+    except Exception as e:
+        logger.error(f"Failed to start bot application: {e}")
 
 async def startup():
     logger.info("Application startup initiated")
