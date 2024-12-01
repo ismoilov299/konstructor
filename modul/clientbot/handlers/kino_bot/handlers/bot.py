@@ -30,12 +30,6 @@ from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
 
-import logging
-import time
-
-# Настройка логгера
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 class SearchFilmForm(StatesGroup):
     query = State()
@@ -517,71 +511,95 @@ from aiogram.types import URLInputFile, FSInputFile
 import yt_dlp
 import os
 
+import yt_dlp
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 async def youtube_download_handler(message: Message, bot: Bot):
-    await message.answer('📥 Скачиваю...')
-
-    if not message.text:
-        await message.answer('Пришлите ссылку на видео')
-        return
-
-    if 'streaming' in message.text:
-        await message.answer('Извините, но я не могу скачать стримы')
-        return
-
-    me = await bot.get_me()
-    await shortcuts.add_to_analitic_data(me.username, message.text)
-
-    if 'instagram' in message.text:
-        new_url = message.text.replace('www.', 'dd')
-        await message.answer(
-            f'{new_url}\r\nВидео скачано через бота @{me.username}'
-        )
-        return
-
-    url = message.text
-    await bot.send_chat_action(message.chat.id, "upload_video")
-
-    ydl_opts = {
-        'format': 'best[ext=mp4]/best',  # Faqat eng yaxshi formatni tanlash
-        'noplaylist': True,
-        'outtmpl': '%(title)s.%(ext)s',
-        'quiet': True,
-        'no_warnings': True
-    }
-
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                # Video ma'lumotlarini olish
+        await message.answer('📥 Скачиваю...')
+
+        if not message.text:
+            await message.answer('Пришлите ссылку на видео')
+            return
+
+        if 'streaming' in message.text:
+            await message.answer('Извините, но я не могу скачать стримы')
+            return
+
+        me = await bot.get_me()
+
+        # Instagram links handler
+        if 'instagram' in message.text:
+            new_url = message.text.replace('www.', 'dd')
+            await message.answer(
+                f'{new_url}\r\nВидео скачано через бота @{me.username}'
+            )
+            return
+
+        url = message.text
+        await bot.send_chat_action(message.chat.id, "upload_video")
+
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Get video info
                 info = ydl.extract_info(url, download=False)
-                video_url = info['url']
 
+                # Try to get direct video URL
+                formats = info.get('formats', [])
+                if formats:
+                    # Get best MP4 format URL
+                    video_url = None
+                    for f in formats:
+                        if f.get('ext') == 'mp4':
+                            video_url = f.get('url')
+                            break
+
+                    if video_url:
+                        await bot.send_message(
+                            message.chat.id,
+                            f"🎥 Видео найдено: {info.get('title', 'Unknown')}\n"
+                            f"⬇️ Скачиваю и отправляю..."
+                        )
+
+                        try:
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=video_url,
+                                caption=f"Скачано через @{me.username}",
+                                supports_streaming=True
+                            )
+                        except Exception as send_error:
+                            logger.error(f"Error sending video: {send_error}")
+                            raise
+                    else:
+                        await message.answer("Не удалось найти подходящий формат видео")
+                else:
+                    await message.answer("Не удалось получить информацию о форматах видео")
+
+                # Try to update analytics safely
                 try:
-                    # URLInputFile orqali yuborish
-                    await bot.send_video(
-                        message.chat.id,
-                        URLInputFile(video_url),
-                        caption=f"Скачано через @{me.username}",
-                        supports_streaming=True
-                    )
-                except Exception as send_error:
-                    # Agar URLInputFile ishlamasa, xato haqida xabar
-                    await message.answer("Извините, произошла ошибка при отправке видео. Попробуйте позже.")
-                    logger.error(f"Error sending video: {send_error}")
+                    await shortcuts.add_to_analitic_data(me.username, url)
+                except Exception as analytics_error:
+                    logger.error(f"Analytics error: {analytics_error}")
 
-                # Analitikani yangilash
-                domain = info.get('webpage_url_domain', 'unknown')
-                await update_download_analytics(me.username, domain)
-
-            except Exception as extract_error:
-                await message.answer("Не удалось получить информацию о видео. Возможно, видео недоступно.")
-                logger.error(f"Error extracting info: {extract_error}")
+        except Exception as ydl_error:
+            logger.error(f"yt-dlp error: {ydl_error}")
+            await message.answer("Не удалось загрузить видео. Попробуйте позже или используйте другую ссылку.")
 
     except Exception as e:
-        error_message = "Произошла ошибка при скачивании видео. Попробуйте позже."
-        await message.answer(error_message)
-        logger.error(f"YouTube download error: {str(e)}")
+        logger.error(f"General error in youtube_download_handler: {e}")
+        await message.answer("Произошла ошибка при обработке запроса. Попробуйте позже.")
 
 
 client_bot_router.message.register(youtube_download_handler, Download.download)
