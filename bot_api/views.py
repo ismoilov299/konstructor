@@ -10,6 +10,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import Update
 
+from modul import models
 from modul.bot.main_bot.main import init_bot_handlers
 from modul.clientbot.handlers.annon_bot.handlers.admin import admin_panel
 from modul.clientbot.handlers.annon_bot.handlers.bot import anon_bot_handlers
@@ -55,35 +56,41 @@ def setup_routers():
 def telegram_webhook(request, token):
     start_time = time.time()
     logger.info(f"Received webhook for token: {token}")
+    logger.info(f"BOT_TOKEN from settings: {settings_conf.BOT_TOKEN}")
 
     if request.method == 'POST':
         try:
-            # Bot tokenini tekshirish
+            # Tekshiramiz config.py dagi BOT_TOKEN bilan
             if token == settings_conf.BOT_TOKEN:
-                logger.info("Using main bot token")
+                logger.info("Token matches main BOT_TOKEN")
                 update = Update.parse_raw(request.body.decode())
                 async_to_sync(feed_update)(token, update.dict())
                 end_time = time.time()
                 logger.info(f"Webhook processed in {end_time - start_time:.4f} seconds")
                 return HttpResponse(status=202)
 
-            # Agar asosiy bot bo'lmasa, bazadan qidirish
+            # Bazada bot borligini tekshiramiz
             bot = async_to_sync(get_bot_by_token)(token)
+            logger.info(f"Database bot lookup result: {bot}")
+
             if bot:
-                logger.info(f"Found bot in database: {bot}")
+                logger.info(f"Found bot in database with token: {token}")
                 update = Update.parse_raw(request.body.decode())
                 async_to_sync(feed_update)(token, update.dict())
                 end_time = time.time()
                 logger.info(f"Webhook processed in {end_time - start_time:.4f} seconds")
                 return HttpResponse(status=202)
 
-            logger.warning(f"Bot not found for token: {token}")
+            # Bazada bot topilmadi
+            logger.error(f"Bot not found in database for token: {token}")
+            logger.error(f"Available bots in database: {[b.token for b in models.Bot.objects.all()]}")
             return HttpResponse(status=401)
 
         except Exception as e:
             logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
             return HttpResponse(status=500)
 
+    logger.warning(f"Invalid method for webhook: {request.method}")
     return HttpResponse(status=405)
 
 
