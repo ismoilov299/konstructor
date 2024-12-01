@@ -13,6 +13,8 @@ from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from django.db import transaction
 from django.utils import timezone
+
+from bot_api.views import logger
 from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
@@ -505,7 +507,9 @@ def update_download_analytics(bot_username, domain):
     DownloadAnalyticsModel.objects.filter(id=analytics.id).update(count=F('count') + 1)
 
 
+from aiogram.types import URLInputFile, FSInputFile
 import yt_dlp
+import os
 
 
 async def youtube_download_handler(message: Message, bot: Bot):
@@ -533,22 +537,45 @@ async def youtube_download_handler(message: Message, bot: Bot):
     await bot.send_chat_action(message.chat.id, "upload_video")
 
     ydl_opts = {
-        'cachedir': False,
+        'format': 'best[ext=mp4]/best',  # Faqat eng yaxshi formatni tanlash
         'noplaylist': True,
-        'outtmpl': 'clientbot/downloads/%(title)s.%(ext)s',
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=mp3]/best[ext=mp4]/best',
+        'outtmpl': '%(title)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': True
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            await bot.send_video(message.chat.id, URLInputFile(info['url']), supports_streaming=True)
+            try:
+                # Video ma'lumotlarini olish
+                info = ydl.extract_info(url, download=False)
+                video_url = info['url']
 
-            # Обновляем аналитику
-            domain = info.get('webpage_url_domain', 'unknown')
-            await update_download_analytics(me.username, domain)
+                try:
+                    # URLInputFile orqali yuborish
+                    await bot.send_video(
+                        message.chat.id,
+                        URLInputFile(video_url),
+                        caption=f"Скачано через @{me.username}",
+                        supports_streaming=True
+                    )
+                except Exception as send_error:
+                    # Agar URLInputFile ishlamasa, xato haqida xabar
+                    await message.answer("Извините, произошла ошибка при отправке видео. Попробуйте позже.")
+                    logger.error(f"Error sending video: {send_error}")
+
+                # Analitikani yangilash
+                domain = info.get('webpage_url_domain', 'unknown')
+                await update_download_analytics(me.username, domain)
+
+            except Exception as extract_error:
+                await message.answer("Не удалось получить информацию о видео. Возможно, видео недоступно.")
+                logger.error(f"Error extracting info: {extract_error}")
+
     except Exception as e:
-        await bot.send_message(message.chat.id, f"Не удалось скачать это видео: {e}")
+        error_message = "Произошла ошибка при скачивании видео. Попробуйте позже."
+        await message.answer(error_message)
+        logger.error(f"YouTube download error: {str(e)}")
 
 
 client_bot_router.message.register(youtube_download_handler, Download.download)
