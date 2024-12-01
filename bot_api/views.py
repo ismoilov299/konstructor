@@ -56,42 +56,30 @@ def setup_routers():
 def telegram_webhook(request, token):
     start_time = time.time()
     logger.info(f"Received webhook for token: {token}")
-    logger.info(f"BOT_TOKEN from settings: {settings_conf.BOT_TOKEN}")
 
     if request.method == 'POST':
         try:
-            # Tekshiramiz config.py dagi BOT_TOKEN bilan
             if token == settings_conf.BOT_TOKEN:
-                logger.info("Token matches main BOT_TOKEN")
+                logger.info("Processing main bot webhook")
                 update = Update.parse_raw(request.body.decode())
                 async_to_sync(feed_update)(token, update.dict())
-                end_time = time.time()
-                logger.info(f"Webhook processed in {end_time - start_time:.4f} seconds")
-                return HttpResponse(status=202)
+                return HttpResponse(status=200)
 
-            # Bazada bot borligini tekshiramiz
             bot = async_to_sync(get_bot_by_token)(token)
-            logger.info(f"Database bot lookup result: {bot}")
-
             if bot:
-                logger.info(f"Found bot in database with token: {token}")
+                logger.info(f"Processing client bot webhook: {bot.username}")
                 update = Update.parse_raw(request.body.decode())
                 async_to_sync(feed_update)(token, update.dict())
-                end_time = time.time()
-                logger.info(f"Webhook processed in {end_time - start_time:.4f} seconds")
-                return HttpResponse(status=202)
+                return HttpResponse(status=200)
 
-            # Bazada bot topilmadi
-            logger.error(f"Bot not found in database for token: {token}")
-            logger.error(f"Available bots in database: {[b.token for b in models.Bot.objects.all()]}")
-            return HttpResponse(status=401)
+            logger.warning(f"Unknown bot token: {token}")
+            return HttpResponse(status=200)
 
         except Exception as e:
             logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
-            return HttpResponse(status=500)
+            return HttpResponse(status=200)
 
-    logger.warning(f"Invalid method for webhook: {request.method}")
-    return HttpResponse(status=405)
+    return HttpResponse(status=200)
 
 
 async def feed_update(token, update):
