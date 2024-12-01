@@ -46,9 +46,7 @@ async def now_send_photo(message: types.Message, state: FSMContext):
 
 
 async def save_media(message: types.Message, state: FSMContext, url: str, type: str):
-    """
-    Media ma'lumotlarini saqlash
-    """
+
     try:
         logger.info(f"📝 Сохранение медиа для user_id={message.from_user.id}")
 
@@ -75,6 +73,11 @@ async def save_media(message: types.Message, state: FSMContext, url: str, type: 
 last_message_time = defaultdict(float)
 processed_messages = defaultdict(set)
 
+from cachetools import TTLCache
+
+# Global cache yaratamiz
+registration_cache = TTLCache(maxsize=1000, ttl=2.0)
+
 
 @client_bot_router.message(F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 async def bot_start_lets_leo(message: Message, state: FSMContext):
@@ -83,29 +86,21 @@ async def bot_start_lets_leo(message: Message, state: FSMContext):
     """
     try:
         user_id = message.from_user.id
-        message_id = message.message_id
+        cache_key = f"{user_id}_{message.message_id}"
 
-        if message_store.is_processed(user_id, message_id):
-            logger.info(f"🔄 Пропуск дубликата сообщения {message_id} от user_id={user_id}")
+        # Cache orqali tekshirish
+        if cache_key in registration_cache:
+            logger.info(f"🔄 Дубликат сообщения пропущен для user_id={user_id}")
             return
 
-        if not message_store.can_process(user_id):
-            logger.info(f"⏳ Слишком частые запросы от user_id={user_id}")
-            return
+        registration_cache[cache_key] = True
 
         current_state = await state.get_state()
         if current_state != LeomatchRegistration.BEGIN:
             logger.warning(f"❌ Неверное состояние: {current_state}")
             return
 
-        state_data = await state.get_data()
-        if state_data.get('registration_started'):
-            logger.info(f"🔄 Регистрация уже начата для user_id={user_id}")
-            return
-
-        message_store.mark_processed(user_id, message_id)
-
-        await state.update_data(registration_started=True)
+        # O'zgarishlar
         await state.clear()
 
         await message.answer(
@@ -121,7 +116,6 @@ async def bot_start_lets_leo(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"🔴 Ошибка при старте регистрации для user_id={user_id}: {str(e)}", exc_info=True)
         await message.answer("Произошла ошибка")
-
 
 async def clear_processed_messages():
     while True:

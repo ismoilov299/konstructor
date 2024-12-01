@@ -7,15 +7,19 @@ from modul.clientbot.handlers.leomatch.keyboards import reply_kb
 from modul.clientbot.utils.functs import return_main
 from modul.clientbot.handlers.leomatch.shortcuts import exists_leo, get_leo
 from modul.clientbot.handlers.leomatch.handlers.shorts import manage
-from modul.models import LeoMatchModel
+from modul.models import LeoMatchModel, ClientBotUser
 from modul.loader import client_bot_router
 from aiogram.fsm.context import FSMContext
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from aiogram.utils.i18n import gettext as _
 from aiogram.utils.i18n import lazy_gettext as __
 logger = logging.getLogger(__name__)
-
+from cachetools import TTLCache
 from modul.models import UserTG
+
+message_cache = TTLCache(maxsize=1000, ttl=2.0)
+
+
 
 
 @client_bot_router.message(F.text == "🫰 Знакомства")

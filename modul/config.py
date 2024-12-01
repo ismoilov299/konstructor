@@ -30,7 +30,7 @@ LOG_COLORS = {
 class Settings(BaseSettings):
     # Bot settings
     BOT_TOKEN: str
-    WEBHOOK_HOST: str = "https://590a-213-230-118-68.ngrok-free.app"  # Ngrok URL
+    WEBHOOK_HOST: str = "https://029b-84-252-74-138.ngrok-free.app/"  # Ngrok URL
     WEBHOOK_PATH: str = "/bot/webhook/{token}"
     ADMIN: int = 889121031
 

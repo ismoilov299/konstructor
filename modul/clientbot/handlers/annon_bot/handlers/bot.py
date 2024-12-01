@@ -1,4 +1,6 @@
 import re
+from typing import Optional
+
 from aiogram import F, Bot
 from aiogram.filters import CommandStart, Filter
 from aiogram.utils.deep_linking import create_start_link
@@ -109,6 +111,7 @@ async def start(message: Message, state: FSMContext, command: BotCommand = None)
                 parse_mode="html",
                 reply_markup=await main_menu_bt()
             )
+
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",

@@ -17,6 +17,10 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('', include('bot_api.urls')),  # bot/ prefiksini olib tashladik
+
+    path('bot/webhook/<str:token>/', views.process_webhook, name='webhook'),  # slash qo'shilgan
+
+
     path('admin/', admin.site.urls),
     path('', include('modul.urls')),
 ]

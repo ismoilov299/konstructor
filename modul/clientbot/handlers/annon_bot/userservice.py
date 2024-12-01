@@ -3,7 +3,9 @@ from django.db.models import Count, F
 from django.utils import timezone
 
 from bot_api import models
-from bot_api.views import logger
+import logging
+
+logger = logging.getLogger(__name__)
 from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today
 import pytz
 

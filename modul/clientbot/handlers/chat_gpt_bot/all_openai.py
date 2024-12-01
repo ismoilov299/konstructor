@@ -1,7 +1,7 @@
 import os
 
 from openai import OpenAI
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = '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'
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
