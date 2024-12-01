@@ -97,9 +97,19 @@ def startup_signal(sender, **kwargs):
 
 async def startup():
     logger.info("Application startup initiated")
-    setup_routers()
-    await set_webhook()
-    logger.info("Application startup completed")
+    try:
+        # Get or create event loop
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        setup_routers()
+        await set_webhook()
+        logger.info("Application startup completed")
+    except Exception as e:
+        logger.error(f"Startup error: {str(e)}", exc_info=True)
 
 
 def shutdown():
