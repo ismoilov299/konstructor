@@ -1,7 +1,8 @@
-from django.urls import path
+from django.urls import path, re_path
 from . import views
 
 print("Loading bot_api URLs")
 urlpatterns = [
-    path('webhook/<str:token>/', views.telegram_webhook, name='telegram_webhook'),
+    # re_path yordamida barcha belgilarni qabul qilamiz
+    re_path(r'^webhook/(?P<token>[\w\-\.:]+)/?$', views.telegram_webhook, name='telegram_webhook'),
 ]
