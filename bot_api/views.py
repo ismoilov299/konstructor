@@ -55,27 +55,35 @@ def setup_routers():
 def telegram_webhook(request, token):
     start_time = time.time()
     logger.info(f"Received webhook for token: {token}")
-    logger.info(f"Request path: {request.path}")
-    logger.info(f"Request method: {request.method}")
-    logger.info(f"Request body: {request.body.decode()}")
 
     if request.method == 'POST':
         try:
-            bot = async_to_sync(get_bot_by_token)(token)
-            logger.info(f"Bot object: {bot}")
-            if token == settings_conf.BOT_TOKEN or bot:
+            # Bot tokenini tekshirish
+            if token == settings_conf.BOT_TOKEN:
+                logger.info("Using main bot token")
                 update = Update.parse_raw(request.body.decode())
                 async_to_sync(feed_update)(token, update.dict())
                 end_time = time.time()
                 logger.info(f"Webhook processed in {end_time - start_time:.4f} seconds")
                 return HttpResponse(status=202)
-            logger.warning(f"Unauthorized webhook attempt for token: {token}")
+
+            # Agar asosiy bot bo'lmasa, bazadan qidirish
+            bot = async_to_sync(get_bot_by_token)(token)
+            if bot:
+                logger.info(f"Found bot in database: {bot}")
+                update = Update.parse_raw(request.body.decode())
+                async_to_sync(feed_update)(token, update.dict())
+                end_time = time.time()
+                logger.info(f"Webhook processed in {end_time - start_time:.4f} seconds")
+                return HttpResponse(status=202)
+
+            logger.warning(f"Bot not found for token: {token}")
             return HttpResponse(status=401)
+
         except Exception as e:
             logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
             return HttpResponse(status=500)
 
-    logger.warning(f"Invalid method for webhook: {request.method}")
     return HttpResponse(status=405)
 
 
