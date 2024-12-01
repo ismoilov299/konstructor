@@ -14,7 +14,7 @@ from pydantic.v1 import BaseSettings
 # from pydantic import BaseSettings, validator
 
 
-DEBUG = True
+DEBUG = False
 BASE_DIR = Path(__file__).resolve().parent
 
 MEDIA_ROOT = BASE_DIR / "downloads"
