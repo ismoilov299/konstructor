@@ -537,47 +537,50 @@ async def youtube_download_handler(message: Message, bot: Bot):
             return
 
         url = message.text
+        # send_chat_action ni alohida await qilamiz
         await bot.send_chat_action(message.chat.id, "upload_video")
 
         ydl_opts = {
-            'format': 'best[height<=720][ext=mp4]/best[ext=mp4]/best',  # Limit to 720p MP4
+            'format': 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
         }
 
         try:
-            async with bot.send_chat_action(message.chat.id, "upload_video"):
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    try:
-                        # Get video info
-                        info = ydl.extract_info(url, download=False)
+            # send_chat_action ni context manager o'rniga oddiy await qilib ishlatamiz
+            await bot.send_chat_action(message.chat.id, "upload_video")
 
-                        if 'url' in info:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    # Get video info
+                    info = ydl.extract_info(url, download=False)
+
+                    if 'url' in info:
+                        try:
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=info['url'],
+                                caption=f"📹 {info.get('title', 'Video')}\n\nСкачано через @{me.username}",
+                                supports_streaming=True
+                            )
+
+                            # Update analytics
                             try:
-                                await bot.send_video(
-                                    chat_id=message.chat.id,
-                                    video=info['url'],
-                                    caption=f"📹 {info.get('title', 'Video')}\n\nСкачано через @{me.username}",
-                                    supports_streaming=True
-                                )
+                                await shortcuts.add_to_analitic_data(me.username, url)
+                            except Exception as analytics_error:
+                                logger.error(f"Analytics error: {analytics_error}")
 
-                                # Update analytics
-                                try:
-                                    await shortcuts.add_to_analitic_data(me.username, url)
-                                except Exception as analytics_error:
-                                    logger.error(f"Analytics error: {analytics_error}")
+                        except Exception as send_error:
+                            logger.error(f"Error sending video: {send_error}")
+                            await message.answer("❌ Не удалось отправить видео. Возможно оно слишком большое.")
+                    else:
+                        await message.answer("❌ Не удалось получить ссылку на видео")
 
-                            except Exception as send_error:
-                                logger.error(f"Error sending video: {send_error}")
-                                await message.answer("❌ Не удалось отправить видео. Возможно оно слишком большое.")
-                        else:
-                            await message.answer("❌ Не удалось получить ссылку на видео")
-
-                    except Exception as extract_error:
-                        logger.error(f"Error extracting info: {extract_error}")
-                        await message.answer(
-                            "❌ Не удалось получить информацию о видео. Возможно видео недоступно или защищено.")
+                except Exception as extract_error:
+                    logger.error(f"Error extracting info: {extract_error}")
+                    await message.answer(
+                        "❌ Не удалось получить информацию о видео. Возможно видео недоступно или защищено.")
 
         except Exception as ydl_error:
             logger.error(f"yt-dlp error: {ydl_error}")
