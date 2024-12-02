@@ -519,7 +519,7 @@ logger = logging.getLogger(__name__)
 
 async def youtube_download_handler(message: Message, bot: Bot):
     try:
-        await message.answer('📥 Скачиваю видео...')
+        await message.answer('📥 Скачиваю...')
 
         if not message.text:
             await message.answer('Пришлите ссылку на видео')
@@ -530,16 +530,56 @@ async def youtube_download_handler(message: Message, bot: Bot):
             return
 
         me = await bot.get_me()
+        url = message.text
 
-        if 'instagram' in message.text:
-            new_url = message.text.replace('www.', 'dd')
-            await message.answer(f'{new_url}\r\nВидео скачано через бота @{me.username}')
+        # Instagram handler
+        if 'instagram' in message.text or 'inst.ae' in message.text:
+            try:
+                ydl_opts = {
+                    'format': 'best',
+                    'quiet': True,
+                    'no_warnings': True,
+                }
+
+                await bot.send_chat_action(message.chat.id, "upload_video")
+
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+
+                    if 'url' in info:
+                        try:
+                            # Ko'proq formatlarni qo'llab-quvvatlash uchun
+                            media_type = info.get('ext', '')
+                            if media_type in ['mp4', 'mov']:
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=info['url'],
+                                    caption=f"📹 Instagram video\nСкачано через @{me.username}",
+                                )
+                            elif media_type in ['jpg', 'jpeg', 'png']:
+                                await bot.send_photo(
+                                    chat_id=message.chat.id,
+                                    photo=info['url'],
+                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}",
+                                )
+                            else:
+                                await message.answer("❌ Неподдерживаемый формат медиа")
+
+                            await shortcuts.add_to_analitic_data(me.username, url)
+
+                        except Exception as send_error:
+                            logger.error(f"Error sending Instagram media: {send_error}")
+                            await message.answer("❌ Не удалось отправить медиа")
+                    else:
+                        await message.answer("❌ Не удалось получить ссылку на медиа")
+
+            except Exception as inst_error:
+                logger.error(f"Instagram download error: {inst_error}")
+                await message.answer("❌ Ошибка при скачивании из Instagram. Возможно пост недоступен или защищен.")
             return
 
-        url = message.text
-        # send_chat_action ni alohida await qilamiz
+        # YouTube handler
         await bot.send_chat_action(message.chat.id, "upload_video")
-
         ydl_opts = {
             'format': 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
             'noplaylist': True,
@@ -548,9 +588,7 @@ async def youtube_download_handler(message: Message, bot: Bot):
         }
 
         try:
-            # send_chat_action ni context manager o'rniga oddiy await qilib ishlatamiz
             await bot.send_chat_action(message.chat.id, "upload_video")
-
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
                     # Get video info
@@ -589,6 +627,10 @@ async def youtube_download_handler(message: Message, bot: Bot):
     except Exception as e:
         logger.error(f"General error: {e}")
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+
+
+async def is_short_video(url: str) -> bool:
+    return any(x in url.lower() for x in ['shorts', 'reels', 'tiktok.com'])
 
 
 client_bot_router.message.register(youtube_download_handler, Download.download)
