@@ -19,7 +19,7 @@ from aiogram.types import FSInputFile
 import os
 from modul.loader import bot_session, main_bot, dp
 from aiogram import Bot
-
+from django.utils import timezone
 
 def get_fsm_context(bot: Bot, chat_id: int, user_id: int = None):
     if not user_id:
