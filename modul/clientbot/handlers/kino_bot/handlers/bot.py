@@ -519,87 +519,73 @@ logger = logging.getLogger(__name__)
 
 async def youtube_download_handler(message: Message, bot: Bot):
     try:
-        await message.answer('📥 Скачиваю...')
+        await message.answer('📥 Скачиваю видео...')
 
         if not message.text:
             await message.answer('Пришлите ссылку на видео')
             return
 
         if 'streaming' in message.text:
-            await message.answer('Извините, но я не могу скачать стримы')
+            await message.answer('❌ Я не могу скачать стримы')
             return
 
         me = await bot.get_me()
 
-        # Instagram links handler
         if 'instagram' in message.text:
             new_url = message.text.replace('www.', 'dd')
-            await message.answer(
-                f'{new_url}\r\nВидео скачано через бота @{me.username}'
-            )
+            await message.answer(f'{new_url}\r\nВидео скачано через бота @{me.username}')
             return
 
         url = message.text
         await bot.send_chat_action(message.chat.id, "upload_video")
 
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',
+            'format': 'best[height<=720][ext=mp4]/best[ext=mp4]/best',  # Limit to 720p MP4
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': True,
         }
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Get video info
-                info = ydl.extract_info(url, download=False)
+            async with bot.send_chat_action(message.chat.id, "upload_video"):
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    try:
+                        # Get video info
+                        info = ydl.extract_info(url, download=False)
 
-                # Try to get direct video URL
-                formats = info.get('formats', [])
-                if formats:
-                    # Get best MP4 format URL
-                    video_url = None
-                    for f in formats:
-                        if f.get('ext') == 'mp4':
-                            video_url = f.get('url')
-                            break
+                        if 'url' in info:
+                            try:
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=info['url'],
+                                    caption=f"📹 {info.get('title', 'Video')}\n\nСкачано через @{me.username}",
+                                    supports_streaming=True
+                                )
 
-                    if video_url:
-                        await bot.send_message(
-                            message.chat.id,
-                            f"🎥 Видео найдено: {info.get('title', 'Unknown')}\n"
-                            f"⬇️ Скачиваю и отправляю..."
-                        )
+                                # Update analytics
+                                try:
+                                    await shortcuts.add_to_analitic_data(me.username, url)
+                                except Exception as analytics_error:
+                                    logger.error(f"Analytics error: {analytics_error}")
 
-                        try:
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=video_url,
-                                caption=f"Скачано через @{me.username}",
-                                supports_streaming=True
-                            )
-                        except Exception as send_error:
-                            logger.error(f"Error sending video: {send_error}")
-                            raise
-                    else:
-                        await message.answer("Не удалось найти подходящий формат видео")
-                else:
-                    await message.answer("Не удалось получить информацию о форматах видео")
+                            except Exception as send_error:
+                                logger.error(f"Error sending video: {send_error}")
+                                await message.answer("❌ Не удалось отправить видео. Возможно оно слишком большое.")
+                        else:
+                            await message.answer("❌ Не удалось получить ссылку на видео")
 
-                # Try to update analytics safely
-                try:
-                    await shortcuts.add_to_analitic_data(me.username, url)
-                except Exception as analytics_error:
-                    logger.error(f"Analytics error: {analytics_error}")
+                    except Exception as extract_error:
+                        logger.error(f"Error extracting info: {extract_error}")
+                        await message.answer(
+                            "❌ Не удалось получить информацию о видео. Возможно видео недоступно или защищено.")
 
         except Exception as ydl_error:
             logger.error(f"yt-dlp error: {ydl_error}")
-            await message.answer("Не удалось загрузить видео. Попробуйте позже или используйте другую ссылку.")
+            await message.answer("❌ Ошибка при скачивании. Попробуйте другое видео или позже.")
 
     except Exception as e:
-        logger.error(f"General error in youtube_download_handler: {e}")
-        await message.answer("Произошла ошибка при обработке запроса. Попробуйте позже.")
+        logger.error(f"General error: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
 client_bot_router.message.register(youtube_download_handler, Download.download)
