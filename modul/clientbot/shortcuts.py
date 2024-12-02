@@ -288,7 +288,7 @@ async def get_new_users_count(bot: Bot):
 
 @sync_to_async
 def add_to_analitic_data(bot_username: str, link: str, ignore_domain: bool = False):
-    now = datetime.now()
+    now = timezone.now()
     domain = get_domain(link) if not ignore_domain else link
     instance = models.DownloadAnalyticsModel.objects.filter(bot_username=bot_username, domain=domain,
                                                                   date__gte=now).first()

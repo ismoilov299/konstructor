@@ -196,7 +196,7 @@ class DownloadAnalyticsModel(models.Model):
     bot_username = models.CharField(max_length=100)
     domain = models.CharField(max_length=1024)
     count = models.IntegerField(default=0)
-    date = models.DateTimeField(default=timezone.make_aware(datetime.now(), timezone=utc))
+    date = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return f"{self.bot_username} - {self.domain} - {self.count}"
