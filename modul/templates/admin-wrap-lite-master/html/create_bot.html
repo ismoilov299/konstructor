@@ -523,15 +523,21 @@
 
                         <div class="section">
                             <h2>Ваши Telegram боты</h2>
-                            <ul class="bot-list">
-                                {% for item in all_user_bot%}
-<li data-bot-id="{{ item.id }}" class="bot-item">
-    <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Bot" style="width: 30px;  height: 26px;">
-    <span class="bot-name">{{item.username}}</span>
-    <span class="bot-status">{% if item.bot_enable %}Работает{% else %}Отключен{% endif %}</span>
-</li>
-                                {% endfor %}
-                            </ul>
+                            {% for item in all_user_bot%}
+                            <div class="bot-item">
+                                <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png"
+                                     style="width: 30px; height: 26px;">
+                                <span class="bot-name"
+                                      data-bot-id="{{ item.id }}"
+                                      data-bot-token="{{ item.token }}"
+                                      onclick="openBotSettings('{{ item.id }}', '{{ item.username }}', '{{ item.token }}')">
+                                    {{ item.username }}
+                                </span>
+                                <span class="bot-status">
+                                    {% if item.bot_enable %}Работает{% else %}Отключен{% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>

@@ -68,15 +68,14 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     uid = message.from_user.id
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
+
     if shortcuts.have_one_module(bot_db, "download"):
-        builder = ReplyKeyboardBuilder()
-        builder.button(text='💸Заработать')
         text = ("🤖 Привет, {full_name}! Я бот-загрузчик.\r\n\r\n"
                 "Я могу скачать фото/видео/аудио/файлы/архивы с *Youtube, Instagram, TikTok, Facebook, SoundCloud, Vimeo, Вконтакте, Twitter и 1000+ аудио/видео/файловых хостингов*. Просто пришли мне URL на публикацию с медиа или прямую ссылку на файл.").format(
             full_name=message.from_user.full_name)
         await state.set_state(Download.download)
         kwargs['parse_mode'] = "Markdown"
-        kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
+
     elif shortcuts.have_one_module(bot_db, "refs"):
         await start_ref(message)
     elif shortcuts.have_one_module(bot_db, "kino"):
@@ -96,6 +95,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup()
     else:
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
+
     await message.answer(text, **kwargs)
 
 @sync_to_async
