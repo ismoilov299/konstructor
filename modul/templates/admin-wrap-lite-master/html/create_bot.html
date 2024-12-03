@@ -525,11 +525,15 @@
                             <h2>Ваши Telegram боты</h2>
                             <ul class="bot-list">
                                 {% for item in all_user_bot%}
-<li data-bot-id="{{ item.id }}" class="bot-item">
-    <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Bot" style="width: 30px;  height: 26px;">
-    <span class="bot-name">{{item.username}}</span>
-    <span class="bot-status">{% if item.bot_enable %}Работает{% else %}Отключен{% endif %}</span>
-</li>
+                                    <li data-bot-id="{{ item.id }}" class="bot-item">
+                                        <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png"
+                                             alt="Bot"
+                                             style="width: 30px; height: 26px;">
+                                        <span class="bot-name">{{item.username}}</span>
+                                        <span class="bot-status">
+                                            {% if item.bot_enable %}Работает{% else %}Отключен{% endif %}
+                                        </span>
+                                    </li>
                                 {% endfor %}
                             </ul>
                         </div>
@@ -681,16 +685,49 @@
         // scripts.js
 
         document.addEventListener("DOMContentLoaded", function () {
-            var modal = document.getElementById("custom-botSettingsModal");
-            var closeModalSpan = document.getElementsByClassName("custom-close")[0];
-            var botItems = document.querySelectorAll(".bot-item");
+    // Bot elementlariga click eventi qo'shamiz
+    document.querySelectorAll('.bot-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const botId = this.getAttribute('data-bot-id');
+            fetch(`/get_bot_info/${botId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    // Modal elementlarini olamiz
+                    const modal = document.getElementById('custom-botSettingsModal');
+                    const tokenInput = document.getElementById('custom-botToken');
+                    const moduleSelect = document.getElementById('custom-module');
+                    const disableBtn = document.getElementById('custom-disableBtn');
+                    const archiveBtn = document.getElementById('custom-archiveBtn');
 
-            // Функция для заполнения формы данными бота
-            function fillBotSettings(botData) {
-                document.getElementById("custom-botToken").value = botData.token || '';
-                // Дополнительные настройки можно заполнить здесь...
-            }
-            function openBotSettingsModal(botToken) {
+                    // Ma'lumotlarni formaga joylash
+                    tokenInput.value = data.token;
+                    moduleSelect.value = data.module;
+
+                    // Bot statusiga qarab tugma matnini o'zgartirish
+                    disableBtn.textContent = data.is_enabled ? 'Выключить' : 'Включить';
+
+                    // Token ni o'chirish tugmasiga saqlash
+                    archiveBtn.setAttribute('data-token', data.token);
+
+                    // Modalni ko'rsatish
+                    modal.style.display = 'flex';
+                })
+                .catch(error => console.error('Error:', error));
+        });
+    });
+
+    // Modal yopish funktsiyalari
+    document.querySelector('.custom-close').onclick = function() {
+        document.getElementById('custom-botSettingsModal').style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        const modal = document.getElementById('custom-botSettingsModal');
+        if (event.target == modal) {
+            modal.style.display = 'none';
+        }
+    }
+});
     fetch(`/get_bot_info/${botToken}`)
         .then(response => response.json())
         .then(data => {
