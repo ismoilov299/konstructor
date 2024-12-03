@@ -523,21 +523,15 @@
 
                         <div class="section">
                             <h2>Ваши Telegram боты</h2>
-                            <div class="bot-list">
-                                {% for item in all_user_bot %}
-                                <div class="bot-item">
-                                    <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png"
-                                         alt="Telegram Bot"
-                                         class="bot-icon">
-                                    <span class="bot-name" onclick="openBotSettings('{{ item.id }}', '{{ item.username }}', '{{ item.token }}')">
-                                        {{ item.username }}
-                                    </span>
-                                    <span class="bot-status {% if item.bot_enable %}active{% else %}inactive{% endif %}">
-                                        {% if item.bot_enable %}Работает{% else %}Отключен{% endif %}
-                                    </span>
-                                </div>
+                            <ul class="bot-list">
+                                {% for item in all_user_bot%}
+<li data-bot-id="{{ item.id }}" class="bot-item">
+    <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Bot" style="width: 30px;  height: 26px;">
+    <span class="bot-name">{{item.username}}</span>
+    <span class="bot-status">{% if item.bot_enable %}Работает{% else %}Отключен{% endif %}</span>
+</li>
                                 {% endfor %}
-                            </div>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -559,36 +553,34 @@
 
 
         <!-- Модальное окно -->
-        <div id="botSettingsModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Настройки бота</h3>
-                    <span class="close">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <form id="botSettingsForm">
-                        {% csrf_token %}
-                        <input type="hidden" id="bot_token" name="bot_token">
-                        <div class="form-group">
-                            <label>Имя бота:</label>
-                            <span id="botUsername" class="bot-username"></span>
-                        </div>
-                        <div class="form-group">
-                            <label>Модуль:</label>
-                            <div class="module-options">
-                                <label><input type="radio" name="module" value="none"> Нет модуля</label>
-                                <label><input type="radio" name="module" value="download"> Скачивание медиа</label>
-                                <label><input type="radio" name="module" value="kino"> Кино бот</label>
-                                <label><input type="radio" name="module" value="anon"> Анонимный чат</label>
-                                <label><input type="radio" name="module" value="chatgpt"> ChatGPT</label>
-                                <label><input type="radio" name="module" value="refs"> Реферальная система</label>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-save" onclick="saveBotSettings()">Сохранить</button>
-                </div>
+        <div id="custom-botSettingsModal" class="custom-modal">
+            <div class="custom-modal-content">
+                <span class="custom-close">&times;</span>
+                <h2>Настройка вашего бота</h2>
+                <form id="custom-botSettingsForm" action="{% url 'update_bot_settings' %}" method="post"
+                    enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <label for="custom-botToken">Ваш токен</label>
+                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}" readonly>
+
+                    <label for="custom-module">Модуль заработка</label>
+                    <select id="custom-module" name="module" >
+                        <option value="no_module">Нет модуля</option>
+                        <option value="leo" >Дайвинчик</option>
+                        <option value="refs" >Реферальный бот</option>
+                        <option value="kino">Кино бот</option>
+                        <option value="download">All save бот</option>
+			<option value="anon">Аноним чат бот</option>
+			<option value="chatgpt">ChatGPT бот</option>
+                    </select>
+
+                    <div class="custom-button-group">
+                        <button type="button" id="custom-archiveBtn" data-token="">Удалить</button>
+                        <button type="button" id="custom-disableBtn"></button>
+                        <button type="submit" id="custom-saveSettingsBtn">Сохранить настройки</button>
+                    </div>
+
+                </form>
             </div>
         </div>
 
@@ -872,7 +864,6 @@
     <script src="{% static 'assets/node_modules/morrisjs/morris.min.js' %}"></script>
     <script src="{% static 'assets/node_modules/raphael/raphael-min.js' %}"></script>
     <script src="{% static 'assets/node_modules/d3/d3.min.js' %}"></script>
-    <script src="{% static 'js/bot_settings.js' %}"></script>
     <script src="{% static 'assets/node_modules/c3-master/c3.min.js' %}"></script>
     <script src="{% static 'js/dashboard1.js' %}"></script>
 </body>
