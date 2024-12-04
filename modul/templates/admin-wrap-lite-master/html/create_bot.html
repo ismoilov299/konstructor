@@ -524,8 +524,8 @@
                         <div class="section">
                             <h2>Ваши Telegram боты</h2>
                             <ul class="bot-list">
-                                {% for item in all_user_bot %}
-                                    <li id="custom-botSettingsModal" data-bot-id="{{ item.id }}" class="bot-item">
+                                {% for item in all_user_bot%}
+                                    <li data-bot-id="{{ item.id }}" class="bot-item">
                                         <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png"
                                              alt="Bot"
                                              style="width: 30px; height: 26px;">
@@ -659,6 +659,7 @@
 
     <script src="{% static 'assets/node_modules/jquery/jquery.min.js'%}"></script>
     <script>
+        document.addEventListener("DOMContentLoaded", function () {
         // Получаем элементы
         const openModalBtn = document.getElementById('openModalBtn');
         const modal = document.getElementById('myModal');
@@ -681,53 +682,54 @@
             }
         });
 
-
+    });
         // scripts.js
 
         document.addEventListener("DOMContentLoaded", function () {
-    // Bot elementlariga click eventi qo'shamiz
-    document.querySelectorAll('.bot-item').forEach(item => {
-        item.addEventListener('click', function() {
-            const botId = this.getAttribute('data-bot-id');
-            fetch(`/get_bot_info/${botId}/`)
-                .then(response => response.json())
-                .then(data => {
-                    // Modal elementlarini olamiz
-                    const modal = document.getElementById('custom-botSettingsModal');
-                    const tokenInput = document.getElementById('custom-botToken');
-                    const moduleSelect = document.getElementById('custom-module');
-                    const disableBtn = document.getElementById('custom-disableBtn');
-                    const archiveBtn = document.getElementById('custom-archiveBtn');
+        // Add click event to bot items
+        document.querySelectorAll('.bot-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const botId = this.getAttribute('data-bot-id');
+                fetch(`/get_bot_info/${botId}/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Get modal elements
+                        const modal = document.getElementById('custom-botSettingsModal');
+                        const tokenInput = document.getElementById('custom-botToken');
+                        const moduleSelect = document.getElementById('custom-module');
+                        const disableBtn = document.getElementById('custom-disableBtn');
+                        const archiveBtn = document.getElementById('custom-archiveBtn');
 
-                    // Ma'lumotlarni formaga joylash
-                    tokenInput.value = data.token;
-                    moduleSelect.value = data.module;
+                        // Populate form with bot data
+                        tokenInput.value = data.token;
+                        moduleSelect.value = data.module;
 
-                    // Bot statusiga qarab tugma matnini o'zgartirish
-                    disableBtn.textContent = data.is_enabled ? 'Выключить' : 'Включить';
+                        // Change button text based on bot status
+                        disableBtn.textContent = data.is_enabled ? 'Выключить' : 'Включить';
 
-                    // Token ni o'chirish tugmasiga saqlash
-                    archiveBtn.setAttribute('data-token', data.token);
+                        // Save token to delete button
+                        archiveBtn.setAttribute('data-token', data.token);
 
-                    // Modalni ko'rsatish
-                    modal.style.display = 'flex';
-                })
-                .catch(error => console.error('Error:', error));
+                        // Show modal
+                        modal.style.display = 'flex';
+                    })
+                    .catch(error => console.error('Error:', error));
+            });
+        });
+
+        // Close modal functions
+        document.querySelector('.custom-close').onclick = function() {
+            document.getElementById('custom-botSettingsModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('custom-botSettingsModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
         });
     });
-
-    // Modal yopish funktsiyalari
-    document.querySelector('.custom-close').onclick = function() {
-        document.getElementById('custom-botSettingsModal').style.display = 'none';
-    }
-
-    window.onclick = function(event) {
-        const modal = document.getElementById('custom-botSettingsModal');
-        if (event.target == modal) {
-            modal.style.display = 'none';
-        }
-    }
-});
     fetch(`/get_bot_info/${botToken}`)
         .then(response => response.json())
         .then(data => {
@@ -742,7 +744,7 @@
             document.getElementById('custom-botSettingsModal').style.display = 'flex';
         })
         .catch(error => console.error('Error:', error));
-}
+
     document.querySelectorAll('.bot-item').forEach(item => {
     item.addEventListener('click', function() {
         openBotSettingsModal(this.getAttribute('data-bot-id'));
@@ -787,7 +789,7 @@
             }
 
 
-        });
+
 
 
         $(document).ready(function () {
