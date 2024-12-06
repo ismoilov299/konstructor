@@ -106,41 +106,49 @@ def get_user(uid: int, username: str, first_name: str = None, last_name: str = N
 
 def start_bot_client():
     @client_bot_router.message(CommandStart())
-    @flags.rate_limit(key="on_start")
     async def on_start(message: Message, command: CommandObject, state: FSMContext, bot: Bot):
-        print(message.from_user.id)
-        info = await get_user(uid=message.from_user.id, username=message.from_user.username,
-                              first_name=message.from_user.first_name if message.from_user.first_name else None,
-                              last_name=message.from_user.last_name if message.from_user.last_name else None)
-        await state.clear()
-        commands = await bot.get_my_commands()
-        bot_commands = [
-            BotCommand(command="/start", description="Меню"),
-        ]
-        print('command start')
-        if commands != bot_commands:
-            await bot.set_my_commands(bot_commands)
-        referral = command.args
-        uid = message.from_user.id
-        user = await shortcuts.get_user(uid, bot)
+        print("Start command received from", message.from_user.id)
+        try:
+            info = await get_user(uid=message.from_user.id,
+                                  username=message.from_user.username,
+                                  first_name=message.from_user.first_name if message.from_user.first_name else None,
+                                  last_name=message.from_user.last_name if message.from_user.last_name else None)
 
-        if not user:
-            if referral and referral.isdigit():
-                inviter = await shortcuts.get_user(int(referral))
-                if inviter:
-                    await shortcuts.increase_referral(inviter)
-                    with suppress(TelegramForbiddenError):
-                        user_link = html.link('реферал', f'tg://user?id={uid}')
-                        await bot.send_message(
-                            chat_id=referral,
-                            text=('new_referral').format(
-                                user_link=user_link,
+            await state.clear()
+            commands = await bot.get_my_commands()
+            bot_commands = [
+                BotCommand(command="/start", description="Меню"),
+            ]
+            print('command start')
+
+            if commands != bot_commands:
+                await bot.set_my_commands(bot_commands)
+
+            referral = command.args
+            uid = message.from_user.id
+            user = await shortcuts.get_user(uid, bot)
+
+            if not user:
+                if referral and referral.isdigit():
+                    inviter = await shortcuts.get_user(int(referral))
+                    if inviter:
+                        await shortcuts.increase_referral(inviter)
+                        with suppress(TelegramForbiddenError):
+                            user_link = html.link('реферал', f'tg://user?id={uid}')
+                            await bot.send_message(
+                                chat_id=referral,
+                                text=('new_referral').format(
+                                    user_link=user_link,
+                                )
                             )
-                        )
-            else:
-                inviter = None
-            await save_user(u=message.from_user, inviter=inviter, bot=bot)
-        await start(message, state, bot)
+                else:
+                    inviter = None
+                await save_user(u=message.from_user, inviter=inviter, bot=bot)
+
+            await start(message, state, bot)
+        except Exception as e:
+            print(f"Error in start handler: {e}")
+            raise
 
 
 @client_bot_router.message(CommandStart())

@@ -101,19 +101,11 @@ def telegram_webhook(request, token):
 async def feed_update(token, update):
     start_time = time.time()
     logger.info(f"Processing update for token: {token}")
+    logger.info(f"Update content: {update}")  # debug uchun
     try:
-        # Event loop olish yoki yaratish
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                raise RuntimeError("Event loop is closed")
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
         async with Bot(token, bot_session, default=default).context(auto_close=False) as bot_:
             await dp.feed_raw_update(bot_, update)
-
+            logger.info("Update successfully processed by dispatcher")
         end_time = time.time()
         logger.info(f"Update processed in {end_time - start_time:.4f} seconds")
     except Exception as e:
