@@ -98,6 +98,7 @@ async def feed_update(token, update):
     start_time = time.time()
     logger.info(f"Processing update for token: {token}")
     try:
+        # Event loop olish yoki yaratish
         try:
             loop = asyncio.get_event_loop()
             if loop.is_closed():
