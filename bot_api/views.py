@@ -39,11 +39,13 @@ logger = logging.getLogger(__name__)
 
 def setup_routers():
     logger.info("Setting up routers")
-    try:
-        if not hasattr(dp, 'routers_setup'):
+    if not hasattr(dp, 'routers_setup'):
+        try:
+            # Router'larni tozalash
             if hasattr(dp, 'sub_routers'):
                 dp.sub_routers.clear()
 
+            # Handler'larni sozlash
             chat_gpt_bot_handlers()
             start_bot_client()
             admin_panel()
@@ -51,21 +53,17 @@ def setup_routers():
             anon_bot_handlers()
             setup_main_bot_filter(main_bot_router, client_bot_router)
 
-            if hasattr(main_bot_router, '_parent_router'):
-                main_bot_router._parent_router = None
-            if hasattr(client_bot_router, '_parent_router'):
-                client_bot_router._parent_router = None
-
-            dp.include_router(main_bot_router)
-            dp.include_router(client_bot_router)
+            # Router'larni qo'shish
+            if main_bot_router not in dp.sub_routers:
+                dp.include_router(main_bot_router)
+            if client_bot_router not in dp.sub_routers:
+                dp.include_router(client_bot_router)
 
             dp.routers_setup = True
-            logger.info("Routers successfully setup")
-    except Exception as e:
-        logger.error(f"Error setting up routers: {e}")
-        raise
-
-    logger.info("Routers setup completed")
+            logger.info("Router setup completed successfully")
+        except Exception as e:
+            logger.error(f"Error in router setup: {e}")
+            raise
 
 
 @csrf_exempt
@@ -99,6 +97,7 @@ def telegram_webhook(request, token):
 
 
 async def feed_update(token, update):
+    logger.info(f"Received update: {update}")
     start_time = time.time()
     logger.info(f"Processing update for token: {token}")
     logger.info(f"Update content: {update}")  # debug uchun
