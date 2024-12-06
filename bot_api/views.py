@@ -70,19 +70,28 @@ def setup_routers():
 def telegram_webhook(request, token):
     start_time = time.time()
     logger.info(f"Received webhook for token: {token}")
+    logger.info(f"Request method: {request.method}")
+    logger.info(f"Request path: {request.path}")
 
     if request.method == 'POST':
         try:
+            update_data = request.body.decode()
+            logger.info(f"Update data: {update_data}")
+
+            # Main bot tekshirish
             if token == settings_conf.BOT_TOKEN:
                 logger.info("Processing main bot webhook")
-                update = Update.parse_raw(request.body.decode())
+                update = Update.parse_raw(update_data)
                 async_to_sync(feed_update)(token, update.dict())
                 return HttpResponse(status=200)
 
+            # Client bot tekshirish
             bot = async_to_sync(get_bot_by_token)(token)
+            logger.info(f"Bot lookup result: {bot}")
+
             if bot:
                 logger.info(f"Processing client bot webhook: {bot.username}")
-                update = Update.parse_raw(request.body.decode())
+                update = Update.parse_raw(update_data)
                 async_to_sync(feed_update)(token, update.dict())
                 return HttpResponse(status=200)
 
@@ -143,18 +152,27 @@ def shutdown():
     logger.info("Application shutdown completed")
 
 
-
 async def set_webhook():
     logger.info("Setting webhook")
     try:
         webhook_url = settings_conf.WEBHOOK_URL.format(token=main_bot.token)
-        webhook_info = await main_bot.get_webhook_info()
-        if webhook_info.url != webhook_url:
-            await main_bot.set_webhook(webhook_url, allowed_updates=settings_conf.USED_UPDATE_TYPES)
-            logger.info(f"Webhook set to {webhook_url}")
+        logger.info(f"Setting webhook URL to: {webhook_url}")
 
-    except:
-        pass
+        webhook_info = await main_bot.get_webhook_info()
+        logger.info(f"Current webhook info: {webhook_info}")
+
+        if webhook_info.url != webhook_url:
+            logger.info("Setting new webhook URL...")
+            result = await main_bot.set_webhook(
+                webhook_url,
+                allowed_updates=settings_conf.USED_UPDATE_TYPES
+            )
+            logger.info(f"Webhook set result: {result}")
+        else:
+            logger.info("Webhook URL already correct")
+
+    except Exception as e:
+        logger.error(f"Error setting webhook: {e}", exc_info=True)
 
 # async def set_webhook():
 #     logger.info("Setting webhook")
