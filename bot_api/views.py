@@ -41,7 +41,8 @@ def setup_routers():
     logger.info("Setting up routers")
     try:
         if not hasattr(dp, 'routers_setup'):
-            dp.sub_routers.clear()
+            if hasattr(dp, 'sub_routers'):
+                dp.sub_routers.clear()
 
             chat_gpt_bot_handlers()
             start_bot_client()
@@ -50,18 +51,21 @@ def setup_routers():
             anon_bot_handlers()
             setup_main_bot_filter(main_bot_router, client_bot_router)
 
-            if main_bot_router not in dp.sub_routers:
-                dp.include_router(main_bot_router)
-            if client_bot_router not in dp.sub_routers:
-                dp.include_router(client_bot_router)
+            if hasattr(main_bot_router, '_parent_router'):
+                main_bot_router._parent_router = None
+            if hasattr(client_bot_router, '_parent_router'):
+                client_bot_router._parent_router = None
+
+            dp.include_router(main_bot_router)
+            dp.include_router(client_bot_router)
 
             dp.routers_setup = True
-            logger.info("Routers setup completed")
-        else:
-            logger.info("Routers already setup, skipping")
+            logger.info("Routers successfully setup")
     except Exception as e:
         logger.error(f"Error setting up routers: {e}")
         raise
+
+    logger.info("Routers setup completed")
 
 
 @csrf_exempt
