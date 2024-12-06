@@ -312,6 +312,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
+    logger.info(f"Start command received from user {message.from_user.id}")
     bot_db = await shortcuts.get_bot(bot)
 
     info = await get_user(uid=message.from_user.id, username=message.from_user.username,
