@@ -39,17 +39,29 @@ logger = logging.getLogger(__name__)
 
 def setup_routers():
     logger.info("Setting up routers")
-    if not hasattr(dp, 'routers_setup'):
-        chat_gpt_bot_handlers()
-        start_bot_client()
-        admin_panel()
-        init_bot_handlers()
-        anon_bot_handlers()
-        setup_main_bot_filter(main_bot_router, client_bot_router)
-        dp.include_router(main_bot_router)
-        dp.include_router(client_bot_router)
-        dp.routers_setup = True
-    logger.info("Routers setup completed")
+    try:
+        if not hasattr(dp, 'routers_setup'):
+            dp.sub_routers.clear()
+
+            chat_gpt_bot_handlers()
+            start_bot_client()
+            admin_panel()
+            init_bot_handlers()
+            anon_bot_handlers()
+            setup_main_bot_filter(main_bot_router, client_bot_router)
+
+            if main_bot_router not in dp.sub_routers:
+                dp.include_router(main_bot_router)
+            if client_bot_router not in dp.sub_routers:
+                dp.include_router(client_bot_router)
+
+            dp.routers_setup = True
+            logger.info("Routers setup completed")
+        else:
+            logger.info("Routers already setup, skipping")
+    except Exception as e:
+        logger.error(f"Error setting up routers: {e}")
+        raise
 
 
 @csrf_exempt
@@ -86,8 +98,17 @@ async def feed_update(token, update):
     start_time = time.time()
     logger.info(f"Processing update for token: {token}")
     try:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                raise RuntimeError("Event loop is closed")
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
         async with Bot(token, bot_session, default=default).context(auto_close=False) as bot_:
             await dp.feed_raw_update(bot_, update)
+
         end_time = time.time()
         logger.info(f"Update processed in {end_time - start_time:.4f} seconds")
     except Exception as e:
