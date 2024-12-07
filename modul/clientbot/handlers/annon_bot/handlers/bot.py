@@ -162,69 +162,74 @@ async def again(query: CallbackQuery, state: FSMContext):
 
 @client_bot_router.message(Links.send_st)
 async def anon_mes(message: Message, state: FSMContext):
-    get_link = await state.get_data()
-    receiver = get_link.get("link_user")
-    sender_message_id = message.message_id
-    text1 = "<b>У тебя новое анонимное сообщение!</b>\n\n"
-    text2 = "↩️<i> Свайпни для ответа.</i>"
-    caption = ""
-    if message.caption:
-        caption = message.caption + "\n\n"
     try:
-        if message.voice:
-            receiver_message = await message.bot.copy_message(chat_id=receiver, from_chat_id=message.from_user.id,
-                                                              message_id=message.message_id,
-                                                              caption="<b>У тебя новое анонимное сообщение!</b>\n\n"
-                                                                      "↩️<i>Свайпни для ответа.</i>",
-                                                              parse_mode="html")
-            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
-                                           reply_markup=await again_in(receiver))
-            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
-                                    sender_message_id=sender_message_id,
-                                    receiver_message_id=receiver_message.message_id)
-            await state.clear()
-        elif message.video_note or message.sticker:
-            await message.bot.copy_message(chat_id=receiver, from_chat_id=message.from_user.id,
-                                           message_id=message.message_id)
-            receiver_message = await message.bot.send_message(chat_id=receiver,
-                                                              text="<b>У тебя новое анонимное сообщение!</b>\n\n"
-                                                                   "↩️<i>Свайпни для ответа.</i>", parse_mode="html")
-            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
-                                           reply_markup=await again_in(receiver))
-            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
-                                    sender_message_id=sender_message_id,
-                                    receiver_message_id=receiver_message.message_id)
-            await state.clear()
-        elif message.video or message.photo or message.document:
-            receiver_message = await message.bot.copy_message(chat_id=receiver, from_chat_id=message.from_user.id,
-                                                              message_id=message.message_id,
-                                                              caption=text1 + caption + text2,
-                                                              parse_mode="html")
-            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
-                                           reply_markup=await again_in(receiver))
-            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
-                                    sender_message_id=sender_message_id,
-                                    receiver_message_id=receiver_message.message_id)
-            await state.clear()
-        elif message.text:
-            receiver_message = await message.bot.send_message(chat_id=receiver,
-                                                              text=text1 + message.text + "\n\n" + text2,
-                                                              parse_mode="html")
-            await message.bot.send_message(chat_id=message.from_user.id, text="Сообщение отправлено, ожидайте ответ!",
-                                           reply_markup=await again_in(receiver))
-            await add_messages_info(sender_id=message.from_user.id, receiver_id=receiver,
-                                    sender_message_id=sender_message_id,
-                                    receiver_message_id=receiver_message.message_id)
-            await state.clear()
-        else:
-            await message.bot.send_message(message.from_user.id, "️️❗Ошибка. Неподдерживаемый формат",
-                                           reply_markup=await main_menu_bt())
-            await state.clear()
-    except:
-        await message.bot.send_message(message.from_user.id, "️️❗Ошибка. Не удалось отправить сообщение",
-                                       reply_markup=await main_menu_bt())
-        await state.clear()
+        get_link = await state.get_data()
+        receiver = get_link.get("link_user")
+        logger.info(f"State data: {get_link}, Receiver ID: {receiver}")  # Debug log
 
+        if not receiver:
+            logger.error("Receiver ID not found in state data")
+            await message.answer("❗Ошибка: получатель не найден", reply_markup=await main_menu_bt())
+            await state.clear()
+            return
+
+        sender_message_id = message.message_id
+        text1 = "<b>У тебя новое анонимное сообщение!</b>\n\n"
+        text2 = "↩️<i> Свайпни для ответа.</i>"
+        caption = message.caption + "\n\n" if message.caption else ""
+
+        try:
+            if message.voice:
+                logger.info(f"Sending voice message to {receiver}")
+                receiver_message = await message.bot.copy_message(
+                    chat_id=receiver,
+                    from_chat_id=message.from_user.id,
+                    message_id=message.message_id,
+                    caption=text1 + caption + text2,
+                    parse_mode="html"
+                )
+            elif message.text:
+                logger.info(f"Sending text message to {receiver}: {message.text[:50]}")
+                receiver_message = await message.bot.send_message(
+                    chat_id=receiver,
+                    text=text1 + message.text + "\n\n" + text2,
+                    parse_mode="html"
+                )
+            else:
+                await message.answer("❗Неподдерживаемый формат сообщения",
+                                  reply_markup=await main_menu_bt())
+                await state.clear()
+                return
+
+            # Xabar yuborildi, endi ma'lumotlarni saqlash
+            await add_messages_info(
+                sender_id=message.from_user.id,
+                receiver_id=receiver,
+                sender_message_id=sender_message_id,
+                receiver_message_id=receiver_message.message_id
+            )
+
+            await message.answer(
+                "Сообщение отправлено, ожидайте ответ!",
+                reply_markup=await again_in(receiver)
+            )
+            await state.clear()
+
+        except Exception as e:
+            logger.error(f"Error sending message: {str(e)}", exc_info=True)
+            await message.answer(
+                "❗Ошибка при отправке сообщения. Возможно, пользователь заблокировал бота.",
+                reply_markup=await main_menu_bt()
+            )
+            await state.clear()
+
+    except Exception as e:
+        logger.error(f"General error in anon_mes: {str(e)}", exc_info=True)
+        await message.answer(
+            "❗Произошла ошибка. Попробуйте позже.",
+            reply_markup=await main_menu_bt()
+        )
+        await state.clear()
 
 @client_bot_router.message(Links.change_greeting)
 async def change_greeting(message: Message, state: FSMContext):
