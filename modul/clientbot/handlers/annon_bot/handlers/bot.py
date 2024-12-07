@@ -1,3 +1,4 @@
+import logging
 import re
 from aiogram import F, Bot
 from aiogram.filters import CommandStart, Filter
@@ -14,7 +15,7 @@ from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_use
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link
 from modul.loader import client_bot_router
 
-
+logger = logging.getLogger(__name__)
 async def check_channels(message):
     all_channels = await get_channels_for_check()
     if all_channels != []:
@@ -47,54 +48,57 @@ async def payment(message, amount):
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start(message: Message, state: FSMContext, command: BotCommand = None):
-    channels_checker = await check_channels(message)
-    checker = await check_user(message.from_user.id)
-    if not channels_checker:
-        if not checker:
-            new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
-            link_for_db = new_link[new_link.index("=") + 1:]
-            await add_user(message.from_user, link_for_db)
-    else:
-        if not checker:
-            new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
-            link_for_db = new_link[new_link.index("=") + 1:]
-            print(link_for_db)
-            await add_user(message.from_user, link_for_db)
+    try:
+        # Command args (start=ID)
+        args = message.text.split(' ')[-1] if ' ' in message.text else None
+        user_id = args if args and args.isdigit() else None
 
-        if command.args:
+        channels_checker = await check_channels(message)
+        checker = await check_user(message.from_user.id)
+
+        #  channel check
+        if not channels_checker:
             if not checker:
                 new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
                 link_for_db = new_link[new_link.index("=") + 1:]
-                await message.bot.send_message(chat_id=message.from_user.id, text="Добро пожаловать в анонимный чат!",
-                                               reply_markup=await main_menu_bt())
-            link_user = await get_user_by_link(command.args)
-            if link_user:
-                await add_link_statistic(link_user)
-                greeting = await get_greeting(link_user)
-                await message.bot.send_message(chat_id=message.from_user.id,
-                                               text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>, который опубликовал "
-                                                    "эту ссылку.\n\n"
-                                                    "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-                                                    "получит ваше сообщение, но не будет знать от кого.\n\n"
-                                                    "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-                                                    "(кружки), а также стикеры.\n\n"
-                                                    "⚠️<b> Это полностью анонимно!</b>", reply_markup=await cancel_in(),
-                                               parse_mode="html")
-                if greeting:
-                    await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
-                await state.set_state(Links.send_st)
-                await state.set_data({"link_user": link_user})
-        if not command.args:
-            user_link = await get_user_link(message.from_user.id)
-            print(user_link)
-            link = await create_start_link(message.bot, user_link)
-            await message.bot.send_message(chat_id=message.from_user.id,
-                                           text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-                                                f"Твоя личная ссылка:\n👉{link}\n\n"
-                                                f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-                                                f"других соц сетях, чтобы начать получать сообщения 💬",
-                                           parse_mode="html",
-                                           reply_markup=await main_menu_bt())
+                await add_user(message.from_user, link_for_db)
+        else:
+            # new user
+            if not checker:
+                new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+                link_for_db = new_link[new_link.index("=") + 1:]
+                await add_user(message.from_user, link_for_db)
+
+            # User ID
+            if user_id:
+                link_user = await get_user_by_link(user_id)
+                if link_user:
+                    await add_link_statistic(link_user)
+                    greeting = await get_greeting(link_user)
+                    await message.bot.send_message(
+                        chat_id=message.from_user.id,
+                        text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>...",
+                        reply_markup=await cancel_in(),
+                        parse_mode="html")
+                    if greeting:
+                        await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
+                    await state.set_state(Links.send_st)
+                    await state.set_data({"link_user": link_user})
+            else:
+                # Oddiy start command
+                user_link = await get_user_link(message.from_user.id)
+                link = await create_start_link(message.bot, user_link)
+                await message.bot.send_message(
+                    chat_id=message.from_user.id,
+                    text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+                         f"Твоя личная ссылка:\n👉{link}\n\n"
+                         f"Размести эту ссылку ☝️ в своём профиле...",
+                    parse_mode="html",
+                    reply_markup=await main_menu_bt())
+
+    except Exception as e:
+        logger.error(f"Error in start handler: {e}")
+        raise
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",
