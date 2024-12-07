@@ -536,21 +536,20 @@ async def youtube_download_handler(message: Message, bot: Bot):
         # TikTok handler
         if 'tiktok.com' in message.text:
             ydl_opts = {
-                'format': 'worst[ext=mp4]/worst',  # Eng past sifatli versiya
+                'format': 'worst[ext=mp4]/worst',
                 'quiet': True,
                 'no_warnings': True,
-                'max_filesize': 40000000,  # 40MB limit
+                'max_filesize': 40000000,
                 'postprocessor_args': [
-                    '-vf', 'scale=360:-2',  # Videoni 360p ga o'zgartirish
-                    '-b:v', '500k',  # Video bitrate ni cheklash
-                    '-maxrate', '500k',  # Maksimal bitrate
-                    '-bufsize', '1000k'  # Buffer size
+                    '-vf', 'scale=360:-2',
+                    '-b:v', '500k',
+                    '-maxrate', '500k',
+                    '-bufsize', '1000k'
                 ],
                 'postprocessors': [{
                     'key': 'FFmpegVideoConvertor',
                     'preferedformat': 'mp4'
-                }],
-                'outtmpl': '%(title)s.%(ext)s'
+                }]
             }
 
             try:
@@ -559,31 +558,41 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     try:
-                        info = ydl.extract_info(url, download=True)
-                        video_path = ydl.prepare_filename(info)
-
-                        # Videoni yuborish
-                        try:
-                            with open(video_path, 'rb') as video_file:
+                        # Video ma'lumotlarini olish
+                        info = ydl.extract_info(url, download=False)
+                        if info and 'url' in info:
+                            try:
+                                # To'g'ridan-to'g'ri URLni yuborish
                                 await bot.send_video(
                                     chat_id=message.chat.id,
-                                    video=video_file,
+                                    video=info['url'],
                                     caption=f"📹 TikTok video\nСкачано через @{me.username}",
                                 )
-                            await shortcuts.add_to_analitic_data(me.username, url)
-
-                        except Exception as send_error:
-                            logger.error(f"Error sending video: {send_error}")
-                            await message.answer("❌ Ошибка при отправке видео")
-
-                        finally:
-                            # Faylni tozalash
-                            try:
-                                import os
-                                if os.path.exists(video_path):
-                                    os.remove(video_path)
-                            except:
-                                pass
+                                await shortcuts.add_to_analitic_data(me.username, url)
+                                return
+                            except Exception as send_error:
+                                logger.error(f"Error sending video: {send_error}")
+                                try:
+                                    # Agar URL orqali yuborish amalga oshmasa, FSInputFile orqali yuborish
+                                    from aiogram.types import FSInputFile
+                                    info = ydl.extract_info(url, download=True)
+                                    video_path = ydl.prepare_filename(info)
+                                    video = FSInputFile(video_path)
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=video,
+                                        caption=f"📹 TikTok video\nСкачано через @{me.username}",
+                                    )
+                                    # Faylni o'chirish
+                                    import os
+                                    if os.path.exists(video_path):
+                                        os.remove(video_path)
+                                    return
+                                except Exception as file_send_error:
+                                    logger.error(f"Error sending video file: {file_send_error}")
+                                    await message.answer("❌ Ошибка при отправке видео")
+                        else:
+                            await message.answer("❌ Не удалось получить ссылку на видео")
 
                     except Exception as download_error:
                         logger.error(f"Download error: {download_error}")
