@@ -49,29 +49,25 @@ async def payment(message, amount):
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start(message: Message, state: FSMContext, command: BotCommand = None):
     try:
-        # Command args (start=ID)
-        args = message.text.split(' ')[-1] if ' ' in message.text else None
-        user_id = args if args and args.isdigit() else None
-
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
 
-        #  channel check
+        # channel check
         if not channels_checker:
             if not checker:
-                new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
-                link_for_db = new_link[new_link.index("=") + 1:]
+                new_link = await create_start_link(message.bot, str(message.from_user.id))
+                link_for_db = str(message.from_user.id)
                 await add_user(message.from_user, link_for_db)
         else:
             # new user
             if not checker:
-                new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
-                link_for_db = new_link[new_link.index("=") + 1:]
+                new_link = await create_start_link(message.bot, str(message.from_user.id))
+                link_for_db = str(message.from_user.id)
                 await add_user(message.from_user, link_for_db)
 
-            # User ID
-            if user_id:
-                link_user = await get_user_by_link(user_id)
+            # Command args check
+            if command.args:
+                link_user = await get_user_by_link(command.args)
                 if link_user:
                     await add_link_statistic(link_user)
                     greeting = await get_greeting(link_user)
@@ -85,14 +81,15 @@ async def start(message: Message, state: FSMContext, command: BotCommand = None)
                     await state.set_state(Links.send_st)
                     await state.set_data({"link_user": link_user})
             else:
-                # Oddiy start command
-                user_link = await get_user_link(message.from_user.id)
+
+                user_link = str(message.from_user.id)
                 link = await create_start_link(message.bot, user_link)
                 await message.bot.send_message(
                     chat_id=message.from_user.id,
                     text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                          f"Твоя личная ссылка:\n👉{link}\n\n"
-                         f"Размести эту ссылку ☝️ в своём профиле...",
+                         f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+                         f"других соц сетях, чтобы начать получать сообщения 💬",
                     parse_mode="html",
                     reply_markup=await main_menu_bt())
 
