@@ -1,7 +1,7 @@
 import logging
 import re
 from aiogram import F, Bot
-from aiogram.filters import CommandStart, Filter
+from aiogram.filters import CommandStart, Filter, CommandObject
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, BotCommand, CallbackQuery, LabeledPrice
@@ -47,41 +47,47 @@ async def payment(message, amount):
 
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
-async def start(message: Message, state: FSMContext, command: BotCommand = None):
+async def start(message: Message, state: FSMContext, command: CommandObject = None):
     try:
+        # Start commanddan ID ni olish
+        args = message.text.split(' ')
+        user_id = args[1] if len(args) > 1 else None
+
+        logger.info(f"Start command received with args: {user_id}")  # debug uchun
+
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
 
-        # channel check
         if not channels_checker:
             if not checker:
-                new_link = await create_start_link(message.bot, str(message.from_user.id))
-                link_for_db = str(message.from_user.id)
-                await add_user(message.from_user, link_for_db)
+                await add_user(message.from_user, str(message.from_user.id))
         else:
-            # new user
             if not checker:
-                new_link = await create_start_link(message.bot, str(message.from_user.id))
-                link_for_db = str(message.from_user.id)
-                await add_user(message.from_user, link_for_db)
+                await add_user(message.from_user, str(message.from_user.id))
 
-            # Command args check
-            if command.args:
-                link_user = await get_user_by_link(command.args)
+            if user_id:  # Agar ID kelgan bo'lsa
+                logger.info(f"Looking up user with ID: {user_id}")  # debug uchun
+                link_user = await get_user_by_link(user_id)
+
                 if link_user:
                     await add_link_statistic(link_user)
                     greeting = await get_greeting(link_user)
+
                     await message.bot.send_message(
                         chat_id=message.from_user.id,
                         text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>...",
                         reply_markup=await cancel_in(),
-                        parse_mode="html")
+                        parse_mode="html"
+                    )
+
                     if greeting:
                         await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
+
                     await state.set_state(Links.send_st)
                     await state.set_data({"link_user": link_user})
+                else:
+                    logger.error(f"User not found with ID: {user_id}")  # debug uchun
             else:
-
                 user_link = str(message.from_user.id)
                 link = await create_start_link(message.bot, user_link)
                 await message.bot.send_message(
@@ -91,11 +97,11 @@ async def start(message: Message, state: FSMContext, command: BotCommand = None)
                          f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
                          f"других соц сетях, чтобы начать получать сообщения 💬",
                     parse_mode="html",
-                    reply_markup=await main_menu_bt())
+                    reply_markup=await main_menu_bt()
+                )
 
     except Exception as e:
-        logger.error(f"Error in start handler: {e}")
-        raise
+        logger.error(f"Error in start handler: {e}", exc_info=True)
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",
