@@ -535,54 +535,64 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
 
         # TikTok handler
+        # TikTok handler
         if 'tiktok.com' in message.text:
             ydl_opts = {
-                'format': 'best',  # Eng yaxshi formatni tanlash
-                'extract_flat': True,
+                'format': 'worst[ext=mp4]',  # Eng past sifatli MP4
                 'quiet': True,
                 'no_warnings': True,
-                'allow_unplayable_formats': False,
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                },
-                # Video uchun cheklovlar
+                'max_filesize': 40000000,  # 40MB limit
                 'format_sort': [
-                    'res:720',
+                    'filesize:<=40M',
+                    'res:360',
                     'ext:mp4:m4a',
-                    'size:>0',
-                    'proto:https'
                 ],
+                'postprocessors': [{
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': 'mp4',
+                    'maxfilesize': '40M'
+                }],
+                'outtmpl': '%(id)s.%(ext)s'
             }
 
             try:
+                # URL ni tozalash
+                if '?' in url:
+                    url = url.split('?')[0]
+
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # TikTok URL ni tozalash
-                    if '?' in url:
-                        url = url.split('?')[0]
+                    # Avval videoni yuklab olamiz
+                    info = ydl.extract_info(url, download=True)
+                    video_path = ydl.prepare_filename(info)
 
-                    info = ydl.extract_info(url, download=False)
-
-                    if info and ('url' in info or 'direct_url' in info):
-                        video_url = info.get('url') or info.get('direct_url')
-                        try:
+                    try:
+                        # Videoni Telegram orqali yuborish
+                        with open(video_path, 'rb') as video_file:
                             await bot.send_video(
                                 chat_id=message.chat.id,
-                                video=video_url,
+                                video=video_file,
                                 caption=f"📹 TikTok video\nСкачано через @{me.username}",
                             )
-                            await shortcuts.add_to_analitic_data(me.username, url)
-                            return
-                        except Exception as send_error:
-                            logger.error(f"Error sending video: {send_error}")
-                            await message.answer("❌ Ошибка при отправке видео. Возможно видео слишком большое.")
-                            return
-                    else:
-                        await message.answer("❌ Не удалось получить ссылку на видео")
+                        await shortcuts.add_to_analitic_data(me.username, url)
+
+                        # Faylni o'chirish
+                        import os
+                        os.remove(video_path)
+                        return
+
+                    except Exception as send_error:
+                        logger.error(f"Error sending video: {send_error}")
+                        # Fayl o'chirishga harakat
+                        try:
+                            os.remove(video_path)
+                        except:
+                            pass
+                        await message.answer("❌ Ошибка при отправке видео. Попробуйте позже.")
                         return
 
             except Exception as tiktok_error:
                 logger.error(f"TikTok download error: {tiktok_error}")
-                await message.answer("❌ Ошибка при скачивании. Попробуйте другое видео или позже.")
+                await message.answer("❌ Ошибка при скачивании. Попробуйте позже.")
                 return
         # Instagram handler
         if 'instagram' in message.text or 'inst.ae' in message.text:
