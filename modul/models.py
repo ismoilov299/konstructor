@@ -340,10 +340,10 @@ class ChannelSponsor(models.Model):
 
 
 class Messages(models.Model):
-    sender_id = models.IntegerField()
-    receiver_id = models.IntegerField()
-    sender_message_id = models.IntegerField()
-    receiver_message_id = models.IntegerField()
+    sender_id = models.BigIntegerField()  # g
+    receiver_id = models.BigIntegerField()
+    sender_message_id = models.BigIntegerField()
+    receiver_message_id = models.BigIntegerField()
     reg_date = models.DateTimeField(auto_now_add=True)
 
 
