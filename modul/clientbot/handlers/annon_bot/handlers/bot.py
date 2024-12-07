@@ -165,47 +165,27 @@ async def anon_mes(message: Message, state: FSMContext):
     try:
         get_link = await state.get_data()
         receiver = get_link.get("link_user")
-        logger.info(f"State data: {get_link}, Receiver ID: {receiver}")  # Debug log
-
-        if not receiver:
-            logger.error("Receiver ID not found in state data")
-            await message.answer("❗Ошибка: получатель не найден", reply_markup=await main_menu_bt())
-            await state.clear()
-            return
-
-        sender_message_id = message.message_id
-        text1 = "<b>У тебя новое анонимное сообщение!</b>\n\n"
-        text2 = "↩️<i> Свайпни для ответа.</i>"
-        caption = message.caption + "\n\n" if message.caption else ""
+        logger.info(f"Trying to send message to receiver: {receiver}")
 
         try:
-            if message.voice:
-                logger.info(f"Sending voice message to {receiver}")
-                receiver_message = await message.bot.copy_message(
-                    chat_id=receiver,
-                    from_chat_id=message.from_user.id,
-                    message_id=message.message_id,
-                    caption=text1 + caption + text2,
-                    parse_mode="html"
-                )
-            elif message.text:
-                logger.info(f"Sending text message to {receiver}: {message.text[:50]}")
-                receiver_message = await message.bot.send_message(
-                    chat_id=receiver,
-                    text=text1 + message.text + "\n\n" + text2,
-                    parse_mode="html"
-                )
-            else:
-                await message.answer("❗Неподдерживаемый формат сообщения",
-                                  reply_markup=await main_menu_bt())
-                await state.clear()
-                return
+            # Caption ni qo'shamiz
+            caption = "<b>У тебя новое анонимное сообщение!</b>\n\n" + (
+                        message.caption or '') + "\n\n↩️<i>Свайпни для ответа.</i>"
 
-            # Xabar yuborildi, endi ma'lumotlarni saqlash
+            # Message ni copy qilamiz
+            receiver_message = await message.bot.copy_message(
+                chat_id=receiver,
+                from_chat_id=message.from_user.id,
+                message_id=message.message_id,
+                caption=caption if message.caption is not None else None,
+                parse_mode="html"
+            )
+
+            # Ma'lumotlarni saqlaymiz
             await add_messages_info(
                 sender_id=message.from_user.id,
                 receiver_id=receiver,
-                sender_message_id=sender_message_id,
+                sender_message_id=message.message_id,
                 receiver_message_id=receiver_message.message_id
             )
 
@@ -216,17 +196,17 @@ async def anon_mes(message: Message, state: FSMContext):
             await state.clear()
 
         except Exception as e:
-            logger.error(f"Error sending message: {str(e)}", exc_info=True)
+            logger.error(f"Error sending message: {str(e)}")
             await message.answer(
-                "❗Ошибка при отправке сообщения. Возможно, пользователь заблокировал бота.",
+                "❗️Ошибка: не удалось отправить сообщение",
                 reply_markup=await main_menu_bt()
             )
             await state.clear()
 
     except Exception as e:
-        logger.error(f"General error in anon_mes: {str(e)}", exc_info=True)
+        logger.error(f"Error in anon_mes: {str(e)}")
         await message.answer(
-            "❗Произошла ошибка. Попробуйте позже.",
+            "❗️Произошла ошибка",
             reply_markup=await main_menu_bt()
         )
         await state.clear()
