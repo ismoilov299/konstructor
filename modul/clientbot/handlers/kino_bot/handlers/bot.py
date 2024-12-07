@@ -662,8 +662,8 @@ async def youtube_download_handler(message: Message, bot: Bot):
         # YouTube handler
         await bot.send_chat_action(message.chat.id, "upload_video")
         ydl_opts = {
-            'format': 'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[ext=mp4]',
-            'max_filesize': 45_000_000,
+            'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]',  # 480p
+            'max_filesize': 45_000_000,  # 45MB limit
             'merge_output_format': 'mp4',
             'postprocessors': [{
                 'key': 'FFmpegVideoConvertor',
@@ -672,6 +672,12 @@ async def youtube_download_handler(message: Message, bot: Bot):
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
+            'postprocessor_args': [
+                '-vf', 'scale=854:480',  # 480p ga o'tkazish
+                '-b:v', '1000k',  # Video bitrate
+                '-maxrate', '1000k',  # Maksimal bitrate
+                '-bufsize', '2000k'  # Buffer size
+            ],
         }
 
         try:
