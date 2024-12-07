@@ -535,28 +535,36 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
 
         # TikTok handler
-        # TikTok handler
         if 'tiktok.com' in message.text:
             ydl_opts = {
-                'format': 'h264_720p_1637940-0',  # 720p formatni tanlaymiz
-                'fallback_formats': [
-                    'h264_720p_1637940-1',
-                    'bytevc1_720p_1010288-0',
-                    'bytevc1_720p_1010288-1',
-                    'bytevc1_540p_678404-0',
-                    'bytevc1_540p_678404-1'
-                ],
+                'format': 'best',  # Eng yaxshi formatni tanlash
+                'extract_flat': True,
                 'quiet': True,
                 'no_warnings': True,
+                'allow_unplayable_formats': False,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                # Video uchun cheklovlar
+                'format_sort': [
+                    'res:720',
+                    'ext:mp4:m4a',
+                    'size:>0',
+                    'proto:https'
+                ],
             }
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    try:
-                        info = ydl.extract_info(url, download=False)
+                    # TikTok URL ni tozalash
+                    if '?' in url:
+                        url = url.split('?')[0]
 
-                        if info and 'url' in info:
-                            video_url = info['url']
+                    info = ydl.extract_info(url, download=False)
+
+                    if info and ('url' in info or 'direct_url' in info):
+                        video_url = info.get('url') or info.get('direct_url')
+                        try:
                             await bot.send_video(
                                 chat_id=message.chat.id,
                                 video=video_url,
@@ -564,49 +572,18 @@ async def youtube_download_handler(message: Message, bot: Bot):
                             )
                             await shortcuts.add_to_analitic_data(me.username, url)
                             return
-
-                    except Exception as format_error:
-                        # Agar birinchi format ishlamasa, zaxira formatlarni sinab ko'ramiz
-                        for backup_format in ydl_opts['fallback_formats']:
-                            try:
-                                ydl_opts['format'] = backup_format
-                                with yt_dlp.YoutubeDL(ydl_opts) as ydl_backup:
-                                    info = ydl_backup.extract_info(url, download=False)
-                                    if info and 'url' in info:
-                                        video_url = info['url']
-                                        await bot.send_video(
-                                            chat_id=message.chat.id,
-                                            video=video_url,
-                                            caption=f"📹 TikTok video\nСкачано через @{me.username}",
-                                        )
-                                        await shortcuts.add_to_analitic_data(me.username, url)
-                                        return
-                            except:
-                                continue
-
-                        logger.error(f"Format error: {format_error}")
-                        await message.answer("❌ Ошибка при получении видео")
+                        except Exception as send_error:
+                            logger.error(f"Error sending video: {send_error}")
+                            await message.answer("❌ Ошибка при отправке видео. Возможно видео слишком большое.")
+                            return
+                    else:
+                        await message.answer("❌ Не удалось получить ссылку на видео")
                         return
 
             except Exception as tiktok_error:
                 logger.error(f"TikTok download error: {tiktok_error}")
-                # Oxirgi urinish - eng oddiy format
-                try:
-                    ydl_opts['format'] = 'download'
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_last:
-                        info = ydl_last.extract_info(url, download=False)
-                        if info and 'url' in info:
-                            video_url = info['url']
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=video_url,
-                                caption=f"📹 TikTok video (Базовое качество)\nСкачано через @{me.username}",
-                            )
-                            return
-                except:
-                    await message.answer("❌ Ошибка при скачивании TikTok видео")
+                await message.answer("❌ Ошибка при скачивании. Попробуйте другое видео или позже.")
                 return
-
         # Instagram handler
         if 'instagram' in message.text or 'inst.ae' in message.text:
             try:
