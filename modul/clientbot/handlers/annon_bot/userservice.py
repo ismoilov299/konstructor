@@ -29,10 +29,16 @@ def add_user(u, link):
 
 
 @sync_to_async
-def get_user_by_link(link):
-    user = UserTG.objects.filter(user_link=link).first()
+def get_user_by_link(link_or_id):
+    user = UserTG.objects.filter(user_link=link_or_id).first()
+    if not user:
+        user = UserTG.objects.filter(uid=link_or_id).first()
     return user.uid if user else False
 
+@sync_to_async
+def get_user_by_id(uid):
+    user = UserTG.objects.filter(uid=uid).first()
+    return user.uid if user else False
 
 @sync_to_async
 def add_messages_info(sender_id, receiver_id, sender_message_id, receiver_message_id):

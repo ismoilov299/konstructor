@@ -12,7 +12,7 @@ from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in, pa
 from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
-    add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link
+    add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
 from modul.loader import client_bot_router
 
 logger = logging.getLogger(__name__)
@@ -65,9 +65,9 @@ async def start(message: Message, state: FSMContext, command: CommandObject = No
             if not checker:
                 await add_user(message.from_user, str(message.from_user.id))
 
-            if user_id:  # Agar ID kelgan bo'lsa
-                logger.info(f"Looking up user with ID: {user_id}")  # debug uchun
-                link_user = await get_user_by_link(user_id)
+            if user_id:
+                logger.info(f"Looking up user with ID: {user_id}")
+                link_user = await get_user_by_id(user_id)
 
                 if link_user:
                     await add_link_statistic(link_user)
