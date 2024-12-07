@@ -533,67 +533,65 @@ async def youtube_download_handler(message: Message, bot: Bot):
         me = await bot.get_me()
         url = message.text
 
-
-        # TikTok handler
         # TikTok handler
         if 'tiktok.com' in message.text:
             ydl_opts = {
-                'format': 'worst[ext=mp4]',  # Eng past sifatli MP4
+                'format': 'worst[ext=mp4]/worst',  # Eng past sifatli versiya
                 'quiet': True,
                 'no_warnings': True,
                 'max_filesize': 40000000,  # 40MB limit
-                'format_sort': [
-                    'filesize:<=40M',
-                    'res:360',
-                    'ext:mp4:m4a',
+                'postprocessor_args': [
+                    '-vf', 'scale=360:-2',  # Videoni 360p ga o'zgartirish
+                    '-b:v', '500k',  # Video bitrate ni cheklash
+                    '-maxrate', '500k',  # Maksimal bitrate
+                    '-bufsize', '1000k'  # Buffer size
                 ],
                 'postprocessors': [{
                     'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4',
-                    'maxfilesize': '40M'
+                    'preferedformat': 'mp4'
                 }],
-                'outtmpl': '%(id)s.%(ext)s'
+                'outtmpl': '%(title)s.%(ext)s'
             }
 
             try:
-                # URL ni tozalash
                 if '?' in url:
                     url = url.split('?')[0]
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # Avval videoni yuklab olamiz
-                    info = ydl.extract_info(url, download=True)
-                    video_path = ydl.prepare_filename(info)
-
                     try:
-                        # Videoni Telegram orqali yuborish
-                        with open(video_path, 'rb') as video_file:
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=video_file,
-                                caption=f"📹 TikTok video\nСкачано через @{me.username}",
-                            )
-                        await shortcuts.add_to_analitic_data(me.username, url)
+                        info = ydl.extract_info(url, download=True)
+                        video_path = ydl.prepare_filename(info)
 
-                        # Faylni o'chirish
-                        import os
-                        os.remove(video_path)
-                        return
-
-                    except Exception as send_error:
-                        logger.error(f"Error sending video: {send_error}")
-                        # Fayl o'chirishga harakat
+                        # Videoni yuborish
                         try:
-                            os.remove(video_path)
-                        except:
-                            pass
-                        await message.answer("❌ Ошибка при отправке видео. Попробуйте позже.")
-                        return
+                            with open(video_path, 'rb') as video_file:
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=video_file,
+                                    caption=f"📹 TikTok video\nСкачано через @{me.username}",
+                                )
+                            await shortcuts.add_to_analitic_data(me.username, url)
+
+                        except Exception as send_error:
+                            logger.error(f"Error sending video: {send_error}")
+                            await message.answer("❌ Ошибка при отправке видео")
+
+                        finally:
+                            # Faylni tozalash
+                            try:
+                                import os
+                                if os.path.exists(video_path):
+                                    os.remove(video_path)
+                            except:
+                                pass
+
+                    except Exception as download_error:
+                        logger.error(f"Download error: {download_error}")
+                        await message.answer("❌ Ошибка при скачивании видео")
 
             except Exception as tiktok_error:
                 logger.error(f"TikTok download error: {tiktok_error}")
                 await message.answer("❌ Ошибка при скачивании. Попробуйте позже.")
-                return
         # Instagram handler
         if 'instagram' in message.text or 'inst.ae' in message.text:
             try:
