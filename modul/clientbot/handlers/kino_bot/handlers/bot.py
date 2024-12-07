@@ -601,6 +601,7 @@ async def youtube_download_handler(message: Message, bot: Bot):
             except Exception as tiktok_error:
                 logger.error(f"TikTok download error: {tiktok_error}")
                 await message.answer("❌ Ошибка при скачивании. Попробуйте позже.")
+
         # Instagram handler
         if 'instagram' in message.text or 'inst.ae' in message.text:
             try:
@@ -638,7 +639,6 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
                         except Exception as send_error:
                             logger.error(f"Error sending Instagram media: {send_error}")
-                            # Sifatni pasaytirish
                             try:
                                 ydl_opts['format'] = 'worst[ext=mp4]'
                                 with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
@@ -662,61 +662,57 @@ async def youtube_download_handler(message: Message, bot: Bot):
         # YouTube handler
         await bot.send_chat_action(message.chat.id, "upload_video")
         ydl_opts = {
-            'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]',  # 480p
-            'max_filesize': 45_000_000,  # 45MB limit
+            'format': 'best[height<=480][ext=mp4]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best',
             'merge_output_format': 'mp4',
-            'postprocessors': [{
-                'key': 'FFmpegVideoConvertor',
-                'preferedformat': 'mp4',
-            }],
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
-            'postprocessor_args': [
-                '-vf', 'scale=854:480',  # 480p ga o'tkazish
-                '-b:v', '1000k',  # Video bitrate
-                '-maxrate', '1000k',  # Maksimal bitrate
-                '-bufsize', '2000k'  # Buffer size
-            ],
         }
 
         try:
             await bot.send_chat_action(message.chat.id, "upload_video")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
-                    info = ydl.extract_info(url, download=False)
+                    info = ydl.extract_info(url, download=True)  # download=True qilamiz
+                    video_path = ydl.prepare_filename(info)
 
-                    if 'url' in info:
+                    try:
+                        from aiogram.types import FSInputFile
+                        video = FSInputFile(video_path)
+                        await bot.send_video(
+                            chat_id=message.chat.id,
+                            video=video,
+                            caption=f"📹 {info.get('title', 'Video')}\n\nСкачано через @{me.username}",
+                            supports_streaming=True
+                        )
+                        await shortcuts.add_to_analitic_data(me.username, url)
+
+                        # Videoni o'chirib tashlash
+                        if os.path.exists(video_path):
+                            os.remove(video_path)
+
+                    except Exception as send_error:
+                        logger.error(f"Error sending video: {send_error}")
+                        # Sifatni pasaytirish
                         try:
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=info['url'],
-                                caption=f"📹 {info.get('title', 'Video')}\n\nСкачано через @{me.username}",
-                                supports_streaming=True
-                            )
+                            ydl_opts['format'] = 'worst[ext=mp4]/worst'
+                            with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
+                                info_low = ydl.extract_info(url, download=True)
+                                video_path_low = ydl_low.prepare_filename(info_low)
+                                video_low = FSInputFile(video_path_low)
 
-                            try:
-                                await shortcuts.add_to_analitic_data(me.username, url)
-                            except Exception as analytics_error:
-                                logger.error(f"Analytics error: {analytics_error}")
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=video_low,
+                                    caption=f"📹 {info_low.get('title', 'Video')} (Низкое качество)\n\nСкачано через @{me.username}",
+                                    supports_streaming=True
+                                )
 
-                        except Exception as send_error:
-                            logger.error(f"Error sending video: {send_error}")
-                            # Sifatni pasaytirish
-                            try:
-                                ydl_opts['format'] = 'worst[ext=mp4]'
-                                with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
-                                    info_low = ydl_low.extract_info(url, download=False)
-                                    await bot.send_video(
-                                        chat_id=message.chat.id,
-                                        video=info_low['url'],
-                                        caption=f"📹 {info_low.get('title', 'Video')} (Низкое качество)\n\nСкачано через @{me.username}",
-                                        supports_streaming=True
-                                    )
-                            except:
-                                await message.answer("❌ Не удалось отправить видео даже в низком качестве.")
-                    else:
-                        await message.answer("❌ Не удалось получить ссылку на видео")
+                                if os.path.exists(video_path_low):
+                                    os.remove(video_path_low)
+
+                        except Exception:
+                            await message.answer("❌ Не удалось отправить видео даже в низком качестве.")
 
                 except Exception as extract_error:
                     logger.error(f"Error extracting info: {extract_error}")
