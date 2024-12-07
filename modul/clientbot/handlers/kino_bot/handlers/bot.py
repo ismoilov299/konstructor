@@ -534,9 +534,15 @@ async def youtube_download_handler(message: Message, bot: Bot):
         url = message.text
 
         # TikTok handler
+        # TikTok handler
         if 'tiktok.com' in message.text:
             ydl_opts = {
-                'format': '360p',  # 360p sifatda yuklash
+                # ESKI
+                # 'format': '360p',  # Bu xato bermoqda
+
+                # YANGI
+                'format': 'best_mp4[filesize<45M]/worst_mp4',
+                # TikTok uchun mavjud formatlardan eng yaxshisini tanlaydi
                 'max_filesize': 45_000_000,  # 45MB limit
                 'merge_output_format': 'mp4',
                 'postprocessors': [{
@@ -563,7 +569,7 @@ async def youtube_download_handler(message: Message, bot: Bot):
                 logger.error(f"TikTok download error: {tiktok_error}")
                 try:
                     # Sifatni pasaytirish
-                    ydl_opts['format'] = 'worst[ext=mp4]'
+                    ydl_opts['format'] = 'worst[filesize<45M]'  # Eng past sifatli versiya
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
                         info_low = ydl_low.extract_info(url, download=False)
                         await bot.send_video(
