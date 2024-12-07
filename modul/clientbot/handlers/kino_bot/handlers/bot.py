@@ -287,7 +287,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['parse_mode'] = "Markdown"
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
     elif shortcuts.have_one_module(bot_db, "refs"):
-        await start_ref(message)
+        await start_ref(message, bot=bot)
     elif shortcuts.have_one_module(bot_db, "kino"):
         await start_kino_bot(message, state)
         kwargs['parse_mode'] = "HTML"
@@ -533,6 +533,14 @@ async def youtube_download_handler(message: Message, bot: Bot):
         me = await bot.get_me()
         url = message.text
 
+        if 'tiktok.com' in message.text:
+            ydl_opts = {
+                'format': 'worst[ext=mp4]',  # TikTok uchun eng past sifatli versiyani olish
+                'noplaylist': True,
+                'quiet': True,
+                'no_warnings': True,
+            }
+
         # Instagram handler
         if 'instagram' in message.text or 'inst.ae' in message.text:
             try:
@@ -582,7 +590,12 @@ async def youtube_download_handler(message: Message, bot: Bot):
         # YouTube handler
         await bot.send_chat_action(message.chat.id, "upload_video")
         ydl_opts = {
-            'format': 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
+            'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best',
+            'merge_output_format': 'mp4',
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',
+            }],
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,

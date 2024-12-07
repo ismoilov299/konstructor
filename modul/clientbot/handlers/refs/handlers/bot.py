@@ -46,7 +46,7 @@ async def banned(message):
     return True
 
 
-async def start_ref(message: Message, command: BotCommand = None):
+async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
     channels_checker = await check_channels(message)
     checker = await check_user(message.from_user.id)
     checker_banned = await banned(message)

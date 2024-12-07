@@ -216,7 +216,7 @@ def add_channel(channel_url, channel_id):
 @sync_to_async
 def get_actual_price():
     admin_info = AdminInfo.objects.first()
-    return admin_info.price if admin_info else None
+    return admin_info.price if admin_info else 10
 
 
 @sync_to_async
