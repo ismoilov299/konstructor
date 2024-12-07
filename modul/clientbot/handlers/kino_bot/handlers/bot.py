@@ -533,19 +533,56 @@ async def youtube_download_handler(message: Message, bot: Bot):
         me = await bot.get_me()
         url = message.text
 
+        # TikTok handler
         if 'tiktok.com' in message.text:
             ydl_opts = {
-                'format': 'worst[ext=mp4]',  # TikTok uchun eng past sifatli versiyani olish
+                'format': '360p',  # 360p sifatda yuklash
+                'max_filesize': 45_000_000,  # 45MB limit
+                'merge_output_format': 'mp4',
+                'postprocessors': [{
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': 'mp4',
+                }],
                 'noplaylist': True,
                 'quiet': True,
                 'no_warnings': True,
             }
 
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    if 'url' in info:
+                        await bot.send_video(
+                            chat_id=message.chat.id,
+                            video=info['url'],
+                            caption=f"📹 TikTok video\nСкачано через @{me.username}",
+                        )
+                        await shortcuts.add_to_analitic_data(me.username, url)
+                    return
+            except Exception as tiktok_error:
+                logger.error(f"TikTok download error: {tiktok_error}")
+                try:
+                    # Sifatni pasaytirish
+                    ydl_opts['format'] = 'worst[ext=mp4]'
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
+                        info_low = ydl_low.extract_info(url, download=False)
+                        await bot.send_video(
+                            chat_id=message.chat.id,
+                            video=info_low['url'],
+                            caption=f"📹 TikTok video (Низкое качество)\nСкачано через @{me.username}",
+                            supports_streaming=True
+                        )
+                        await shortcuts.add_to_analitic_data(me.username, url)
+                except:
+                    await message.answer("❌ Ошибка при скачивании TikTok видео.")
+                return
+
         # Instagram handler
         if 'instagram' in message.text or 'inst.ae' in message.text:
             try:
                 ydl_opts = {
-                    'format': 'best',
+                    'format': 'best[height<=360]',
+                    'max_filesize': 45_000_000,
                     'quiet': True,
                     'no_warnings': True,
                 }
@@ -557,7 +594,6 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
                     if 'url' in info:
                         try:
-                            # Ko'proq formatlarni qo'llab-quvvatlash uchun
                             media_type = info.get('ext', '')
                             if media_type in ['mp4', 'mov']:
                                 await bot.send_video(
@@ -578,7 +614,19 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
                         except Exception as send_error:
                             logger.error(f"Error sending Instagram media: {send_error}")
-                            await message.answer("❌ Не удалось отправить медиа")
+                            # Sifatni pasaytirish
+                            try:
+                                ydl_opts['format'] = 'worst[ext=mp4]'
+                                with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
+                                    info_low = ydl_low.extract_info(url, download=False)
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=info_low['url'],
+                                        caption=f"📹 Instagram video (Низкое качество)\nСкачано через @{me.username}",
+                                        supports_streaming=True
+                                    )
+                            except:
+                                await message.answer("❌ Не удалось отправить медиа")
                     else:
                         await message.answer("❌ Не удалось получить ссылку на медиа")
 
@@ -590,7 +638,8 @@ async def youtube_download_handler(message: Message, bot: Bot):
         # YouTube handler
         await bot.send_chat_action(message.chat.id, "upload_video")
         ydl_opts = {
-            'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best',
+            'format': 'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[ext=mp4]',
+            'max_filesize': 45_000_000,
             'merge_output_format': 'mp4',
             'postprocessors': [{
                 'key': 'FFmpegVideoConvertor',
@@ -605,7 +654,6 @@ async def youtube_download_handler(message: Message, bot: Bot):
             await bot.send_chat_action(message.chat.id, "upload_video")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
-                    # Get video info
                     info = ydl.extract_info(url, download=False)
 
                     if 'url' in info:
@@ -617,7 +665,6 @@ async def youtube_download_handler(message: Message, bot: Bot):
                                 supports_streaming=True
                             )
 
-                            # Update analytics
                             try:
                                 await shortcuts.add_to_analitic_data(me.username, url)
                             except Exception as analytics_error:
@@ -625,7 +672,19 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
                         except Exception as send_error:
                             logger.error(f"Error sending video: {send_error}")
-                            await message.answer("❌ Не удалось отправить видео. Возможно оно слишком большое.")
+                            # Sifatni pasaytirish
+                            try:
+                                ydl_opts['format'] = 'worst[ext=mp4]'
+                                with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
+                                    info_low = ydl_low.extract_info(url, download=False)
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=info_low['url'],
+                                        caption=f"📹 {info_low.get('title', 'Video')} (Низкое качество)\n\nСкачано через @{me.username}",
+                                        supports_streaming=True
+                                    )
+                            except:
+                                await message.answer("❌ Не удалось отправить видео даже в низком качестве.")
                     else:
                         await message.answer("❌ Не удалось получить ссылку на видео")
 
