@@ -3,7 +3,7 @@ from contextlib import suppress
 
 from aiogram import Bot, F, html
 from aiogram.exceptions import TelegramForbiddenError
-from aiogram.filters import Command, CommandStart, CommandObject, Filter, BaseFilter
+from aiogram.filters import Command, CommandStart, CommandObject, Filter, BaseFilter, command
 from aiogram.fsm.context import FSMContext
 from aiogram.filters.state import State, StatesGroup, StateFilter
 
@@ -287,7 +287,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['parse_mode'] = "Markdown"
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
     elif shortcuts.have_one_module(bot_db, "refs"):
-        await start_ref(message, bot=bot)
+        await start_ref(message, bot=bot, command=command)
     elif shortcuts.have_one_module(bot_db, "kino"):
         await start_kino_bot(message, state)
         kwargs['parse_mode'] = "HTML"
@@ -315,6 +315,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
     logger.info(f"Start command received from user {message.from_user.id}")
     bot_db = await shortcuts.get_bot(bot)
 
+    # Debug log qo'shamiz
+    if command.args:
+        logger.info(f"Referral args received: {command.args}")
+
     info = await get_user(uid=message.from_user.id, username=message.from_user.username,
                           first_name=message.from_user.first_name if message.from_user.first_name else None,
                           last_name=message.from_user.last_name if message.from_user.last_name else None)
@@ -323,9 +327,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
     bot_commands = [
         BotCommand(command="/start", description="Меню"),
     ]
-    print('command start')
+
     if commands != bot_commands:
         await bot.set_my_commands(bot_commands)
+
     referral = command.args
     uid = message.from_user.id
     user = await shortcuts.get_user(uid, bot)
@@ -348,7 +353,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
         link_for_db = new_link[new_link.index("=") + 1:]
         await save_user(u=message.from_user, inviter=inviter, bot=bot, link=link_for_db)
-    await start(message, state, bot)
+
+    # Command ni start funksiyasiga uzatamiz
+    await start(message, state, bot, command=command)
     return
 
 
