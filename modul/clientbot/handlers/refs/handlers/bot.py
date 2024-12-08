@@ -9,7 +9,7 @@ from modul.clientbot.handlers.refs.keyboards.buttons import *
 from modul.clientbot.handlers.refs.shortcuts import *
 from aiogram import F, Bot
 from modul.clientbot.handlers.refs.data.states import PaymentState
-
+logger = logging.getLogger(__name__)
 
 # TODO изменить метод получения айди админа
 async def admin_id_func(user_id, bot):
@@ -51,7 +51,8 @@ async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
     checker = await check_user(message.from_user.id)
     checker_banned = await banned(message)
     if command and not checker and checker_banned:
-        inv_id = int(decode_payload(command.args))
+        inv_id = int(command.args)
+        logger.info(f"Referral ID: {inv_id}")
         inv_name = await get_user_name(inv_id)
         if inv_name:
             await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id,
