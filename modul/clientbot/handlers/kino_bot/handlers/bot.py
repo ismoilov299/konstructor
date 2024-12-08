@@ -287,7 +287,11 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['parse_mode'] = "Markdown"
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
     elif shortcuts.have_one_module(bot_db, "refs"):
-        await start_ref(message, bot=bot, command=command)
+        # Faqat shu qismni o'zgartiramiz
+        if hasattr(message, 'command_args'):
+            await start_ref(message, bot=bot, command=BotCommand(command='start', args=message.command_args))
+        else:
+            await start_ref(message, bot=bot)
     elif shortcuts.have_one_module(bot_db, "kino"):
         await start_kino_bot(message, state)
         kwargs['parse_mode'] = "HTML"
@@ -318,6 +322,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
     # Debug log qo'shamiz
     if command.args:
         logger.info(f"Referral args received: {command.args}")
+        # Buyerda referral ma'lumotini message ga saqlaymiz
+        message.command_args = command.args
 
     info = await get_user(uid=message.from_user.id, username=message.from_user.username,
                           first_name=message.from_user.first_name if message.from_user.first_name else None,
@@ -354,8 +360,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         link_for_db = new_link[new_link.index("=") + 1:]
         await save_user(u=message.from_user, inviter=inviter, bot=bot, link=link_for_db)
 
-    # Command ni start funksiyasiga uzatamiz
-    await start(message, state, bot, command=command)
+    # Start funksiyasini chaqirish
+    await start(message, state, bot)
     return
 
 
