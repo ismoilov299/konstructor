@@ -54,29 +54,38 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
     if referral_id and not checker and checker_banned:
         try:
             inv_id = int(referral_id)
-            inviter = await shortcuts.get_user(inv_id, bot)
-            if inviter:
+            inv_name = await get_user_name(inv_id)
+            logger.info(f"Processing referral. Inviter ID: {inv_id}, Inviter name: {inv_name}")  # Debug log
+
+            if inv_name:
+                # Yangi foydalanuvchini qo'shish
                 await add_user(
                     user_name=message.from_user.first_name,
                     tg_id=message.from_user.id,
-                    invited=await get_user_name(inv_id),
+                    invited=inv_name,
                     invited_id=inv_id
                 )
+                # Referalni qo'shish
                 await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
+                # Taklif qilgan odamga bonus berish
+                await plus_ref(inv_id)  # Referral sonini oshirish
+                await plus_money(inv_id)  # Balansga pul qo'shish
+
                 await message.bot.send_message(
                     message.from_user.id,
-                    f"🎉Привет, {message.from_user.first_name}",
+                    f"🎉Привет, {message.from_user.first_name}\nВы были приглашены пользователем {inv_name}",
                     reply_markup=await main_menu_bt()
                 )
                 return
+
         except Exception as e:
             logger.error(f"Error processing referral: {e}")
 
-    # Default behavior
-    if not checker and checker_banned:
+    elif not checker and checker_banned:
         await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
-        await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                       reply_markup=await main_menu_bt())
+
+    await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+                                   reply_markup=await main_menu_bt())
 
 
 # async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
