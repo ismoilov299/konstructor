@@ -330,10 +330,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         logger.info(f"Referral args received: {command.args}")
         await state.update_data(referral=command.args)
 
-    # Bot argumenti qo'shildi
+    # Bot argumentisiz chaqiramiz
     info = await get_user(
         uid=message.from_user.id,
-        bot=bot,  # Bot argumenti
         username=message.from_user.username,
         first_name=message.from_user.first_name if message.from_user.first_name else None,
         last_name=message.from_user.last_name if message.from_user.last_name else None
@@ -353,8 +352,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
 
     if not user:
         if referral and referral.isdigit():
-            # Bu yerda ham bot argumenti qo'shildi
-            inviter = await shortcuts.get_user(int(referral), bot)
+            # Bot argumentisiz get_user ni chaqiramiz
+            inviter = await shortcuts.get_user(int(referral))
             if inviter:
                 await shortcuts.increase_referral(inviter)
                 with suppress(TelegramForbiddenError):
@@ -367,6 +366,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     )
         else:
             inviter = None
+
+        # Bot username ni olish
         me = await bot.get_me()
         new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
         await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
