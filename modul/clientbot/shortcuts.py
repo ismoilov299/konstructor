@@ -106,8 +106,7 @@ def get_users(**kwargs):
 #
 async def increase_referral(user: models.ClientBotUser):
     user.referral_count += 1
-    await user.save()
-
+    await sync_to_async(user.save)()
 
 #
 #

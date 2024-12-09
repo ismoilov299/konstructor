@@ -335,9 +335,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
 
     if not user:
         if command.args and command.args.isdigit():
-            # Bot argumentini uzatamiz
             inviter = await shortcuts.get_user(int(command.args), bot)
             if inviter:
+                # sync_to_async dekoratori bilan o'ralgan funksiyani chaqiramiz
                 await shortcuts.increase_referral(inviter)
                 with suppress(TelegramForbiddenError):
                     user_link = html.link('реферал', f'tg://user?id={uid}')
