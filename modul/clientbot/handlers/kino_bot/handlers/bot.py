@@ -288,13 +288,14 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['parse_mode'] = "Markdown"
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
+
     elif shortcuts.have_one_module(bot_db, "refs"):
+
         state_data = await state.get_data()
+
         referral = state_data.get('referral')
-        if referral:
-            await start_ref(message, bot=bot, command=BotCommand(command='start', args=referral))
-        else:
-            await start_ref(message, bot=bot)
+
+        await start_ref(message, bot=bot, referral_id=referral)
 
     elif shortcuts.have_one_module(bot_db, "kino"):
         await start_kino_bot(message, state)

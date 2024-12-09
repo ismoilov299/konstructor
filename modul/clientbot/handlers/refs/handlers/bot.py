@@ -46,31 +46,64 @@ async def banned(message):
     return True
 
 
-async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
+async def start_ref(message: Message, bot: Bot, referral_id: str = None):
     channels_checker = await check_channels(message)
     checker = await check_user(message.from_user.id)
     checker_banned = await banned(message)
-    if command and not checker and checker_banned:
-        inv_id = int(command.args)
-        logger.info(f"Referral ID: {inv_id}")
-        inv_name = await get_user_name(inv_id)
-        if inv_name:
-            await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id,
-                           invited=inv_name, invited_id=inv_id)
-            await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
-            await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                           reply_markup=await main_menu_bt())
-        elif not inv_name:
-            await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
-            await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                           reply_markup=await main_menu_bt())
-    elif not checker and checker_banned:
+
+    if referral_id and not checker and checker_banned:
+        try:
+            inv_id = int(referral_id)
+            inviter = await shortcuts.get_user(inv_id, bot)
+            if inviter:
+                await add_user(
+                    user_name=message.from_user.first_name,
+                    tg_id=message.from_user.id,
+                    invited=await get_user_name(inv_id),
+                    invited_id=inv_id
+                )
+                await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
+                await message.bot.send_message(
+                    message.from_user.id,
+                    f"🎉Привет, {message.from_user.first_name}",
+                    reply_markup=await main_menu_bt()
+                )
+                return
+        except Exception as e:
+            logger.error(f"Error processing referral: {e}")
+
+    # Default behavior
+    if not checker and checker_banned:
         await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
         await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
                                        reply_markup=await main_menu_bt())
-    elif channels_checker and checker_banned and checker:
-        await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                       reply_markup=await main_menu_bt())
+
+
+# async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
+#     channels_checker = await check_channels(message)
+#     checker = await check_user(message.from_user.id)
+#     checker_banned = await banned(message)
+#     if command and not checker and checker_banned:
+#         inv_id = int(command.args)
+#         logger.info(f"Referral ID: {inv_id}")
+#         inv_name = await get_user_name(inv_id)
+#         if inv_name:
+#             await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id,
+#                            invited=inv_name, invited_id=inv_id)
+#             await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
+#             await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+#                                            reply_markup=await main_menu_bt())
+#         elif not inv_name:
+#             await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
+#             await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+#                                            reply_markup=await main_menu_bt())
+#     elif not checker and checker_banned:
+#         await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
+#         await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+#                                        reply_markup=await main_menu_bt())
+#     elif channels_checker and checker_banned and checker:
+#         await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+#                                        reply_markup=await main_menu_bt())
 
 
 @client_bot_router.message(F.text == "💸Заработать")
