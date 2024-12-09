@@ -58,7 +58,6 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
             logger.info(f"Processing referral. Inviter ID: {inv_id}, Inviter name: {inv_name}")  # Debug log
 
             if inv_name:
-                # Yangi foydalanuvchini qo'shish
                 await add_user(
                     user_name=message.from_user.first_name,
                     tg_id=message.from_user.id,
@@ -67,7 +66,6 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
                 )
                 # Referalni qo'shish
                 await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
-                # Taklif qilgan odamga bonus berish
                 await plus_ref(inv_id)  # Referral sonini oshirish
                 await plus_money(inv_id)  # Balansga pul qo'shish
 
