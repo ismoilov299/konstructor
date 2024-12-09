@@ -82,7 +82,7 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
         checker_banned = await banned(message)
         if channels_checker and checker_banned:
             # To'g'ridan-to'g'ri user ID ni ishlatamiz
-            link = f"https://t.me/test_new_my_robot?start={message.from_user.id}"
+            link = f"https://t.me/{(await bot.me).username}?start={message.from_user.id}"
             price = await get_actual_price()
             await message.bot.send_message(message.from_user.id,
                                         f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
@@ -91,7 +91,7 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
         channels_checker = await check_channels(message)
         checker_banned = await banned(message)
         if channels_checker and checker_banned:
-            link = f"https://t.me/test_new_my_robot?start={message.from_user.id}"
+            link = f"https://t.me/{(await bot.me).username}?start={message.from_user.id}"
             price = await get_actual_price()
             await message.bot.send_message(message.from_user.id,
                                         f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"

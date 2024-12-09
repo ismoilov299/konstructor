@@ -277,6 +277,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     uid = message.from_user.id
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
+
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
@@ -286,15 +287,19 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         await state.set_state(Download.download)
         kwargs['parse_mode'] = "Markdown"
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
+
     elif shortcuts.have_one_module(bot_db, "refs"):
-        # Faqat shu qismni o'zgartiramiz
-        if hasattr(message, 'command_args'):
-            await start_ref(message, bot=bot, command=BotCommand(command='start', args=message.command_args))
+        state_data = await state.get_data()
+        referral = state_data.get('referral')
+        if referral:
+            await start_ref(message, bot=bot, command=BotCommand(command='start', args=referral))
         else:
             await start_ref(message, bot=bot)
+
     elif shortcuts.have_one_module(bot_db, "kino"):
         await start_kino_bot(message, state)
         kwargs['parse_mode'] = "HTML"
+
     elif shortcuts.have_one_module(bot_db, "chatgpt"):
         builder = InlineKeyboardBuilder()
         builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
@@ -307,8 +312,10 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         print(result)
         text = f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}'
         kwargs['reply_markup'] = builder.as_markup()
+
     else:
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
+
     await message.answer(text, **kwargs)
 
 # print(client_bot_router.message.handlers)
@@ -319,16 +326,14 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
     logger.info(f"Start command received from user {message.from_user.id}")
     bot_db = await shortcuts.get_bot(bot)
 
-    # Debug log qo'shamiz
     if command.args:
         logger.info(f"Referral args received: {command.args}")
-        # Buyerda referral ma'lumotini message ga saqlaymiz
-        message.command_args = command.args
+        await state.update_data(referral=command.args)
 
     info = await get_user(uid=message.from_user.id, username=message.from_user.username,
                           first_name=message.from_user.first_name if message.from_user.first_name else None,
                           last_name=message.from_user.last_name if message.from_user.last_name else None)
-    await state.clear()
+
     commands = await bot.get_my_commands()
     bot_commands = [
         BotCommand(command="/start", description="Меню"),
@@ -356,11 +361,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     )
         else:
             inviter = None
-        new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
-        link_for_db = new_link[new_link.index("=") + 1:]
-        await save_user(u=message.from_user, inviter=inviter, bot=bot, link=link_for_db)
+        new_link = f"https://t.me/{(await bot.me).username}?start={message.from_user.id}"
+        await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
 
-    # Start funksiyasini chaqirish
     await start(message, state, bot)
     return
 
