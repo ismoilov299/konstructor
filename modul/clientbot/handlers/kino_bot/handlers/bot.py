@@ -330,36 +330,19 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         logger.info(f"Referral args received: {command.args}")
         await state.update_data(referral=command.args)
 
-    # Bot argumentisiz chaqiramiz
-    info = await get_user(
-        uid=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name if message.from_user.first_name else None,
-        last_name=message.from_user.last_name if message.from_user.last_name else None
-    )
-
-    commands = await bot.get_my_commands()
-    bot_commands = [
-        BotCommand(command="/start", description="Меню"),
-    ]
-
-    if commands != bot_commands:
-        await bot.set_my_commands(bot_commands)
-
-    referral = command.args
     uid = message.from_user.id
     user = await shortcuts.get_user(uid, bot)
 
     if not user:
-        if referral and referral.isdigit():
-            # Bot argumentisiz get_user ni chaqiramiz
-            inviter = await shortcuts.get_user(int(referral))
+        if command.args and command.args.isdigit():
+            # Bot argumentini uzatamiz
+            inviter = await shortcuts.get_user(int(command.args), bot)
             if inviter:
                 await shortcuts.increase_referral(inviter)
                 with suppress(TelegramForbiddenError):
                     user_link = html.link('реферал', f'tg://user?id={uid}')
                     await bot.send_message(
-                        chat_id=referral,
+                        chat_id=command.args,
                         text=('new_referral').format(
                             user_link=user_link,
                         )
@@ -367,7 +350,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         else:
             inviter = None
 
-        # Bot username ni olish
         me = await bot.get_me()
         new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
         await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
