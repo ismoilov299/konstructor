@@ -81,22 +81,23 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
         channels_checker = await check_channels(message)
         checker_banned = await banned(message)
         if channels_checker and checker_banned:
-            link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+            # To'g'ridan-to'g'ri user ID ni ishlatamiz
+            link = f"https://t.me/test_new_my_robot?start={message.from_user.id}"
             price = await get_actual_price()
             await message.bot.send_message(message.from_user.id,
-                                           f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-                                           f"🔗 Ваша ссылка для приглашений:\n {link}")
+                                        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
+                                        f"🔗 Ваша ссылка для приглашений:\n {link}")
     else:
         channels_checker = await check_channels(message)
         checker_banned = await banned(message)
         if channels_checker and checker_banned:
-            link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+            link = f"https://t.me/test_new_my_robot?start={message.from_user.id}"
             price = await get_actual_price()
             await message.bot.send_message(message.from_user.id,
-                                           f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-                                           f"🔗 Ваша ссылка для приглашений:\n {link}"
-                                           "\n Что бы вернуть функционал основного бота напишите /start",
-                                           reply_markup=await main_menu_bt())
+                                        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
+                                        f"🔗 Ваша ссылка для приглашений:\n {link}"
+                                        "\n Что бы вернуть функционал основного бота напишите /start",
+                                        reply_markup=await main_menu_bt())
 
 
 @client_bot_router.message(F.text == "📱Профиль")
