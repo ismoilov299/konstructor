@@ -367,7 +367,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     )
         else:
             inviter = None
-        new_link = f"https://t.me/{(await bot.me).username}?start={message.from_user.id}"
+        me = await bot.get_me()
+        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
         await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
 
     await start(message, state, bot)
