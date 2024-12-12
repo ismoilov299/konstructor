@@ -81,100 +81,91 @@ async def check_referral_status(user_id: int) -> dict:
         'earned_from_refs': user.balance  # You might want to track this separately
     }
 
-async def process_referral_reward(referrer_id: int):
-    """
-    Process referral reward immediately after registration
-    """
+
+async def process_referral(message: Message, referrer_id: int):
+    """Process referral rewards and updates"""
     try:
-        # Get reward amount from admin settings
-        admin_info = await sync_to_async(AdminInfo.objects.first)()
-        if not admin_info or not admin_info.price:
-            logger.error("Admin price not set")
-            return
+        # Get referrer's name
+        referrer_name = await get_user_name(referrer_id)
+        if not referrer_name:
+            logger.warning(f"Referrer {referrer_id} not found")
+            return False
 
-        # Update referrer's balance and refs count atomically
-        user = await sync_to_async(UserTG.objects.filter(uid=referrer_id).first)()
-        if user:
-            user.balance = F('balance') + admin_info.price
-            user.refs = F('refs') + 1
-            await sync_to_async(user.save)()
+        # Add user with referral info
+        await add_user(
+            tg_id=message.from_user.id,
+            user_name=message.from_user.first_name,
+            invited=referrer_name,
+            invited_id=referrer_id
+        )
 
-            logger.info(f"Updated referrer {referrer_id} balance (+{admin_info.price}) and refs count")
+        # Update referrer's stats
+        await plus_ref(referrer_id)  # Increment referral count
+        await plus_money(referrer_id)  # Add reward money
+
+        logger.info(f"Successfully processed referral: user {message.from_user.id} -> referrer {referrer_id}")
+        return True
+
     except Exception as e:
-        logger.error(f"Error processing referral reward: {e}")
+        logger.error(f"Error processing referral: {e}")
+        return False
 
 
 async def start_ref(message: Message, bot: Bot, referral: str = None):
-    """
-    Handle start command with referral system
-    """
-    channels_checker = await check_channels(message)
-    checker = await check_user(message.from_user.id)
-    checker_banned = await banned(message)
+    """Handle /start command with referral"""
+    try:
+        # Check requirements
+        channels_checker = await check_channels(message)
+        is_registered = await check_user(message.from_user.id)
+        is_banned = await check_ban(message.from_user.id)
 
-    if referral and not checker and checker_banned:
-        try:
-            inv_id = int(referral)
-            logger.info(f"Processing referral ID: {inv_id}")
+        if not channels_checker or is_banned:
+            return
 
-            if inv_id == message.from_user.id:
-                logger.warning(f"User {inv_id} tried to refer themselves")
+        if referral and not is_registered:
+            try:
+                referrer_id = int(referral)
+
+                # Prevent self-referral
+                if referrer_id == message.from_user.id:
+                    logger.warning(f"User {referrer_id} tried to refer themselves")
+                    await add_user(
+                        tg_id=message.from_user.id,
+                        user_name=message.from_user.first_name
+                    )
+                else:
+                    # Process referral
+                    success = await process_referral(message, referrer_id)
+                    if not success:
+                        # If referral processing failed, add user without referral
+                        await add_user(
+                            tg_id=message.from_user.id,
+                            user_name=message.from_user.first_name
+                        )
+            except ValueError:
+                logger.error(f"Invalid referral ID: {referral}")
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name
                 )
-                return await message.bot.send_message(
-                    message.from_user.id,
-                    f"🎉Привет, {message.from_user.first_name}",
-                    reply_markup=await main_menu_bt()
-                )
-
-            inv_name = await get_user_name(inv_id)
-            if inv_name:
-                # 1. Add user
-                await add_user(
-                    tg_id=message.from_user.id,
-                    user_name=message.from_user.first_name,
-                    invited=inv_name,
-                    invited_id=inv_id
-                )
-
-                # 2. Add referral record
-                await add_ref(
-                    tg_id=message.from_user.id,
-                    inv_id=inv_id
-                )
-
-                # 3. Process referral reward immediately
-                await process_referral_reward(inv_id)
-
-                logger.info(f"Successfully added user {message.from_user.id} referred by {inv_id}")
-            else:
-                logger.warning(f"Referrer {inv_id} not found")
-                await add_user(
-                    tg_id=message.from_user.id,
-                    user_name=message.from_user.first_name
-                )
-
-        except ValueError as e:
-            logger.error(f"Invalid referral ID: {referral}. Error: {e}")
+        elif not is_registered:
+            # Add new user without referral
             await add_user(
                 tg_id=message.from_user.id,
                 user_name=message.from_user.first_name
             )
-    elif not checker and checker_banned:
-        await add_user(
-            tg_id=message.from_user.id,
-            user_name=message.from_user.first_name
+
+        await message.answer(
+            f"🎉 Привет, {message.from_user.first_name}",
+            reply_markup=await main_menu_bt()
         )
 
-    await message.bot.send_message(
-        message.from_user.id,
-        f"🎉Привет, {message.from_user.first_name}",
-        reply_markup=await main_menu_bt()
-    )
-
-
+    except Exception as e:
+        logger.error(f"Error in start_ref: {e}")
+        await message.answer(
+            "Произошла ошибка. Попробуйте позже.",
+            reply_markup=await main_menu_bt()
+        )
 
 
 @client_bot_router.message(F.text == "💸Заработать")
@@ -208,20 +199,45 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
 
 @client_bot_router.message(F.text == "📱Профиль")
 async def profile(message: Message):
-    channels_checker = await check_channels(message)
-    checker_banned = await banned(message)
-    if channels_checker and checker_banned:
-        info = await get_user_info_db(message.from_user.id)
-        if info:
-            await message.bot.send_message(message.from_user.id, f"📝 Ваше имя: {info[0]}\n"
-                                                                 f"🆔 Ваш ID: <code>{info[1]}</code>\n"
-                                                                 f"==========================\n"
-                                                                 f"💳 Баланс: {info[2]}\n"
-                                                                 f"👥 Всего друзей: {info[3]}\n"
-                                                                 f"👤 Вас привел {info[4]}\n"
-                                                                 f"==========================\n",
-                                           parse_mode="html", reply_markup=await payment_in())
+    """Show user profile with referral information"""
+    try:
+        channels_checker = await check_channels(message)
+        is_banned = await check_ban(message.from_user.id)
 
+        if not channels_checker or is_banned:
+            return
+
+        user_info = await get_user_info_db(message.from_user.id)
+        if not user_info:
+            await message.answer(
+                "Ошибка получения данных профиля",
+                reply_markup=await main_menu_bt()
+            )
+            return
+
+        profile_text = (
+            f"📱Профиль\n\n"
+            f"📝 Ваше имя: {user_info[0]}\n"
+            f"🆔 Ваш ID: <code>{user_info[1]}</code>\n"
+            f"==========================\n"
+            f"💳 Баланс: {user_info[2]}\n"
+            f"👥 Всего друзей: {user_info[3]}\n"
+            f"👤 Вас привел {user_info[4]}\n"
+            f"==========================\n"
+        )
+
+        await message.answer(
+            profile_text,
+            parse_mode="html",
+            reply_markup=await payment_in()
+        )
+
+    except Exception as e:
+        logger.error(f"Error in profile handler: {e}")
+        await message.answer(
+            "Произошла ошибка при загрузке профиля",
+            reply_markup=await main_menu_bt()
+        )
 
 @client_bot_router.message(F.text == "ℹ️Инфо")
 async def info(message: Message):
