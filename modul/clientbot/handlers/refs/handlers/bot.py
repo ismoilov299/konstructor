@@ -58,99 +58,74 @@ from aiogram import F, Bot
 logger = logging.getLogger(__name__)
 
 
+@client_bot_router.message()
 async def start_ref(message: Message, bot: Bot, referral_id: str = None):
-    # Ban holatini tekshiramiz
+    # Ban tekshiruvi
     checker_banned = await check_ban(message.from_user.id)
-    if not checker_banned:
-        await message.bot.send_message(
-            message.from_user.id,
-            "Вы были заблокированы"
-        )
-        return
+    if checker_banned:
+        # Foydalanuvchi bazada bormi?
+        checker = await check_user(message.from_user.id)
 
-    # Foydalanuvchi bazada bormi?
-    checker = await check_user(message.from_user.id)
-
-    # Agar referral_id mavjud bo'lsa, demak user referal sifatida kelgan
-    if referral_id and not checker and checker_banned:
-        try:
+        # Referal case:
+        if referral_id and not checker:
             inv_id = int(referral_id)
             inv_name = await get_user_name(inv_id)
             logger.info(f"Processing referral. Inviter ID: {inv_id}, Inviter name: {inv_name}")
 
             if inv_name:
-                # Referal foydalanuvchini qo'shamiz
+                # Yangi userni referal sifatida bazaga qo'shish
                 await add_user(
                     user_name=message.from_user.first_name,
                     tg_id=message.from_user.id,
                     invited=inv_name,
                     invited_id=inv_id
                 )
-                # Referalni checkerga yozamiz
                 await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
 
-                # Taklif qilgan foydalanuvchiga darhol bonus beramiz
+                # Taklif qilgan userga darhol bonus berish
                 await plus_ref(inv_id)
                 await plus_money(inv_id)
 
-                # Yangi foydalanuvchiga xabar
-                await message.bot.send_message(
-                    message.from_user.id,
+                await message.answer(
                     f"🎉Привет, {message.from_user.first_name}\n"
                     f"Вы были приглашены пользователем {inv_name}",
                     reply_markup=await main_menu_bt()
                 )
                 return
             else:
-                # Inviter topilmasa, oddiy foydalanuvchi sifatida qo'shamiz
+                # Inviter topilmadi, oddiy user sifatida qo'shamiz
                 await add_user(
                     user_name=message.from_user.first_name,
                     tg_id=message.from_user.id
                 )
-                await message.bot.send_message(
-                    message.from_user.id,
+                await message.answer(
                     f"🎉Привет, {message.from_user.first_name}",
                     reply_markup=await main_menu_bt()
                 )
                 return
 
-        except Exception as e:
-            logger.error(f"Error processing referral: {e}")
-            # Xatolik bo'lsa ham foydalanuvchini oddiy foydalanuvchi sifatida qo'shamiz
-            if not checker and checker_banned:
-                await add_user(
-                    user_name=message.from_user.first_name,
-                    tg_id=message.from_user.id
-                )
-                await message.bot.send_message(
-                    message.from_user.id,
-                    f"🎉Привет, {message.from_user.first_name}",
-                    reply_markup=await main_menu_bt()
-                )
+        # Agar referal_id yo'q va user bazada yo'q bo'lsa
+        elif not checker:
+            await add_user(
+                user_name=message.from_user.first_name,
+                tg_id=message.from_user.id
+            )
+            await message.answer(
+                f"🎉Привет, {message.from_user.first_name}",
+                reply_markup=await main_menu_bt()
+            )
             return
 
-    # Agar referal_id bo'lmasa va foydalanuvchi bazada yo'q bo'lsa
-    elif not checker and checker_banned:
-        await add_user(
-            user_name=message.from_user.first_name,
-            tg_id=message.from_user.id
-        )
-        await message.bot.send_message(
-            message.from_user.id,
-            f"🎉Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
-        return
-
-    # Agar foydalanuvchi allaqachon bazada bo'lsa
-    elif checker and checker_banned:
-        await message.bot.send_message(
-            message.from_user.id,
-            f"🎉Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
-        return
-
+        # Agar user bazada bo'lsa
+        else:
+            await message.answer(
+                f"🎉Привет, {message.from_user.first_name}",
+                reply_markup=await main_menu_bt()
+            )
+            return
+    else:
+        # User banlangan
+        await message.answer("Вы были заблокированы")
 
 
 
