@@ -47,11 +47,15 @@ async def banned(message):
 
 
 async def start_ref(message: Message, bot: Bot, referral_id: str = None):
-    channels_checker = await check_channels(message)
+    # Kanallarni tekshiramiz
+    all_channels = await get_channels_for_check()
+    channels_checker = True
+    if all_channels:
+        channels_checker = await check_channels(message)
+
     checker = await check_user(message.from_user.id)
     checker_banned = await banned(message)
 
-    # Agar referal_id mavjud, foydalanuvchi hali ro'yxatdan o'tmagan va banlanmagan bo'lsa:
     if referral_id and not checker and checker_banned:
         try:
             inv_id = int(referral_id)
@@ -59,17 +63,20 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
             logger.info(f"Processing referral. Inviter ID: {inv_id}, Inviter name: {inv_name}")
 
             if inv_name:
-                # Inviter topilgan bo'lsa, referal foydalanuvchini qo'shamiz
+                # Yangi foydalanuvchini referal sifatida qo'shamiz
                 await add_user(
                     user_name=message.from_user.first_name,
                     tg_id=message.from_user.id,
                     invited=inv_name,
                     invited_id=inv_id
                 )
-                # Checker jadvaliga yozib qo'yamiz, lekin bonuslarni hozircha bermaymiz
                 await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
 
-                # Keyin userga xabar yuboramiz
+                # Agar kanal bo'lmasa, bonusni hozir beramiz
+                if not all_channels:
+                    await plus_ref(inv_id)
+                    await plus_money(inv_id)
+
                 await message.bot.send_message(
                     message.from_user.id,
                     f"🎉Привет, {message.from_user.first_name}\nВы были приглашены пользователем {inv_name}",
@@ -77,7 +84,7 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
                 )
                 return
             else:
-                # Inviter topilmasa, oddiy user sifatida qo'shamiz
+                # Inviter topilmagan bo'lsa, oddiy foydalanuvchi sifatida qo'shamiz
                 await add_user(
                     user_name=message.from_user.first_name,
                     tg_id=message.from_user.id
@@ -91,12 +98,9 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
 
         except Exception as e:
             logger.error(f"Error processing referral: {e}")
-            # Nima bo'lganda ham foydalanuvchini oddiy user sifatida qo'shib yuboramiz
+            # Xato bo'lsa ham foydalanuvchini oddiy foydalanuvchi sifatida qo'shish
             if not checker and checker_banned:
-                await add_user(
-                    user_name=message.from_user.first_name,
-                    tg_id=message.from_user.id
-                )
+                await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
                 await message.bot.send_message(
                     message.from_user.id,
                     f"🎉Привет, {message.from_user.first_name}",
@@ -104,8 +108,8 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
                 )
             return
 
-    # Agar foydalanuvchi bazada bo'lmasa, banlanmagan bo'lsa lekin referal_id bo'lmasa:
     elif not checker and checker_banned:
+        # Agar referal yo'q bo'lsa ham, oddiy user sifatida qo'shamiz
         await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
         await message.bot.send_message(
             message.from_user.id,
@@ -114,7 +118,6 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
         )
         return
 
-    # Agar foydalanuvchi allaqachon bazada bo'lsa yoki boshqa shartlarga mos kelsa:
     elif checker and checker_banned and channels_checker:
         await message.bot.send_message(
             message.from_user.id,
@@ -122,6 +125,7 @@ async def start_ref(message: Message, bot: Bot, referral_id: str = None):
             reply_markup=await main_menu_bt()
         )
         return
+
 
 
 # async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
