@@ -272,6 +272,7 @@ class NonChatGptFilter(Filter):
         return not shortcuts.have_one_module(bot_db, "chatgpt")
 
 
+# /var/www/Konstructor/modul/clientbot/handlers/kino_bot/handlers/bot.py
 async def start(message: Message, state: FSMContext, bot: Bot):
     bot_db = await shortcuts.get_bot(bot)
     uid = message.from_user.id
@@ -288,14 +289,15 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['parse_mode'] = "Markdown"
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
-
     elif shortcuts.have_one_module(bot_db, "refs"):
-
         state_data = await state.get_data()
-
         referral = state_data.get('referral')
 
-        await start_ref(message, bot=bot, referral_id=referral)
+        # Create a mock BotCommand object with the referral as args
+        command = type('BotCommand', (), {'args': str(referral)}) if referral else None
+
+        # Pass command instead of referral_id
+        await start_ref(message, bot=bot, command=command)
 
     elif shortcuts.have_one_module(bot_db, "kino"):
         await start_kino_bot(message, state)
@@ -318,6 +320,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
     await message.answer(text, **kwargs)
+
 
 # print(client_bot_router.message.handlers)
 # client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства")

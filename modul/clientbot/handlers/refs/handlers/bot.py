@@ -57,34 +57,79 @@ from modul.clientbot.handlers.refs.shortcuts import (
 from aiogram import F, Bot
 logger = logging.getLogger(__name__)
 
-
+#/ var / www / Konstructor / modul / clientbot / handlers / refs / handlers / bot.py
 
 
 async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
+    """
+    Handle /start command with referral
+
+    Args:
+        message (Message): Telegram message
+        bot (Bot): Bot instance
+        command (BotCommand): Command object containing referral args
+    """
     channels_checker = await check_channels(message)
     checker = await check_user(message.from_user.id)
     checker_banned = await banned(message)
-    if command and not checker and checker_banned:
-        inv_id = int(command.args)
-        logger.info(f"Referral ID: {inv_id}")
-        inv_name = await get_user_name(inv_id)
-        if inv_name:
-            await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id,
-                           invited=inv_name, invited_id=inv_id)
-            await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
-            await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                           reply_markup=await main_menu_bt())
-        elif not inv_name:
-            await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
-            await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                           reply_markup=await main_menu_bt())
+
+    if command and command.args and not checker and checker_banned:
+        try:
+            inv_id = int(command.args)
+            logger.info(f"Referral ID: {inv_id}")
+            inv_name = await get_user_name(inv_id)
+
+            if inv_name:
+                await add_user(
+                    user_name=message.from_user.first_name,
+                    tg_id=message.from_user.id,
+                    invited=inv_name,
+                    invited_id=inv_id
+                )
+                await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
+                await message.bot.send_message(
+                    message.from_user.id,
+                    f"🎉Привет, {message.from_user.first_name}",
+                    reply_markup=await main_menu_bt()
+                )
+            else:
+                await add_user(
+                    user_name=message.from_user.first_name,
+                    tg_id=message.from_user.id
+                )
+                await message.bot.send_message(
+                    message.from_user.id,
+                    f"🎉Привет, {message.from_user.first_name}",
+                    reply_markup=await main_menu_bt()
+                )
+        except (ValueError, TypeError):
+            logger.error(f"Invalid referral ID: {command.args}")
+            # Handle invalid referral ID case
+            await add_user(
+                user_name=message.from_user.first_name,
+                tg_id=message.from_user.id
+            )
+            await message.bot.send_message(
+                message.from_user.id,
+                f"🎉Привет, {message.from_user.first_name}",
+                reply_markup=await main_menu_bt()
+            )
     elif not checker and checker_banned:
-        await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
-        await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                       reply_markup=await main_menu_bt())
+        await add_user(
+            user_name=message.from_user.first_name,
+            tg_id=message.from_user.id
+        )
+        await message.bot.send_message(
+            message.from_user.id,
+            f"🎉Привет, {message.from_user.first_name}",
+            reply_markup=await main_menu_bt()
+        )
     elif channels_checker and checker_banned and checker:
-        await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-                                       reply_markup=await main_menu_bt())
+        await message.bot.send_message(
+            message.from_user.id,
+            f"🎉Привет, {message.from_user.first_name}",
+            reply_markup=await main_menu_bt()
+        )
 
 
 @client_bot_router.message(F.text == "💸Заработать")
