@@ -58,102 +58,33 @@ from aiogram import F, Bot
 logger = logging.getLogger(__name__)
 
 
-@client_bot_router.message()
-async def start_ref(message: Message, bot: Bot, referral_id: str = None):
-    # Ban tekshiruvi
-    checker_banned = await check_ban(message.from_user.id)
-    if checker_banned:
-        # Foydalanuvchi bazada bormi?
-        checker = await check_user(message.from_user.id)
-
-        # Referal case:
-        if referral_id and not checker:
-            inv_id = int(referral_id)
-            inv_name = await get_user_name(inv_id)
-            logger.info(f"Processing referral. Inviter ID: {inv_id}, Inviter name: {inv_name}")
-
-            if inv_name:
-                # Yangi userni referal sifatida bazaga qo'shish
-                await add_user(
-                    user_name=message.from_user.first_name,
-                    tg_id=message.from_user.id,
-                    invited=inv_name,
-                    invited_id=inv_id
-                )
-                await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
-
-                # Taklif qilgan userga darhol bonus berish
-                await plus_ref(inv_id)
-                await plus_money(inv_id)
-
-                await message.answer(
-                    f"🎉Привет, {message.from_user.first_name}\n"
-                    f"Вы были приглашены пользователем {inv_name}",
-                    reply_markup=await main_menu_bt()
-                )
-                return
-            else:
-                # Inviter topilmadi, oddiy user sifatida qo'shamiz
-                await add_user(
-                    user_name=message.from_user.first_name,
-                    tg_id=message.from_user.id
-                )
-                await message.answer(
-                    f"🎉Привет, {message.from_user.first_name}",
-                    reply_markup=await main_menu_bt()
-                )
-                return
-
-        # Agar referal_id yo'q va user bazada yo'q bo'lsa
-        elif not checker:
-            await add_user(
-                user_name=message.from_user.first_name,
-                tg_id=message.from_user.id
-            )
-            await message.answer(
-                f"🎉Привет, {message.from_user.first_name}",
-                reply_markup=await main_menu_bt()
-            )
-            return
-
-        # Agar user bazada bo'lsa
-        else:
-            await message.answer(
-                f"🎉Привет, {message.from_user.first_name}",
-                reply_markup=await main_menu_bt()
-            )
-            return
-    else:
-        # User banlangan
-        await message.answer("Вы были заблокированы")
 
 
-
-# async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
-#     channels_checker = await check_channels(message)
-#     checker = await check_user(message.from_user.id)
-#     checker_banned = await banned(message)
-#     if command and not checker and checker_banned:
-#         inv_id = int(command.args)
-#         logger.info(f"Referral ID: {inv_id}")
-#         inv_name = await get_user_name(inv_id)
-#         if inv_name:
-#             await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id,
-#                            invited=inv_name, invited_id=inv_id)
-#             await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
-#             await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-#                                            reply_markup=await main_menu_bt())
-#         elif not inv_name:
-#             await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
-#             await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-#                                            reply_markup=await main_menu_bt())
-#     elif not checker and checker_banned:
-#         await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
-#         await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-#                                        reply_markup=await main_menu_bt())
-#     elif channels_checker and checker_banned and checker:
-#         await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
-#                                        reply_markup=await main_menu_bt())
+async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
+    channels_checker = await check_channels(message)
+    checker = await check_user(message.from_user.id)
+    checker_banned = await banned(message)
+    if command and not checker and checker_banned:
+        inv_id = int(command.args)
+        logger.info(f"Referral ID: {inv_id}")
+        inv_name = await get_user_name(inv_id)
+        if inv_name:
+            await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id,
+                           invited=inv_name, invited_id=inv_id)
+            await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
+            await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+                                           reply_markup=await main_menu_bt())
+        elif not inv_name:
+            await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
+            await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+                                           reply_markup=await main_menu_bt())
+    elif not checker and checker_banned:
+        await add_user(user_name=message.from_user.first_name, tg_id=message.from_user.id)
+        await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+                                       reply_markup=await main_menu_bt())
+    elif channels_checker and checker_banned and checker:
+        await message.bot.send_message(message.from_user.id, f"🎉Привет, {message.from_user.first_name}",
+                                       reply_markup=await main_menu_bt())
 
 
 @client_bot_router.message(F.text == "💸Заработать")
