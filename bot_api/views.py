@@ -106,10 +106,10 @@ def telegram_webhook(request, token):
 
 
 async def feed_update(token, update):
-    logger.info(f"Received update: {update}")
+    # logger.info(f"Received update: {update}")
     start_time = time.time()
     logger.info(f"Processing update for token: {token}")
-    logger.info(f"Update content: {update}")  # debug uchun
+    # logger.info(f"Update content: {update}")  # debug uchun
     try:
         async with Bot(token, bot_session, default=default).context(auto_close=False) as bot_:
             await dp.feed_raw_update(bot_, update)
