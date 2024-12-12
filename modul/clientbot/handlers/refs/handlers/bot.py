@@ -67,7 +67,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
     Args:
         message (Message): Telegram message
         bot (Bot): Bot instance
-        referral (str): Referral ID (optional)
+        referral (str): Optional referral ID
     """
     channels_checker = await check_channels(message)
     checker = await check_user(message.from_user.id)
@@ -76,37 +76,24 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
     if referral and not checker and checker_banned:
         try:
             inv_id = int(referral)
-            logger.info(f"Referral ID: {inv_id}")
+            logger.info(f"Processing referral ID: {inv_id}")
             inv_name = await get_user_name(inv_id)
 
             if inv_name and inv_id != message.from_user.id:
-                # Add user with referral info
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name,
                     invited=inv_name,
                     invited_id=inv_id
                 )
-                # Add referral record
                 await add_ref(
                     tg_id=message.from_user.id,
                     inv_id=inv_id
                 )
-                await message.bot.send_message(
-                    message.from_user.id,
-                    f"🎉Привет, {message.from_user.first_name}",
-                    reply_markup=await main_menu_bt()
-                )
             else:
-                # Add user without referral
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name
-                )
-                await message.bot.send_message(
-                    message.from_user.id,
-                    f"🎉Привет, {message.from_user.first_name}",
-                    reply_markup=await main_menu_bt()
                 )
         except ValueError:
             logger.error(f"Invalid referral ID: {referral}")
@@ -114,27 +101,17 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                 tg_id=message.from_user.id,
                 user_name=message.from_user.first_name
             )
-            await message.bot.send_message(
-                message.from_user.id,
-                f"🎉Привет, {message.from_user.first_name}",
-                reply_markup=await main_menu_bt()
-            )
     elif not checker and checker_banned:
         await add_user(
             tg_id=message.from_user.id,
             user_name=message.from_user.first_name
         )
-        await message.bot.send_message(
-            message.from_user.id,
-            f"🎉Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
-    elif channels_checker and checker_banned and checker:
-        await message.bot.send_message(
-            message.from_user.id,
-            f"🎉Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
+
+    await message.bot.send_message(
+        message.from_user.id,
+        f"🎉Привет, {message.from_user.first_name}",
+        reply_markup=await main_menu_bt()
+    )
 
 
 @client_bot_router.message(F.text == "💸Заработать")

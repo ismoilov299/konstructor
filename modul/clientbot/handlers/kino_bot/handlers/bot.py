@@ -290,14 +290,15 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
     elif shortcuts.have_one_module(bot_db, "refs"):
-        state_data = await state.get_data()
-        referral = state_data.get('referral')
+        # Get referral ID from message text after /start command
+        referral = message.text[7:] if message.text and len(message.text) > 7 else None
+        logger.info(f"Processing start command with referral: {referral}")
 
-        # Create a mock BotCommand object with the referral as args
-        command = type('BotCommand', (), {'args': str(referral)}) if referral else None
-
-        # Pass command instead of referral_id
-        await start_ref(message, bot=bot, command=command)
+        if referral:
+            # Pass referral ID directly
+            await start_ref(message, bot=bot, referral=referral)
+        else:
+            await start_ref(message, bot=bot)
 
     elif shortcuts.have_one_module(bot_db, "kino"):
         await start_kino_bot(message, state)
