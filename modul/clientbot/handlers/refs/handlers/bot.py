@@ -59,15 +59,54 @@ logger = logging.getLogger(__name__)
 
 #/ var / www / Konstructor / modul / clientbot / handlers / refs / handlers / bot.py
 
+async def check_referral_status(user_id: int) -> dict:
+    """
+    Check user's referral status and rewards
+    """
+    user = await sync_to_async(UserTG.objects.filter(uid=user_id).first)()
+    if not user:
+        return {
+            'status': False,
+            'message': 'User not found'
+        }
+
+    referrals = await sync_to_async(
+        lambda: UserTG.objects.filter(invited_id=user_id).count()
+    )()
+
+    return {
+        'status': True,
+        'refs_count': referrals,
+        'balance': user.balance,
+        'earned_from_refs': user.balance  # You might want to track this separately
+    }
+
+async def process_referral_reward(referrer_id: int):
+    """
+    Process referral reward immediately after registration
+    """
+    try:
+        # Get reward amount from admin settings
+        admin_info = await sync_to_async(AdminInfo.objects.first)()
+        if not admin_info or not admin_info.price:
+            logger.error("Admin price not set")
+            return
+
+        # Update referrer's balance and refs count atomically
+        user = await sync_to_async(UserTG.objects.filter(uid=referrer_id).first)()
+        if user:
+            user.balance = F('balance') + admin_info.price
+            user.refs = F('refs') + 1
+            await sync_to_async(user.save)()
+
+            logger.info(f"Updated referrer {referrer_id} balance (+{admin_info.price}) and refs count")
+    except Exception as e:
+        logger.error(f"Error processing referral reward: {e}")
+
 
 async def start_ref(message: Message, bot: Bot, referral: str = None):
     """
-    Handle start command with referral
-
-    Args:
-        message (Message): Telegram message
-        bot (Bot): Bot instance
-        referral (str): Optional referral ID
+    Handle start command with referral system
     """
     channels_checker = await check_channels(message)
     checker = await check_user(message.from_user.id)
@@ -77,26 +116,48 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
         try:
             inv_id = int(referral)
             logger.info(f"Processing referral ID: {inv_id}")
-            inv_name = await get_user_name(inv_id)
 
-            if inv_name and inv_id != message.from_user.id:
+            if inv_id == message.from_user.id:
+                logger.warning(f"User {inv_id} tried to refer themselves")
+                await add_user(
+                    tg_id=message.from_user.id,
+                    user_name=message.from_user.first_name
+                )
+                return await message.bot.send_message(
+                    message.from_user.id,
+                    f"🎉Привет, {message.from_user.first_name}",
+                    reply_markup=await main_menu_bt()
+                )
+
+            inv_name = await get_user_name(inv_id)
+            if inv_name:
+                # 1. Add user
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name,
                     invited=inv_name,
                     invited_id=inv_id
                 )
+
+                # 2. Add referral record
                 await add_ref(
                     tg_id=message.from_user.id,
                     inv_id=inv_id
                 )
+
+                # 3. Process referral reward immediately
+                await process_referral_reward(inv_id)
+
+                logger.info(f"Successfully added user {message.from_user.id} referred by {inv_id}")
             else:
+                logger.warning(f"Referrer {inv_id} not found")
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name
                 )
-        except ValueError:
-            logger.error(f"Invalid referral ID: {referral}")
+
+        except ValueError as e:
+            logger.error(f"Invalid referral ID: {referral}. Error: {e}")
             await add_user(
                 tg_id=message.from_user.id,
                 user_name=message.from_user.first_name
@@ -112,6 +173,8 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
         f"🎉Привет, {message.from_user.first_name}",
         reply_markup=await main_menu_bt()
     )
+
+
 
 
 @client_bot_router.message(F.text == "💸Заработать")

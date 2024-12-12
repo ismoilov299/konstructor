@@ -330,9 +330,12 @@ class Channels(models.Model):
 
 
 class AdminInfo(models.Model):
-    price = models.FloatField(default=4.00)
-    min_amount = models.FloatField(default=60.00)
     admin_channel = models.CharField(max_length=255)
+    price = models.FloatField(default=10.0)  # Default narx qo'shildi
+    min_amount = models.FloatField(default=50.0)
+
+    class Meta:
+        db_table = 'admin_info'
 
 
 class ChannelSponsor(models.Model):
