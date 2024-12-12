@@ -60,54 +60,59 @@ logger = logging.getLogger(__name__)
 #/ var / www / Konstructor / modul / clientbot / handlers / refs / handlers / bot.py
 
 
-async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
+async def start_ref(message: Message, bot: Bot, referral: str = None):
     """
-    Handle /start command with referral
+    Handle start command with referral
 
     Args:
         message (Message): Telegram message
         bot (Bot): Bot instance
-        command (BotCommand): Command object containing referral args
+        referral (str): Referral ID (optional)
     """
     channels_checker = await check_channels(message)
     checker = await check_user(message.from_user.id)
     checker_banned = await banned(message)
 
-    if command and command.args and not checker and checker_banned:
+    if referral and not checker and checker_banned:
         try:
-            inv_id = int(command.args)
+            inv_id = int(referral)
             logger.info(f"Referral ID: {inv_id}")
             inv_name = await get_user_name(inv_id)
 
-            if inv_name:
+            if inv_name and inv_id != message.from_user.id:
+                # Add user with referral info
                 await add_user(
-                    user_name=message.from_user.first_name,
                     tg_id=message.from_user.id,
+                    user_name=message.from_user.first_name,
                     invited=inv_name,
                     invited_id=inv_id
                 )
-                await add_ref(tg_id=message.from_user.id, inv_id=inv_id)
+                # Add referral record
+                await add_ref(
+                    tg_id=message.from_user.id,
+                    inv_id=inv_id
+                )
                 await message.bot.send_message(
                     message.from_user.id,
                     f"🎉Привет, {message.from_user.first_name}",
                     reply_markup=await main_menu_bt()
                 )
             else:
+                # Add user without referral
                 await add_user(
-                    user_name=message.from_user.first_name,
-                    tg_id=message.from_user.id
+                    tg_id=message.from_user.id,
+                    user_name=message.from_user.first_name
                 )
                 await message.bot.send_message(
                     message.from_user.id,
                     f"🎉Привет, {message.from_user.first_name}",
                     reply_markup=await main_menu_bt()
                 )
-        except (ValueError, TypeError):
-            logger.error(f"Invalid referral ID: {command.args}")
-            # Handle invalid referral ID case
+        except ValueError:
+            logger.error(f"Invalid referral ID: {referral}")
             await add_user(
-                user_name=message.from_user.first_name,
-                tg_id=message.from_user.id
+                tg_id=message.from_user.id,
+                user_name=message.from_user.first_name
             )
             await message.bot.send_message(
                 message.from_user.id,
@@ -116,8 +121,8 @@ async def start_ref(message: Message, bot: Bot, command: BotCommand = None):
             )
     elif not checker and checker_banned:
         await add_user(
-            user_name=message.from_user.first_name,
-            tg_id=message.from_user.id
+            tg_id=message.from_user.id,
+            user_name=message.from_user.first_name
         )
         await message.bot.send_message(
             message.from_user.id,
