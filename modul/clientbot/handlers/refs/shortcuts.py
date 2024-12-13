@@ -35,42 +35,60 @@ def check_ban(tg_id):
 
 @sync_to_async
 def get_user_info_db(tg_id):
-    user = UserTG.objects.filter(uid=tg_id).first()
-    if user:
+    try:
+        user = UserTG.objects.get(uid=tg_id)
+        print(f"Got user info - Balance: {user.balance}, Refs: {user.refs}")
         return [user.username, user.uid, user.balance, user.refs, user.invited, user.paid]
-    return None
+    except UserTG.DoesNotExist:
+        print(f"User {tg_id} not found in get_user_info_db")
+        return None
+    except Exception as e:
+        print(f"Error in get_user_info_db: {e}")
+        return None
 
 
 @sync_to_async
 def plus_ref(tg_id):
-    UserTG.objects.filter(uid=tg_id).update(refs=F('refs') + 1)
+    try:
+        user = UserTG.objects.select_for_update().get(uid=tg_id)
+        user.refs += 1
+        user.save()
+        print(f"Successfully updated refs for user {tg_id}, new refs count: {user.refs}")
+        return True
+    except UserTG.DoesNotExist:
+        print(f"User {tg_id} not found in plus_ref")
+        return False
+    except Exception as e:
+        print(f"Error in plus_ref for user {tg_id}: {e}")
+        return False
 
 
 @sync_to_async
 def plus_money(tg_id):
     try:
-        # Get admin info first
-        admin_info = AdminInfo.objects.first()
+        # Get price from AdminInfo
+        admin_info = AdminInfo.objects.select_for_update().first()
         if not admin_info:
-            print("AdminInfo not found")
+            print("AdminInfo not found in plus_money")
             return False
 
-        money = admin_info.price
-        print(f"Adding money: {money} to user: {tg_id}")
+        bonus = admin_info.price
+        print(f"Got bonus amount: {bonus}")
 
-        # Get user and update balance
-        user = UserTG.objects.filter(uid=tg_id).first()
-        if not user:
-            print(f"User {tg_id} not found")
-            return False
-
-        user.balance = user.balance + money
+        # Update user balance
+        user = UserTG.objects.select_for_update().get(uid=tg_id)
+        old_balance = user.balance
+        user.balance = float(old_balance) + float(bonus)
         user.save()
 
-        print(f"New balance for user {tg_id}: {user.balance}")
+        print(f"Successfully updated balance for user {tg_id}")
+        print(f"Old balance: {old_balance}, New balance: {user.balance}")
         return True
+    except UserTG.DoesNotExist:
+        print(f"User {tg_id} not found in plus_money")
+        return False
     except Exception as e:
-        print(f"Error in plus_money: {e}")
+        print(f"Error in plus_money for user {tg_id}: {e}")
         return False
 
 
