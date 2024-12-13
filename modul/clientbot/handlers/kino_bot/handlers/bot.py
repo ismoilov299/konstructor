@@ -218,16 +218,33 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
 
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
-    sub_status = await check_subs(message.from_user.id, bot)
-    if not sub_status:
-        kb = await get_subs_kb()
-        await message.answer('<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>', reply_markup=kb)
-        return
-    await state.set_state(SearchFilmForm.query)
-    await message.answer(
-        '<b>Отправьте название фильма / сериала / аниме</b>\n\nНе указывайте года, озвучки и т.д.\n\nПравильный пример: Ведьмак\nНеправильный пример: Ведьмак 2022',
-        parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+    """
+    Kino bot boshlanish funksiyasi
+    """
+    try:
+        sub_status = await check_subs(message.from_user.id, bot)
+        if not sub_status:
+            kb = await get_subs_kb(bot)  # bot ni parametr sifatida uzatamiz
+            await message.answer(
+                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
+                reply_markup=kb
+            )
+            return
 
+        await state.set_state(SearchFilmForm.query)
+        await message.answer(
+            '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
+            'Не указывайте года, озвучки и т.д.\n\n'
+            'Правильный пример: Ведьмак\n'
+            'Неправильный пример: Ведьмак 2022',
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove()
+        )
+    except Exception as e:
+        logger.error(f"Error in start_kino_bot: {e}")
+        await message.answer(
+            "Произошла ошибка при запуске бота. Пожалуйста, попробуйте позже или обратитесь к администратору."
+        )
 
 @sync_to_async
 def get_user(uid: int, username: str, first_name: str = None, last_name: str = None):
@@ -301,7 +318,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             await start_ref(message, bot=bot)
 
     elif shortcuts.have_one_module(bot_db, "kino"):
-        await start_kino_bot(message, state)
+        await start_kino_bot(message, state, bot)
         kwargs['parse_mode'] = "HTML"
 
     elif shortcuts.have_one_module(bot_db, "chatgpt"):
@@ -328,39 +345,46 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
-    logger.info(f"Start command received from user {message.from_user.id}")
-    bot_db = await shortcuts.get_bot(bot)
+    """
+    /start komandasi uchun handler
+    """
+    try:
+        logger.info(f"Start command received from user {message.from_user.id}")
+        bot_db = await shortcuts.get_bot(bot)
 
-    if command.args:
-        logger.info(f"Referral args received: {command.args}")
-        await state.update_data(referral=command.args)
+        if command.args:
+            logger.info(f"Referral args received: {command.args}")
+            await state.update_data(referral=command.args)
 
-    uid = message.from_user.id
-    user = await shortcuts.get_user(uid, bot)
+        uid = message.from_user.id
+        user = await shortcuts.get_user(uid, bot)
 
-    if not user:
-        if command.args and command.args.isdigit():
-            inviter = await shortcuts.get_user(int(command.args), bot)
-            if inviter:
-                # sync_to_async dekoratori bilan o'ralgan funksiyani chaqiramiz
-                await shortcuts.increase_referral(inviter)
-                with suppress(TelegramForbiddenError):
-                    user_link = html.link('реферал', f'tg://user?id={uid}')
-                    await bot.send_message(
-                        chat_id=command.args,
-                        text=('new_referral').format(
-                            user_link=user_link,
+        if not user:
+            if command.args and command.args.isdigit():
+                inviter = await shortcuts.get_user(int(command.args), bot)
+                if inviter:
+                    await shortcuts.increase_referral(inviter)
+                    with suppress(TelegramForbiddenError):
+                        user_link = html.link('реферал', f'tg://user?id={uid}')
+                        await bot.send_message(
+                            chat_id=command.args,
+                            text=('new_referral').format(user_link=user_link)
                         )
-                    )
-        else:
-            inviter = None
+            else:
+                inviter = None
 
-        me = await bot.get_me()
-        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-        await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
+            me = await bot.get_me()
+            new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+            await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
 
-    await start(message, state, bot)
-    return
+        # Bot parametrini uzatamiz
+        await start(message, state, bot)
+
+    except Exception as e:
+        logger.error(f"Error in start_on handler: {e}")
+        await message.answer(
+            "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
+        )
 
 
 @client_bot_router.callback_query(F.data == 'start_search')
