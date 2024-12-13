@@ -368,7 +368,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         user_link = html.link('реферал', f'tg://user?id={uid}')
                         await bot.send_message(
                             chat_id=command.args,
-                            text=('new_referral').format(user_link=user_link)
+                            text=f"У вас новый {user_link}!"  # To'g'ridan to'g'ri xabar matni
                         )
             else:
                 inviter = None
@@ -377,7 +377,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
             await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
 
-        # Bot parametrini uzatamiz
         await start(message, state, bot)
 
     except Exception as e:
