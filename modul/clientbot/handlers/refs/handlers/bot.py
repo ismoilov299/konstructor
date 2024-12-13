@@ -136,6 +136,9 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
             try:
                 referrer_id = int(referral)
 
+                # Log referral process
+                logger.info(f"Processing referral: {message.from_user.id} invited by {referrer_id}")
+
                 # Prevent self-referral
                 if referrer_id == message.from_user.id:
                     logger.warning(f"User {referrer_id} tried to refer themselves")
@@ -144,14 +147,32 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                         user_name=message.from_user.first_name
                     )
                 else:
-                    # Process referral
-                    success = await process_referral(message, referrer_id)
-                    if not success:
-                        # If referral processing failed, add user without referral
+                    # Get referrer's name
+                    referrer_name = await get_user_name(referrer_id)
+                    if referrer_name:
+                        # Add new user with referral info
+                        await add_user(
+                            tg_id=message.from_user.id,
+                            user_name=message.from_user.first_name,
+                            invited=referrer_name,
+                            invited_id=referrer_id
+                        )
+
+                        # Add referral record
+                        await add_ref(message.from_user.id, referrer_id)
+
+                        # Update referrer stats and add bonus
+                        await plus_ref(referrer_id)
+                        await plus_money(referrer_id)
+
+                        logger.info(f"Successfully processed referral for {referrer_id}")
+                    else:
+                        logger.error(f"Referrer {referrer_id} not found")
                         await add_user(
                             tg_id=message.from_user.id,
                             user_name=message.from_user.first_name
                         )
+
             except ValueError:
                 logger.error(f"Invalid referral ID: {referral}")
                 await add_user(
