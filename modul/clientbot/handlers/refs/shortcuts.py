@@ -49,13 +49,28 @@ def plus_ref(tg_id):
 @sync_to_async
 def plus_money(tg_id):
     try:
-        money = AdminInfo.objects.first().price
-        user = UserTG.objects.get(uid=tg_id)
-        user.balance += money
+        # Get admin info first
+        admin_info = AdminInfo.objects.first()
+        if not admin_info:
+            print("AdminInfo not found")
+            return False
+
+        money = admin_info.price
+        print(f"Adding money: {money} to user: {tg_id}")
+
+        # Get user and update balance
+        user = UserTG.objects.filter(uid=tg_id).first()
+        if not user:
+            print(f"User {tg_id} not found")
+            return False
+
+        user.balance = user.balance + money
         user.save()
+
+        print(f"New balance for user {tg_id}: {user.balance}")
         return True
     except Exception as e:
-        logger.error(f"Error in plus_money: {e}")
+        print(f"Error in plus_money: {e}")
         return False
 
 
