@@ -46,7 +46,7 @@ def filter_leos_sync(kwargs, age_range, sex, leo_me_id):
         **kwargs
     ).exclude(
         Q(which_search__in=[sex, SexEnum.ANY.value]) | Q(id=leo_me_id)
-    ).annotate(order=F('random')).order_by('order')[:50]
+    ).order_by('?')[:50]  # '?' belgisi tasodifiy tartibda qaytarish uchun
 
 @sync_to_async
 def get_user_uid_sync(leo):
@@ -54,17 +54,33 @@ def get_user_uid_sync(leo):
 
 
 async def get_leos_id(me: int):
-    users_id = []
-    leo_me = await get_leo(me)
-    kwargs = {}
-    if leo_me.which_search != SexEnum.ANY.value:
-        kwargs['sex'] = leo_me.which_search
-    age_range = (leo_me.age - 3, leo_me.age + 3)
-    leos = await filter_leos_sync(kwargs, age_range, leo_me.sex, leo_me.id)
-    for leo in leos:
-        user_uid = await get_user_uid_sync(leo)
-        users_id.append(user_uid)
-    return users_id
+    try:
+        leo_me = await get_leo(me)
+        if not leo_me:
+            return []
+
+        kwargs = {}
+        if leo_me.which_search != SexEnum.ANY.value:
+            kwargs['sex'] = leo_me.which_search
+
+        age_range = (max(0, leo_me.age - 3), leo_me.age + 3)
+
+        leos = await filter_leos_sync(kwargs, age_range, leo_me.sex, leo_me.id)
+
+        users_id = []
+        for leo in leos:
+            try:
+                user_uid = await get_user_uid_sync(leo)
+                users_id.append(user_uid)
+            except Exception as e:
+                print(f"Error getting user_uid for leo {leo.id}: {e}")
+                continue
+
+        return users_id
+
+    except Exception as e:
+        print(f"Error in get_leos_id: {e}")
+        return []
 
 
 async def exists_leo(uid: int):
