@@ -99,7 +99,10 @@ async def process_referral(message: Message, referrer_id: int):
             invited_id=referrer_id
         )
 
-        # Update referrer's stats
+        # Add referral record
+        await add_ref(message.from_user.id, referrer_id)
+
+        # Update referrer's stats and add money
         await plus_ref(referrer_id)  # Increment referral count
         await plus_money(referrer_id)  # Add reward money
 

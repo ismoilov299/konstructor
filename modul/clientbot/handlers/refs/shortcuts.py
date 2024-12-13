@@ -1,9 +1,11 @@
+import logging
+
 from asgiref.sync import sync_to_async
 from django.db.models import F, Sum
 from django.utils import timezone
 from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels
 
-
+logger = logging.getLogger(__name__)
 @sync_to_async
 def add_user(tg_id, user_name, invited="Никто", invited_id=None):
     UserTG.objects.create(
@@ -46,8 +48,15 @@ def plus_ref(tg_id):
 
 @sync_to_async
 def plus_money(tg_id):
-    money = AdminInfo.objects.first().price
-    UserTG.objects.filter(uid=tg_id).update(balance=F('balance') + money)
+    try:
+        money = AdminInfo.objects.first().price
+        user = UserTG.objects.get(uid=tg_id)
+        user.balance += money
+        user.save()
+        return True
+    except Exception as e:
+        logger.error(f"Error in plus_money: {e}")
+        return False
 
 
 @sync_to_async
