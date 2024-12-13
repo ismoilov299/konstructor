@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from aiogram.types import ReplyKeyboardMarkup
 from django.core.files import File
 from django.db.models import Q, F
-
+import os
 from modul.models import LeoMatchLikesBasketModel, SexEnum, User, LeoMatchModel, MediaTypeEnum, UserTG
 from aiogram import Bot, types
 from modul.clientbot.shortcuts import get_bot_by_username, get_current_bot
@@ -162,11 +162,29 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
     kwargs = {}
     if keyboard:
         kwargs['reply_markup'] = keyboard
+
+    base_dir = "modul/clientbot/data"
+
     try:
-        await message.answer_video(types.FSInputFile(f"modul/clientbot/data/leo{uid}.mp4"), )
-        await message.answer(caption, **kwargs)
-    except:
-        await message.answer_photo(types.FSInputFile(f"modul/clientbot/data/leo{uid}.jpg"), caption=caption, **kwargs)
+        if type == "VIDEO":
+            file_path = f"{base_dir}/leo{uid}.mp4"
+            if os.path.exists(file_path):
+                await message.answer_video(types.FSInputFile(file_path))
+                await message.answer(caption, **kwargs)
+            else:
+                raise FileNotFoundError
+        else:
+            file_path = f"{base_dir}/leo{uid}.jpg"
+            if os.path.exists(file_path):
+                await message.answer_photo(types.FSInputFile(file_path), caption=caption, **kwargs)
+            else:
+                raise FileNotFoundError
+
+    except FileNotFoundError:
+        await message.answer("Извините, медиафайл не найден. Пожалуйста, загрузите фото/видео заново.")
+    except Exception as e:
+        await message.answer("Произошла ошибка при отправке медиа. Пожалуйста, попробуйте позже.")
+        print(f"Error in show_profile: {e}")
 
 
 async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int, city: str, about_me: str, url: str,

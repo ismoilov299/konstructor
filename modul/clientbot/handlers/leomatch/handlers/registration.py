@@ -155,6 +155,7 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     if not message.photo and not message.video:
         await message.answer(("Пожалуйста, пришли фото или видео"))
         return
+
     url = ""
     type = ""
     if message.photo:
@@ -166,23 +167,30 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
             return
         url = message.video.file_id
         type = "VIDEO"
+
     await state.update_data(photo=url, media_type=type)
     bot = await get_current_bot(bot)
     format = "jpg" if type == "PHOTO" else "mp4"
-    file_path = f"/var/www/Konstruktor/modul/clientbot/handlers/leomatch/data/leo{message.from_user.id}.{format}"
 
-    # try:
-    # Ensure directory exists
+    # Create base directory if it doesn't exist
+    base_dir = "modul/clientbot/data"
+    os.makedirs(base_dir, exist_ok=True)
 
-    async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
-        await bot_.download(url, file_path)
+    file_path = f"{base_dir}/leo{message.from_user.id}.{format}"
 
-        # Send file
-    await save_media(message, state, file_path, type)
-    # except TelegramNetworkError as e:
-    #     print(f"Telegram Network Error: {e}")
-    # except Exception as e:
-    #     print(f"Error: {e}")
+    try:
+        async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
+            await bot_.download(url, file_path)
+
+        # After successful download, update state and show profile
+        await save_media(message, state, file_path, type)
+
+    except TelegramNetworkError as e:
+        await message.answer("Произошла ошибка при загрузке медиа. Пожалуйста, попробуйте еще раз.")
+        print(f"Telegram Network Error: {e}")
+    except Exception as e:
+        await message.answer("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
+        print(f"Error: {e}")
 
 
 @client_bot_router.message(F.text == ("Да"), LeomatchRegistration.FINAL)
