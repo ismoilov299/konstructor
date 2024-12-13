@@ -104,9 +104,23 @@ def get_users(**kwargs):
 
 #
 #
+@sync_to_async
 async def increase_referral(user: models.ClientBotUser):
-    user.referral_count += 1
-    await sync_to_async(user.save)()
+    try:
+        # Get admin info for bonus amount
+        admin_info = await models.AdminInfo.objects.first()
+        bonus = admin_info.price if admin_info else 10.0
+
+        # Update user
+        user.referral_count += 1
+        user.balance += float(bonus)
+        await user.save()
+
+        print(f"Updated referral for user {user.uid}: count={user.referral_count}, balance={user.balance}")
+        return True
+    except Exception as e:
+        print(f"Error in increase_referral: {e}")
+        return False
 
 #
 #

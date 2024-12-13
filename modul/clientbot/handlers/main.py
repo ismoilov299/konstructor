@@ -137,9 +137,7 @@ def start_bot_client():
                             user_link = html.link('реферал', f'tg://user?id={uid}')
                             await bot.send_message(
                                 chat_id=referral,
-                                text=('new_referral').format(
-                                    user_link=user_link,
-                                )
+                                text=f"У вас новый {user_link}!"  # formatni to'g'ridan to'g'ri beramiz
                             )
                 else:
                     inviter = None
