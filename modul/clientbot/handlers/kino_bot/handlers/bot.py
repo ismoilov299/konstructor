@@ -843,21 +843,29 @@ class DownloadProgress:
         self.current_message = None
         self.last_update_time = 0
         self.last_percentage = 0
-        # Create event loop reference
-        self.loop = asyncio.get_event_loop()
+        self.bot = message.bot
+        self.chat_id = message.chat.id
 
     def get_progress_bar(self, percentage):
-        filled = int(percentage / 5)  # 20 segments
+        filled = int(percentage / 5)
         empty = 20 - filled
         return f"[{'█' * filled}{'▒' * empty}]"
 
+    def create_text(self, percentage, speed=None):
+        progress_bar = self.get_progress_bar(percentage)
+        if speed:
+            speed_text = f"{speed / 1024 / 1024:.1f} МБ/с"
+        else:
+            speed_text = "⌛️"
+        return f"⏳ Загрузка...\n{progress_bar}\n{percentage:.1f}% | {speed_text}"
+
     def progress_hook(self, d):
         if d['status'] == 'downloading':
-            current_time = time.time()
+            try:
+                current_time = time.time()
 
-            # Update only if 1 second has passed or it's the first update
-            if (current_time - self.last_update_time >= 1) or self.current_message is None:
-                try:
+                # Update only if 1 second has passed or it's the first update
+                if (current_time - self.last_update_time >= 1) or self.current_message is None:
                     total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
                     downloaded = d.get('downloaded_bytes', 0)
 
@@ -865,77 +873,64 @@ class DownloadProgress:
                         percentage = (downloaded / total) * 100
                         speed = d.get('speed', 0)
 
-                        if speed:
-                            speed_text = f"{speed / 1024 / 1024:.1f} МБ/с"
-                        else:
-                            speed_text = "⌛️"
+                        text = self.create_text(percentage, speed)
 
-                        progress_bar = self.get_progress_bar(percentage)
-                        text = (f"⏳ Загрузка...\n{progress_bar}\n"
-                                f"{percentage:.1f}% | {speed_text}")
-
-                        # Run coroutine in the event loop
+                        # Use synchronous bot API methods
                         if self.current_message is None:
-                            future = asyncio.run_coroutine_threadsafe(
-                                self.message.answer(text),
-                                self.loop
-                            )
-                            self.current_message = future.result()
+                            self.current_message = self.bot.send_message(
+                                chat_id=self.chat_id,
+                                text=text
+                            ).wait()
                         else:
                             if abs(percentage - self.last_percentage) >= 1:
-                                future = asyncio.run_coroutine_threadsafe(
-                                    self.current_message.edit_text(text),
-                                    self.loop
-                                )
-                                future.result()
+                                self.bot.edit_message_text(
+                                    chat_id=self.chat_id,
+                                    message_id=self.current_message.message_id,
+                                    text=text
+                                ).wait()
                                 self.last_percentage = percentage
 
                         self.last_update_time = current_time
-
-                except Exception as e:
-                    logger.error(f"Progress update error: {e}")
+            except Exception as e:
+                logger.error(f"Progress update error: {str(e)}")
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
 async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext):
-    try:
-        # Get message before any operations
-        message = callback.message
-        if not message:
-            return
+    message = callback.message
+    if not message:
+        return
 
+    try:
         try:
             await callback.answer()
         except Exception as e:
             logger.error(f"Callback answer error: {e}")
-            # Continue execution even if callback answer fails
             pass
 
-        try:
-            data = await state.get_data()
-            url = data.get('url')
-            formats = data.get('formats', [])
-            selected_format = formats[callback_data.index]
+        status_msg = await message.answer("⏳ Начинаю загрузку...")
 
-            # Create progress handler
-            progress_handler = DownloadProgress(message)
+        data = await state.get_data()
+        url = data.get('url')
+        formats = data.get('formats', [])
+        selected_format = formats[callback_data.index]
 
-            download_opts = {
-                'format': callback_data.format_id,
-                'quiet': True,
-                'no_warnings': True,
-                'noplaylist': True,
-                'progress_hooks': [progress_handler.progress_hook],
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                },
-                'format_sort': ['res', 'ext:mp4:m4a'],
-                'merge_output_format': 'mp4'
-            }
+        # Create progress handler
+        progress_handler = DownloadProgress(message)
 
-            # Send initial download message
-            status_msg = await message.answer("⏳ Начинаю загрузку...")
+        download_opts = {
+            'format': callback_data.format_id,
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'progress_hooks': [progress_handler.progress_hook],
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+            'merge_output_format': 'mp4'
+        }
 
+        async with aiohttp.ClientSession() as session:
             with yt_dlp.YoutubeDL(download_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 file_path = ydl.prepare_filename(info)
@@ -959,54 +954,26 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                         if os.path.exists(file_path):
                             os.remove(file_path)
                         if progress_handler.current_message:
-                            await progress_handler.current_message.delete()
+                            try:
+                                await bot.delete_message(
+                                    chat_id=progress_handler.chat_id,
+                                    message_id=progress_handler.current_message.message_id
+                                )
+                            except Exception:
+                                pass
+                        await status_msg.delete()
                         try:
                             await message.delete()
                         except Exception:
                             pass
-                        try:
-                            await status_msg.delete()
-                        except Exception:
-                            pass
 
-                    # Return to initial state and prompt for new URL
-                    await state.set_state(Download.download)
-                    try:
-                        await callback.message.answer("✅ Отправьте новую ссылку на видео:")
-                    except Exception:
-                        # If original message is not available, try to send to chat
-                        await callback.bot.send_message(
-                            chat_id=callback.message.chat.id,
-                            text="✅ Отправьте новую ссылку на видео:"
-                        )
-
-        except Exception as e:
-            logger.error(f"Download error: {e}")
-            error_text = "❌ Ошибка при скачивании. Попробуйте другой формат или отправьте ссылку заново."
-            try:
-                await message.answer(error_text)
-            except Exception:
-                await callback.bot.send_message(
-                    chat_id=callback.message.chat.id,
-                    text=error_text
-                )
+        await state.set_state(Download.download)
+        await message.answer("✅ Отправьте новую ссылку на видео:")
 
     except Exception as e:
-        logger.error(f"Global format selection error: {e}")
-        try:
-            await callback.bot.send_message(
-                chat_id=callback.message.chat.id,
-                text="❌ Произошла ошибка. Отправьте ссылку заново."
-            )
-        except Exception as send_error:
-            logger.error(f"Failed to send error message: {send_error}")
-
-    finally:
-        # Always try to reset state
-        try:
-            await state.set_state(Download.download)
-        except Exception as state_error:
-            logger.error(f"Failed to reset state: {state_error}")
+        logger.error(f"Download error: {str(e)}")
+        await message.answer("❌ Ошибка при скачивании. Попробуйте еще раз.")
+        await state.set_state(Download.download)
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
