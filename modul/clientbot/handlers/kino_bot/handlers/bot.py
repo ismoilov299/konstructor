@@ -912,38 +912,9 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         formats = data.get('formats', [])
 
         # Send initial status
-        status_msg = await message.answer("⏳ Начинаю загрузку...")
+        status_msg = await message.answer("Загрузка...")
 
         progress_handler = DownloadProgress(message)
-
-        # Background task for periodic updates
-        async def update_status():
-            last_text = ""
-            while True:
-                try:
-                    if hasattr(progress_handler, 'current_progress'):
-                        prog = progress_handler.current_progress
-                        percentage = prog['percentage']
-                        speed = prog['speed']
-                        speed_text = f"{speed / 1024 / 1024:.1f} МБ/с" if speed else "⌛️"
-                        text = f"⚡️ Загрузка... {percentage:.1f}%"
-
-                        if text != last_text:
-                            try:
-                                await status_msg.edit_text(text)
-                                last_text = text
-                            except Exception:
-                                pass
-
-                    await asyncio.sleep(3)  # Wait 3 seconds between updates
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error(f"Status update error: {e}")
-                    await asyncio.sleep(3)
-
-        # Start status update task
-        status_task = asyncio.create_task(update_status())
 
         download_opts = {
             'format': callback_data.format_id,
@@ -963,6 +934,10 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 file_path = ydl.prepare_filename(info)
 
                 if os.path.exists(file_path):
+                    # Show "Загружен!" message before sending file
+                    if status_msg:
+                        await status_msg.edit_text("Загружен!")
+
                     if callback_data.type == 'video':
                         video = FSInputFile(file_path)
                         await message.answer_video(
@@ -1001,12 +976,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
     finally:
         # Cleanup
         try:
-            if status_task and not status_task.done():
-                status_task.cancel()
-                try:
-                    await status_task
-                except asyncio.CancelledError:
-                    pass
+            await asyncio.sleep(1)  # Short delay before cleanup
 
             if status_msg:
                 try:
