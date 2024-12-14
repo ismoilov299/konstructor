@@ -838,82 +838,105 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
 
 class DownloadProgress:
-    def __init__(self, message: Message):
-        self.message = message
+    def __init__(self, bot: Bot, chat_id: int):
+        self.bot = bot
+        self.chat_id = chat_id
         self.last_update_time = 0
         self.last_percentage = 0
-        self.last_text = None
-        self.message_to_edit = None
-
-    async def init_progress_message(self):
-        """Initialize the progress message"""
-        self.message_to_edit = await self.message.answer("⏳ Начинаю загрузку...")
-        return self.message_to_edit
+        self.message_id = None
+        self._queue = []
 
     def get_progress_bar(self, percentage):
-        filled = int(percentage / 5)  # 20 segments
+        filled = int(percentage / 5)
         empty = 20 - filled
         return f"[{'█' * filled}{'▒' * empty}]"
 
-    def create_text(self, percentage, speed):
-        progress_bar = self.get_progress_bar(percentage)
-        speed_text = f"{speed / 1024 / 1024:.1f} МБ/с" if speed > 0 else "⌛️"
-        return f"⏳ Загрузка...\n{progress_bar}\n{percentage:.1f}% | {speed_text}"
+    async def send_initial_message(self):
+        msg = await self.bot.send_message(self.chat_id, "⏳ Начинаю загрузку...")
+        self.message_id = msg.message_id
+        return msg
+
+    def format_size(self, bytes):
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes < 1024:
+                return f"{bytes:.1f} {unit}"
+            bytes /= 1024
+        return f"{bytes:.1f} GB"
 
     def progress_hook(self, d):
-        if d['status'] == 'downloading':
-            try:
+        try:
+            if d['status'] == 'downloading':
                 current_time = time.time()
 
-                # Update only if more than 2 seconds passed or percentage changed significantly
-                total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
-                downloaded = d.get('downloaded_bytes', 0)
-
-                if total > 0:
-                    percentage = (downloaded / total) * 100
+                # Update only every 1 second
+                if current_time - self.last_update_time >= 1:
+                    total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
+                    downloaded = d.get('downloaded_bytes', 0)
                     speed = d.get('speed', 0)
 
-                    # Only update if enough time passed or significant change
-                    if (current_time - self.last_update_time >= 2 and
-                            abs(percentage - self.last_percentage) >= 1):
+                    if total > 0:
+                        percentage = min((downloaded / total) * 100, 100)
 
-                        text = self.create_text(percentage, speed)
+                        # Only update if percentage changed by at least 1%
+                        if abs(percentage - self.last_percentage) >= 1:
+                            progress_bar = self.get_progress_bar(percentage)
+                            speed_text = f"{self.format_size(speed)}/s" if speed else "⌛️"
+                            downloaded_text = self.format_size(downloaded)
+                            total_text = self.format_size(total)
 
-                        # Only update if text actually changed
-                        if text != self.last_text:
-                            asyncio.run_coroutine_threadsafe(
-                                self.message_to_edit.edit_text(text),
-                                asyncio.get_event_loop()
-                            )
-                            self.last_text = text
+                            text = (f"⏳ Загрузка...\n{progress_bar}\n"
+                                    f"{percentage:.1f}% • {speed_text}\n"
+                                    f"📥 {downloaded_text} / {total_text}")
+
+                            # Add to queue
+                            self._queue.append(text)
                             self.last_percentage = percentage
                             self.last_update_time = current_time
 
-            except Exception as e:
-                if "message is not modified" not in str(e):  # Ignore same content errors
-                    logger.error(f"Progress update error: {str(e)}")
+        except Exception as e:
+            logger.error(f"Progress hook error: {e}")
+
+    async def update_progress(self):
+        """Update progress message from queue"""
+        try:
+            if self._queue and self.message_id:
+                text = self._queue[-1]  # Get latest update
+                self._queue.clear()  # Clear queue
+                try:
+                    await self.bot.edit_message_text(
+                        text=text,
+                        chat_id=self.chat_id,
+                        message_id=self.message_id
+                    )
+                except Exception as e:
+                    if "message is not modified" not in str(e):
+                        logger.error(f"Progress update error: {e}")
+        except Exception as e:
+            logger.error(f"Update progress error: {e}")
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
 async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext):
-    message = callback.message
-    if not message:
-        return
-
     try:
+        message = callback.message
+        if not message:
+            return
+
         try:
             await callback.answer()
         except Exception as e:
             logger.error(f"Callback answer error: {e}")
-            pass
-
-        # Create progress handler
-        progress_handler = DownloadProgress(message)
-        await progress_handler.init_progress_message()
 
         data = await state.get_data()
         url = data.get('url')
         formats = data.get('formats', [])
+
+        # Create progress handler
+        progress_handler = DownloadProgress(callback.bot, message.chat.id)
+        status_message = await progress_handler.send_initial_message()
+
+        # Create update task
+        update_task = asyncio.create_task(update_progress_loop(progress_handler))
 
         download_opts = {
             'format': callback_data.format_id,
@@ -927,49 +950,69 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             'merge_output_format': 'mp4'
         }
 
-        with yt_dlp.YoutubeDL(download_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            file_path = ydl.prepare_filename(info)
+        try:
+            with yt_dlp.YoutubeDL(download_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                file_path = ydl.prepare_filename(info)
 
-            if os.path.exists(file_path):
-                try:
-                    if callback_data.type == 'video':
-                        video = FSInputFile(file_path)
-                        await message.answer_video(
-                            video=video,
-                            caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
-                        )
-                    else:
-                        audio = FSInputFile(file_path)
-                        await message.answer_audio(
-                            audio=audio,
-                            title=info.get('title', 'Audio'),
-                            caption="🎵 Аудио версия"
-                        )
-                finally:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                    if progress_handler.message_to_edit:
+                if os.path.exists(file_path):
+                    try:
+                        if callback_data.type == 'video':
+                            video = FSInputFile(file_path)
+                            await message.answer_video(
+                                video=video,
+                                caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
+                            )
+                        else:
+                            audio = FSInputFile(file_path)
+                            await message.answer_audio(
+                                audio=audio,
+                                title=info.get('title', 'Audio'),
+                                caption="🎵 Аудио версия"
+                            )
+                    finally:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+
+                        # Cancel update task
+                        update_task.cancel()
                         try:
-                            await progress_handler.message_to_edit.delete()
+                            await status_message.delete()
                         except Exception:
                             pass
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
+                        try:
+                            await message.delete()
+                        except Exception:
+                            pass
 
-        await state.set_state(Download.download)
-        await message.answer("✅ Отправьте новую ссылку на видео:")
+            await state.set_state(Download.download)
+            await message.answer("✅ Отправьте новую ссылку на видео:")
+
+        except Exception as e:
+            error_msg = str(e)
+            if "Connection lost" in error_msg:
+                await message.answer("❌ Соединение прервано. Попробуйте еще раз.")
+            else:
+                logger.error(f"Download error: {error_msg}")
+                await message.answer("❌ Ошибка при скачивании. Попробуйте еще раз.")
+
+            update_task.cancel()
+            await state.set_state(Download.download)
 
     except Exception as e:
-        error_msg = str(e)
-        if "Connection lost" in error_msg:
-            await message.answer("❌ Соединение прервано. Попробуйте еще раз.")
-        else:
-            logger.error(f"Download error: {error_msg}")
-            await message.answer("❌ Ошибка при скачивании. Попробуйте еще раз.")
+        logger.error(f"Process selection error: {e}")
         await state.set_state(Download.download)
+        await callback.message.answer("❌ Произошла ошибка. Попробуйте еще раз.")
+
+
+async def update_progress_loop(progress_handler):
+    """Background task to update progress message"""
+    try:
+        while True:
+            await progress_handler.update_progress()
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        pass
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
