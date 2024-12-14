@@ -766,15 +766,12 @@ class FormatCallback(CallbackData, prefix="format"):
     format_id: str
     type: str
     quality: str
-    url_encoded: str  # URL ni encode qilgan holda saqlaymiz
+    index: int  # URL o'rniga index ishlatamiz
 
 
-async def handle_youtube(message: Message, url: str, me, bot: Bot):
+async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
     try:
         await message.answer("🔍 Проверяю доступные форматы...")
-
-        # URL ni encode qilish
-        url_encoded = base64.b64encode(url.encode()).decode()
 
         base_opts = {
             'quiet': True,
@@ -788,38 +785,53 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot):
             title = info.get('title', 'Video')
 
             builder = InlineKeyboardBuilder()
+            valid_formats = []  # Barcha formatlarni saqlaymiz
 
             # Video formatlar
             for f in formats:
                 if f.get('ext') == 'mp4' and f.get('height', 0) <= 480:
                     height = f.get('height', 0)
                     if height > 0:
+                        format_info = {
+                            'format_id': f['format_id'],
+                            'type': 'video',
+                            'height': height
+                        }
+                        valid_formats.append(format_info)
                         builder.button(
                             text=f"🎥 {height}p",
                             callback_data=FormatCallback(
                                 format_id=f['format_id'],
                                 type='video',
                                 quality=str(height),
-                                url_encoded=url_encoded
+                                index=len(valid_formats) - 1
                             ).pack()
                         )
 
             # Audio format
             audio_format = next((f for f in formats if f.get('ext') == 'm4a'), None)
             if audio_format:
+                format_info = {
+                    'format_id': audio_format['format_id'],
+                    'type': 'audio',
+                    'height': 0
+                }
+                valid_formats.append(format_info)
                 builder.button(
                     text="🎵 Аудио",
                     callback_data=FormatCallback(
                         format_id=audio_format['format_id'],
                         type='audio',
                         quality='audio',
-                        url_encoded=url_encoded
+                        index=len(valid_formats) - 1
                     ).pack()
                 )
 
             builder.adjust(2)
 
-            if len(builder.buttons) > 0:
+            if valid_formats:
+                # URL va formatlarni state'ga saqlash
+                await state.update_data(url=url, formats=valid_formats)
                 await message.answer(
                     f"📹 {title}\n\nВыберите формат:",
                     reply_markup=builder.as_markup()
@@ -833,19 +845,29 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot):
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
-async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback):
+async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext):
     try:
         await callback.answer()
         message = callback.message
 
-        # URL ni decode qilish
-        url = base64.b64decode(callback_data.url_encoded).decode()
+        # State'dan ma'lumotlarni olish
+        data = await state.get_data()
+        url = data.get('url')
+        formats = data.get('formats', [])
+        selected_format = formats[callback_data.index]
 
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
+            'external_downloader': 'aria2c',
+            'external_downloader_args': [
+                '--min-split-size=1M',
+                '--max-connection-per-server=16',
+                '--max-concurrent-downloads=16',
+                '--split=16'
+            ]
         }
 
         progress_msg = await message.answer("⏳ Начинаю загрузку...")
@@ -874,6 +896,9 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                         os.remove(file_path)
                     await progress_msg.delete()
                     await message.delete()
+
+                # State'ni tozalash
+                await state.clear()
 
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
