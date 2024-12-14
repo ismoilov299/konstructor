@@ -894,14 +894,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
     status_msg = None
     file_path = None
-    download_started = False  # Flag to track if download started
 
     try:
-        try:
-            await callback.answer()
-        except Exception as e:
-            logger.error(f"Callback answer error: {e}")
-
         # Get data from state
         data = await state.get_data()
         url = data.get('url')
@@ -909,7 +903,12 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             await message.answer("❌ Ошибка: ссылка не найдена")
             return
 
-        # Send initial status
+        try:
+            await callback.answer()
+        except Exception as e:
+            logger.error(f"Callback answer error: {e}")
+
+        # Create status message
         status_msg = await message.answer("Загрузка...")
 
         download_opts = {
@@ -921,83 +920,67 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
             'merge_output_format': 'mp4',
-            'socket_timeout': 30,  # Increase timeout
+            'socket_timeout': 30,
             'retries': 3
         }
 
-        try:
-            with yt_dlp.YoutubeDL(download_opts) as ydl:
-                download_started = True
-                info = ydl.extract_info(url, download=True)
-                file_path = ydl.prepare_filename(info)
+        with yt_dlp.YoutubeDL(download_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
 
-                if os.path.exists(file_path):
-                    # Show completion message
-                    try:
-                        if status_msg:
-                            await status_msg.edit_text("Загружен!")
-                    except Exception:
-                        pass
+            if not os.path.exists(file_path):
+                raise FileNotFoundError("Download failed: file not found")
 
-                    if callback_data.type == 'video':
-                        video = FSInputFile(file_path)
-                        await message.answer_video(
-                            video=video,
-                            caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
-                        )
-                    else:
-                        audio = FSInputFile(file_path)
-                        await message.answer_audio(
-                            audio=audio,
-                            title=info.get('title', 'Audio'),
-                            caption="🎵 Аудио версия"
-                        )
+            # Update status before sending file
+            await status_msg.edit_text("Загружен!")
 
-                    # Reset state and prompt for new URL
-                    await state.set_state(Download.download)
-                    await message.answer("✅ Отправьте новую ссылку на видео:")
-                else:
-                    raise FileNotFoundError("Download failed: file not found")
+            if callback_data.type == 'video':
+                video = FSInputFile(file_path)
+                await message.answer_video(
+                    video=video,
+                    caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
+                )
+            else:
+                audio = FSInputFile(file_path)
+                await message.answer_audio(
+                    audio=audio,
+                    title=info.get('title', 'Audio'),
+                    caption="🎵 Аудио версия"
+                )
 
-        except Exception as e:
-            error_msg = "❌ Ошибка при скачивании. Попробуйте еще раз."
-            if not download_started:
-                error_msg = "❌ Не удалось начать скачивание. Попробуйте позже."
-            elif "Connection lost" in str(e):
-                error_msg = "❌ Соединение прервано. Попробуйте еще раз."
-
-            logger.error(f"Download error: {str(e)}")
-            await message.answer(error_msg)
+            # Reset state and prompt for new URL
             await state.set_state(Download.download)
+            await message.answer("✅ Отправьте новую ссылку на видео:")
 
+    except FileNotFoundError:
+        await message.answer("❌ Ошибка: файл не был загружен")
+        await state.set_state(Download.download)
     except Exception as e:
-        logger.error(f"Process selection error: {str(e)}")
-        await message.answer("❌ Произошла ошибка. Попробуйте еще раз.")
+        logger.error(f"Download error: {str(e)}")
+        error_msg = "❌ Ошибка при скачивании. Попробуйте еще раз."
+        await message.answer(error_msg)
         await state.set_state(Download.download)
 
     finally:
-        try:
-            await asyncio.sleep(1)
+        # Cleanup
+        await asyncio.sleep(1)
 
-            if status_msg:
-                try:
-                    await status_msg.delete()
-                except Exception:
-                    pass
-
-            if file_path and os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                except Exception as e:
-                    logger.error(f"File cleanup error: {e}")
-
+        if status_msg:
             try:
-                await message.delete()
+                await status_msg.delete()
             except Exception:
                 pass
 
-        except Exception as e:
-            logger.error(f"Cleanup error: {e}")
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                logger.error(f"File cleanup error: {e}")
+
+        try:
+            await message.delete()
+        except Exception:
+            pass
 
 
 async def remove_file(file_path: str):
