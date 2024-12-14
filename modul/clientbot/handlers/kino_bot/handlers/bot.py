@@ -582,22 +582,23 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
     url = message.text
 
     if not url:
-        await message.answer("\u2757 Пришлите ссылку на видео")
+        await message.answer("❗ Пришлите ссылку на видео")
         return
 
-    await message.answer("\u231b Проверяю доступные форматы...")
+    await message.answer("⏳ Проверяю доступные форматы...")
 
     base_opts = {
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
+        'encoding': 'utf-8',
     }
 
     try:
         with yt_dlp.YoutubeDL(base_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             formats = info.get('formats', [])
-            title = info.get('title', 'Video')
+            title = info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')
 
             builder = InlineKeyboardBuilder()
             valid_formats = []
@@ -615,7 +616,7 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
                             'quality': f'{height}p'
                         })
                         builder.button(
-                            text=f"\ud83c\udfa5 {height}p",
+                            text=f"🎥 {height}p",
                             callback_data=FormatCallback(
                                 format_id=f['format_id'],
                                 type='video',
@@ -633,7 +634,7 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
                     'quality': 'audio'
                 })
                 builder.button(
-                    text="\ud83c\udfb5 Аудио",
+                    text="🎵 Аудио",
                     callback_data=FormatCallback(
                         format_id=audio_format['format_id'],
                         type='audio',
@@ -647,15 +648,15 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
             if valid_formats:
                 await state.update_data(url=url, formats=valid_formats)
                 await message.answer(
-                    f"\ud83c\udfa5 {title}\n\nВыберите формат:",
+                    f"🎥 {title}\n\nВыберите формат:",
                     reply_markup=builder.as_markup()
                 )
             else:
-                await message.answer("\u2757 Не найдены подходящие форматы")
+                await message.answer("❗ Не найдены подходящие форматы")
 
     except Exception as e:
         logger.error(f"YouTube handler error: {str(e)}")
-        await message.answer("\u2757 Ошибка при получении форматов")
+        await message.answer("❗ Ошибка при получении форматов")
 
 async def handle_tiktok(message: Message, url: str, me, bot: Bot):
     try:
@@ -906,10 +907,11 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
+        'encoding': 'utf-8',
     }
 
     try:
-        progress_msg = await callback.message.answer("\u231b Загрузка началась...")
+        progress_msg = await callback.message.answer("⏳ Загрузка началась...")
 
         with yt_dlp.YoutubeDL(download_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -921,13 +923,13 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                         await bot.send_video(
                             chat_id=callback.message.chat.id,
                             video=FSInputFile(file_path),
-                            caption=f"\ud83c\udfa5 {info.get('title', 'Video')} ({callback_data.quality})"
+                            caption=f"🎥 {info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')} ({callback_data.quality})"
                         )
                     else:
                         await bot.send_audio(
                             chat_id=callback.message.chat.id,
                             audio=FSInputFile(file_path),
-                            caption=f"\ud83c\udfb5 {info.get('title', 'Audio')}"
+                            caption=f"🎵 {info.get('title', 'Audio').encode('utf-8', 'replace').decode('utf-8')}"
                         )
                 finally:
                     os.remove(file_path)
@@ -937,7 +939,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
-        await callback.message.answer("\u2757 Ошибка при загрузке файла")
+        await callback.message.answer("❗ Ошибка при загрузке файла")
+
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
