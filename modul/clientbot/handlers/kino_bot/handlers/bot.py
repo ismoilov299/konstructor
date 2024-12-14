@@ -799,7 +799,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'format': 'best[height<=480]', # Default format restriction
+            'format': 'best[height<=480]',  # Default format restriction
             'http_headers': {  # Add custom headers
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             }
