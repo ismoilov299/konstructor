@@ -567,6 +567,10 @@ import os
 
 import yt_dlp
 import logging
+from aiogram.types import Message, FSInputFile
+from aiogram.enums import ChatAction  # To'g'ri import
+from aiogram import Bot
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -588,202 +592,174 @@ async def youtube_download_handler(message: Message, bot: Bot):
 
         # TikTok handler
         if 'tiktok.com' in message.text:
-            ydl_opts = {
-                'format': 'worst[ext=mp4]/worst',
-                'quiet': True,
-                'no_warnings': True,
-                'max_filesize': 40000000,
-                'postprocessor_args': [
-                    '-vf', 'scale=360:-2',
-                    '-b:v', '500k',
-                    '-maxrate', '500k',
-                    '-bufsize', '1000k'
-                ],
-                'postprocessors': [{
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4'
-                }]
-            }
-
-            try:
-                if '?' in url:
-                    url = url.split('?')[0]
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    try:
-                        # Video ma'lumotlarini olish
-                        info = ydl.extract_info(url, download=False)
-                        if info and 'url' in info:
-                            try:
-                                # To'g'ridan-to'g'ri URLni yuborish
-                                await bot.send_video(
-                                    chat_id=message.chat.id,
-                                    video=info['url'],
-                                    caption=f"📹 TikTok video\nСкачано через @{me.username}",
-                                )
-                                await shortcuts.add_to_analitic_data(me.username, url)
-                                return
-                            except Exception as send_error:
-                                logger.error(f"Error sending video: {send_error}")
-                                try:
-                                    # Agar URL orqali yuborish amalga oshmasa, FSInputFile orqali yuborish
-                                    from aiogram.types import FSInputFile
-                                    info = ydl.extract_info(url, download=True)
-                                    video_path = ydl.prepare_filename(info)
-                                    video = FSInputFile(video_path)
-                                    await bot.send_video(
-                                        chat_id=message.chat.id,
-                                        video=video,
-                                        caption=f"📹 TikTok video\nСкачано через @{me.username}",
-                                    )
-                                    # Faylni o'chirish
-                                    import os
-                                    if os.path.exists(video_path):
-                                        os.remove(video_path)
-                                    return
-                                except Exception as file_send_error:
-                                    logger.error(f"Error sending video file: {file_send_error}")
-                                    await message.answer("❌ Ошибка при отправке видео")
-                        else:
-                            await message.answer("❌ Не удалось получить ссылку на видео")
-
-                    except Exception as download_error:
-                        logger.error(f"Download error: {download_error}")
-                        await message.answer("❌ Ошибка при скачивании видео")
-
-            except Exception as tiktok_error:
-                logger.error(f"TikTok download error: {tiktok_error}")
-                await message.answer("❌ Ошибка при скачивании. Попробуйте позже.")
+            await handle_tiktok(message, url, me, bot)
+            return
 
         # Instagram handler
         if 'instagram' in message.text or 'inst.ae' in message.text:
-            try:
-                ydl_opts = {
-                    'format': 'best[height<=360]',
-                    'max_filesize': 45_000_000,
-                    'quiet': True,
-                    'no_warnings': True,
-                }
-
-                await bot.send_chat_action(message.chat.id, "upload_video")
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-
-                    if 'url' in info:
-                        try:
-                            media_type = info.get('ext', '')
-                            if media_type in ['mp4', 'mov']:
-                                await bot.send_video(
-                                    chat_id=message.chat.id,
-                                    video=info['url'],
-                                    caption=f"📹 Instagram video\nСкачано через @{me.username}",
-                                )
-                            elif media_type in ['jpg', 'jpeg', 'png']:
-                                await bot.send_photo(
-                                    chat_id=message.chat.id,
-                                    photo=info['url'],
-                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}",
-                                )
-                            else:
-                                await message.answer("❌ Неподдерживаемый формат медиа")
-
-                            await shortcuts.add_to_analitic_data(me.username, url)
-
-                        except Exception as send_error:
-                            logger.error(f"Error sending Instagram media: {send_error}")
-                            try:
-                                ydl_opts['format'] = 'worst[ext=mp4]'
-                                with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
-                                    info_low = ydl_low.extract_info(url, download=False)
-                                    await bot.send_video(
-                                        chat_id=message.chat.id,
-                                        video=info_low['url'],
-                                        caption=f"📹 Instagram video (Низкое качество)\nСкачано через @{me.username}",
-                                        supports_streaming=True
-                                    )
-                            except:
-                                await message.answer("❌ Не удалось отправить медиа")
-                    else:
-                        await message.answer("❌ Не удалось получить ссылку на медиа")
-
-            except Exception as inst_error:
-                logger.error(f"Instagram download error: {inst_error}")
-                await message.answer("❌ Ошибка при скачивании из Instagram. Возможно пост недоступен или защищен.")
+            await handle_instagram(message, url, me, bot)
             return
 
         # YouTube handler
-        await bot.send_chat_action(message.chat.id, "upload_video")
-        ydl_opts = {
-            'format': 'best[height<=480][ext=mp4]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best',
-            'merge_output_format': 'mp4',
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-        }
-
-        try:
-            await bot.send_chat_action(message.chat.id, "upload_video")
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    info = ydl.extract_info(url, download=True)  # download=True qilamiz
-                    video_path = ydl.prepare_filename(info)
-
-                    try:
-                        from aiogram.types import FSInputFile
-                        video = FSInputFile(video_path)
-                        await bot.send_video(
-                            chat_id=message.chat.id,
-                            video=video,
-                            caption=f"📹 {info.get('title', 'Video')}\n\nСкачано через @{me.username}",
-                            supports_streaming=True
-                        )
-                        await shortcuts.add_to_analitic_data(me.username, url)
-
-                        # Videoni o'chirib tashlash
-                        if os.path.exists(video_path):
-                            os.remove(video_path)
-
-                    except Exception as send_error:
-                        logger.error(f"Error sending video: {send_error}")
-                        # Sifatni pasaytirish
-                        try:
-                            ydl_opts['format'] = 'worst[ext=mp4]/worst'
-                            with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
-                                info_low = ydl.extract_info(url, download=True)
-                                video_path_low = ydl_low.prepare_filename(info_low)
-                                video_low = FSInputFile(video_path_low)
-
-                                await bot.send_video(
-                                    chat_id=message.chat.id,
-                                    video=video_low,
-                                    caption=f"📹 {info_low.get('title', 'Video')} (Низкое качество)\n\nСкачано через @{me.username}",
-                                    supports_streaming=True
-                                )
-
-                                if os.path.exists(video_path_low):
-                                    os.remove(video_path_low)
-
-                        except Exception:
-                            await message.answer("❌ Не удалось отправить видео даже в низком качестве.")
-
-                except Exception as extract_error:
-                    logger.error(f"Error extracting info: {extract_error}")
-                    await message.answer(
-                        "❌ Не удалось получить информацию о видео. Возможно видео недоступно или защищено.")
-
-        except Exception as ydl_error:
-            logger.error(f"yt-dlp error: {ydl_error}")
-            await message.answer("❌ Ошибка при скачивании. Попробуйте другое видео или позже.")
+        await handle_youtube(message, url, me, bot)
 
     except Exception as e:
         logger.error(f"General error: {e}")
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
+async def handle_tiktok(message: Message, url: str, me, bot: Bot):
+    try:
+        ydl_opts = {
+            'format': 'mp4',
+            'quiet': True,
+            'no_warnings': True,
+            'max_filesize': 40000000,
+        }
+
+        if '?' in url:
+            url = url.split('?')[0]
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                # Получаем информацию о видео без скачивания
+                info = ydl.extract_info(url, download=False)
+                if info and 'url' in info:
+                    try:
+                        await bot.send_video(
+                            chat_id=message.chat.id,
+                            video=info['url'],
+                            caption=f"📹 TikTok video\nСкачано через @{me.username}",
+                        )
+                        await shortcuts.add_to_analitic_data(me.username, url)
+                        return
+                    except Exception:
+                        # Если не удалось отправить по URL, пробуем скачать
+                        await download_and_send_video(message, url, ydl_opts, me, bot, "TikTok")
+                else:
+                    await message.answer("❌ Не удалось получить ссылку на видео")
+
+            except Exception as e:
+                logger.error(f"TikTok processing error: {e}")
+                await message.answer("❌ Ошибка при скачивании из TikTok")
+
+    except Exception as e:
+        logger.error(f"TikTok handler error: {e}")
+        await message.answer("❌ Ошибка при обработке TikTok видео")
+
+
+async def handle_instagram(message: Message, url: str, me, bot: Bot):
+    try:
+        ydl_opts = {
+            'format': 'mp4',
+            'quiet': True,
+            'no_warnings': True,
+            'max_filesize': 45000000,
+        }
+
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)  # ChatAction to'g'ri ishlatildi
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+
+            if 'url' in info:
+                media_type = info.get('ext', '')
+                try:
+                    if media_type in ['mp4', 'mov']:
+                        await bot.send_video(
+                            chat_id=message.chat.id,
+                            video=info['url'],
+                            caption=f"📹 Instagram video\nСкачано через @{me.username}",
+                        )
+                    elif media_type in ['jpg', 'jpeg', 'png']:
+                        await bot.send_photo(
+                            chat_id=message.chat.id,
+                            photo=info['url'],
+                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}",
+                        )
+                    await shortcuts.add_to_analitic_data(me.username, url)
+                except Exception:
+                    # Пробуем скачать в низком качестве
+                    ydl_opts['format'] = 'worst[ext=mp4]'
+                    await download_and_send_video(message, url, ydl_opts, me, bot, "Instagram")
+            else:
+                await message.answer("❌ Не удалось получить ссылку на медиа")
+
+    except Exception as e:
+        logger.error(f"Instagram handler error: {e}")
+        await message.answer("❌ Ошибка при скачивании из Instagram")
+
+
+async def handle_youtube(message: Message, url: str, me, bot: Bot):
+    try:
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)  # ChatAction to'g'ri ishlatildi
+
+        # Пробуем сначала получить прямую ссылку
+        ydl_opts = {
+            'format': 'best[ext=mp4][height<=480]',
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(url, download=False)
+                if 'url' in info:
+                    await bot.send_video(
+                        chat_id=message.chat.id,
+                        video=info['url'],
+                        caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
+                        supports_streaming=True
+                    )
+                    await shortcuts.add_to_analitic_data(me.username, url)
+                    return
+            except Exception as e:
+                logger.error(f"YouTube direct link error: {e}")
+                # Если не удалось получить прямую ссылку, пробуем скачать
+                try:
+                    # Пробуем скачать в низком качестве
+                    ydl_opts['format'] = 'worst[ext=mp4]'
+                    await download_and_send_video(message, url, ydl_opts, me, bot, "YouTube")
+                except Exception as download_error:
+                    logger.error(f"YouTube download error: {download_error}")
+                    await message.answer("❌ Не удалось скачать видео")
+
+    except Exception as e:
+        logger.error(f"YouTube handler error: {e}")
+        await message.answer("❌ Ошибка при скачивании с YouTube")
+
+
+async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            video_path = ydl.prepare_filename(info)
+
+            if os.path.exists(video_path):
+                try:
+                    video = FSInputFile(video_path)
+                    await bot.send_video(
+                        chat_id=message.chat.id,
+                        video=video,
+                        caption=f"📹 {info.get('title', 'Video')} (Низкое качество)\nСкачано через @{me.username}",
+                        supports_streaming=True
+                    )
+                finally:
+                    # Всегда удаляем файл после отправки
+                    if os.path.exists(video_path):
+                        os.remove(video_path)
+            else:
+                raise FileNotFoundError("Downloaded video file not found")
+
+    except Exception as e:
+        logger.error(f"Error downloading and sending video from {platform}: {e}")
+        await message.answer(f"❌ Не удалось скачать видео из {platform}")
+
+
 async def is_short_video(url: str) -> bool:
     return any(x in url.lower() for x in ['shorts', 'reels', 'tiktok.com'])
 
 
+# Регистрация хендлера
 client_bot_router.message.register(youtube_download_handler, Download.download)
-
