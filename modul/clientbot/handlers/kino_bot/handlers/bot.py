@@ -840,18 +840,15 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 class DownloadProgress:
     def __init__(self, message: Message):
         self.message = message
-        self.progress_message = None
         self.bot = message.bot
         self.chat_id = message.chat.id
 
     async def init_status(self):
-        """Send initial downloading message"""
         await self.bot.send_chat_action(self.chat_id, ChatAction.UPLOAD_VIDEO)
 
     def progress_hook(self, d):
         if d['status'] == 'downloading':
             try:
-                # Just keep sending chat action
                 asyncio.create_task(
                     self.bot.send_chat_action(self.chat_id, ChatAction.UPLOAD_VIDEO)
                 )
@@ -868,17 +865,17 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
         try:
             await callback.answer()
-        except Exception as e:
-            logger.error(f"Callback answer error: {e}")
+        except Exception:
+            pass
 
         data = await state.get_data()
         url = data.get('url')
-        formats = data.get('formats', [])
 
         # Create progress handler
         progress_handler = DownloadProgress(message)
         await progress_handler.init_status()
 
+        # Optimized download options
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
@@ -886,9 +883,20 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             'noplaylist': True,
             'progress_hooks': [progress_handler.progress_hook],
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
-            'merge_output_format': 'mp4'
+            'socket_timeout': 30,
+            'retries': 3,
+            'file_access_retries': 3,
+            'fragment_retries': 3,
+            'retry_sleep_functions': {'fragment': lambda _: 0},
+            'merge_output_format': 'mp4',
+            'concurrent_fragment_downloads': 8,  # Parallel downloads
+            'buffersize': 1024 * 16,  # Increased buffer size
+            'postprocessor_args': {
+                'ffmpeg': ['-threads', '4']  # Use 4 threads for ffmpeg
+            },
+            'overwrites': True,  # Don't ask about overwriting files
         }
 
         try:
@@ -902,7 +910,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                             video = FSInputFile(file_path)
                             await message.answer_video(
                                 video=video,
-                                caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
+                                caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)",
+                                supports_streaming=True  # Enable streaming
                             )
                         else:
                             audio = FSInputFile(file_path)
@@ -913,7 +922,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                             )
                     finally:
                         if os.path.exists(file_path):
-                            os.remove(file_path)
+                            # Use background task for file deletion
+                            asyncio.create_task(remove_file(file_path))
                         try:
                             await message.delete()
                         except Exception:
@@ -936,6 +946,14 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         logger.error(f"Process selection error: {e}")
         await state.set_state(Download.download)
         await callback.message.answer("❌ Произошла ошибка. Попробуйте еще раз.")
+
+
+async def remove_file(file_path: str):
+    """Remove file in background"""
+    try:
+        os.remove(file_path)
+    except Exception as e:
+        logger.error(f"Error removing file: {e}")
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
