@@ -68,30 +68,32 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
 
         # Agar xabar bo'lsa uni yuborish
         if msg:
-            # get_leo async funksiya bo'lgani uchun await ishlatamiz
             to_user = await get_leo(to_uid)
             if to_user and to_user.user:
                 try:
                     # Video yoki text ekanini tekshirish
-                    @sync_to_async
-                    def send_message():
-                        if isinstance(msg, str) and msg.startswith('bnVid_'):  # Video note ID format
-                            return message.bot.send_video_note(
+                    if isinstance(msg, str):
+                        if msg.startswith('bnVid_'):  # Video note format
+                            await message.bot.send_video_note(
                                 chat_id=to_user.user.uid,
-                                video_note=msg,
-                                caption=f"💌 Новое сообщение от пользователя {from_uid}"
+                                video_note=msg
                             )
                         else:
-                            return message.bot.send_message(
+                            # Debug uchun
+                            print(f"Sending message to user {to_user.user.uid}: {msg}")
+                            result = await message.bot.send_message(
                                 chat_id=to_user.user.uid,
                                 text=f"💌 Новое сообщение:\n\n{msg}"
                             )
+                            print(f"Message sent result: {result}")
 
-                    await send_message()
                     await message.answer("✅ Сообщение отправлено!")
                 except Exception as e:
                     print(f"Error sending message to user {to_uid}: {e}")
                     await message.answer("❌ Не удалось отправить сообщение")
+            else:
+                print(f"User not found or invalid: {to_user}")
+                await message.answer("❌ Не удалось найти пользователя")
         else:
             await message.answer("Лайк отправлен")
 
@@ -100,10 +102,9 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
 
     except Exception as e:
         print(f"Error in like handler: {e}")
-        await message.answer("Произошла ошибка. Попробуйте позже.")
-        # Xatolikni log qilish
         import traceback
         print(traceback.format_exc())
+        await message.answer("Произошла ошибка. Попробуйте позже.")
 
 
 @client_bot_router.callback_query(LeomatchProfileAction.filter(), LeomatchProfiles.LOOCK)
