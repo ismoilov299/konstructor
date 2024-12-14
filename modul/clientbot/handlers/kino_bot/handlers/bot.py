@@ -937,9 +937,13 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 await progress_msg.delete()
                 await state.clear()
 
+            else:
+                raise FileNotFoundError("Yuklangan fayl topilmadi")
+
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
         await callback.message.answer("❗ Ошибка при загрузке файла")
+
 
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
