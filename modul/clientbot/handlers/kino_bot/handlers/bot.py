@@ -575,38 +575,58 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# bot.py yoki handlers.py da
+@client_bot_router.message(Download.download)
+async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+    """
+    YouTube, Instagram, TikTok linklar uchun handler
+    """
+    if not message.text:
+        await message.answer('Пришлите ссылку на видео')
+        return
 
-async def youtube_download_handler(message: Message, bot: Bot):
-    try:
-        await message.answer('📥 Скачиваю...')
+    url = message.text
+    me = await bot.get_me()
 
-        if not message.text:
-            await message.answer('Пришлите ссылку на видео')
-            return
-
-        if 'streaming' in message.text:
-            await message.answer('❌ Я не могу скачать стримы')
-            return
-
-        me = await bot.get_me()
-        url = message.text
-
-        # TikTok handler
-        if 'tiktok.com' in message.text:
-            await handle_tiktok(message, url, me, bot)
-            return
-
-        # Instagram handler
-        if 'instagram' in message.text or 'inst.ae' in message.text:
-            await handle_instagram(message, url, me, bot)
-            return
-
-        # YouTube handler
-        await handle_youtube(message, url, me, bot)
-
-    except Exception as e:
-        logger.error(f"General error: {e}")
-        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+    # Qaysi platforma ekanini tekshirish
+    if 'tiktok.com' in url:
+        await handle_tiktok(message, url, me, bot)
+    elif 'instagram' in url or 'inst.ae' in url:
+        await handle_instagram(message, url, me, bot)
+    else:
+        # YouTube uchun state ham yuboramiz
+        await handle_youtube(message, url, me, bot, state)
+# async def youtube_download_handler(message: Message, bot: Bot):
+#     try:
+#         await message.answer('📥 Скачиваю...')
+#
+#         if not message.text:
+#             await message.answer('Пришлите ссылку на видео')
+#             return
+#
+#         if 'streaming' in message.text:
+#             await message.answer('❌ Я не могу скачать стримы')
+#             return
+#
+#         me = await bot.get_me()
+#         url = message.text
+#
+#         # TikTok handler
+#         if 'tiktok.com' in message.text:
+#             await handle_tiktok(message, url, me, bot)
+#             return
+#
+#         # Instagram handler
+#         if 'instagram' in message.text or 'inst.ae' in message.text:
+#             await handle_instagram(message, url, me, bot)
+#             return
+#
+#         # YouTube handler
+#         await handle_youtube(message, url, me, bot)
+#
+#     except Exception as e:
+#         logger.error(f"General error: {e}")
+#         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
 async def handle_tiktok(message: Message, url: str, me, bot: Bot):
