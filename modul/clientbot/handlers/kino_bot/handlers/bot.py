@@ -793,16 +793,12 @@ class FormatCallback(CallbackData, prefix="format"):
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
     try:
-        status_message = await message.answer("🔍 Проверяю доступные форматы...")
+        await message.answer("🔍 Проверяю доступные форматы...")
 
         base_opts = {
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'format': 'best[height<=480]',  # Default format restriction
-            'http_headers': {  # Add custom headers
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            }
         }
 
         with yt_dlp.YoutubeDL(base_opts) as ydl:
@@ -811,44 +807,34 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             title = info.get('title', 'Video')
 
             builder = InlineKeyboardBuilder()
-            valid_formats = []
-            seen_heights = set()
+            valid_formats = []  # Barcha formatlarni saqlaymiz
 
-            # Filter and deduplicate video formats
-            video_formats = []
+            # Video formatlar
             for f in formats:
-                if f.get('ext') == 'mp4' and f.get('height', 0) <= 480 and f.get('vcodec') != 'none':
-                    video_formats.append(f)
+                if f.get('ext') == 'mp4' and f.get('height', 0) <= 480:
+                    height = f.get('height', 0)
+                    if height > 0:
+                        format_info = {
+                            'format_id': f['format_id'],
+                            'type': 'video',
+                            'height': height
+                        }
+                        valid_formats.append(format_info)
+                        builder.button(
+                            text=f"🎥 {height}p",
+                            callback_data=FormatCallback(
+                                format_id=f['format_id'],
+                                type='video',
+                                quality=str(height),
+                                index=len(valid_formats) - 1
+                            ).pack()
+                        )
 
-            # Sort by height and preference
-            video_formats.sort(key=lambda x: (x.get('height', 0), x.get('tbr', 0)), reverse=True)
-
-            # Add best formats for each unique height
-            for f in video_formats:
-                height = f.get('height', 0)
-                if height > 0 and height not in seen_heights:
-                    seen_heights.add(height)
-                    format_info = {
-                        'format_id': f'{f["format_id"]}+bestaudio/best',  # Combine with best audio
-                        'type': 'video',
-                        'height': height
-                    }
-                    valid_formats.append(format_info)
-                    builder.button(
-                        text=f"🎥 {height}p",
-                        callback_data=FormatCallback(
-                            format_id=format_info['format_id'],
-                            type='video',
-                            quality=str(height),
-                            index=len(valid_formats) - 1
-                        ).pack()
-                    )
-
-            # Add audio format
-            audio_format = next((f for f in formats if f.get('acodec', 'none') != 'none' and f.get('vcodec') == 'none'), None)
+            # Audio format
+            audio_format = next((f for f in formats if f.get('ext') == 'm4a'), None)
             if audio_format:
                 format_info = {
-                    'format_id': 'bestaudio/best',
+                    'format_id': audio_format['format_id'],
                     'type': 'audio',
                     'height': 0
                 }
@@ -856,7 +842,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 builder.button(
                     text="🎵 Аудио",
                     callback_data=FormatCallback(
-                        format_id=format_info['format_id'],
+                        format_id=audio_format['format_id'],
                         type='audio',
                         quality='audio',
                         index=len(valid_formats) - 1
@@ -864,9 +850,9 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 )
 
             builder.adjust(2)
-            await status_message.delete()
 
             if valid_formats:
+                # URL va formatlarni state'ga saqlash
                 await state.update_data(url=url, formats=valid_formats)
                 await message.answer(
                     f"📹 {title}\n\nВыберите формат:",
@@ -874,13 +860,10 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 )
             else:
                 await message.answer("❌ Не найдены подходящие форматы")
-                await state.set_state(Download.download)
 
     except Exception as e:
         logger.error(f"YouTube handler error: {str(e)}")
         await message.answer("❌ Ошибка при получении форматов")
-        await state.set_state(Download.download)
-
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
@@ -942,7 +925,143 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
         await callback.message.answer("❌ Ошибка при скачивании")
-
+#
+# async def handle_youtube(message: Message, url: str, me, bot: Bot):
+#     try:
+#         progress_message = None
+#         last_update_time = 0
+#
+#         # Progress callback funksiyasi
+#         async def show_progress(d):
+#             nonlocal progress_message, last_update_time
+#
+#             if d['status'] == 'downloading':
+#                 current_time = time.time()
+#                 # Har 2 sekundda yangilaymiz
+#                 if current_time - last_update_time > 2:
+#                     try:
+#                         downloaded = d.get('downloaded_bytes', 0)
+#                         total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
+#                         speed = d.get('speed', 0)
+#                         eta = d.get('eta', 0)
+#
+#                         if total > 0:
+#                             percentage = downloaded / total * 100
+#                             # Progress xabarini formatlash
+#                             progress_text = (
+#                                 f"📥 Загрузка: {percentage:.1f}%\n"
+#                                 f"⬇️ Скорость: {format_size(speed)}/s\n"
+#                                 f"💾 Прогресс: {format_size(downloaded)}/{format_size(total)}\n"
+#                                 f"⏱ Осталось: {eta}s"
+#                             )
+#
+#                             if progress_message is None:
+#                                 progress_message = await message.answer(progress_text)
+#                             else:
+#                                 await progress_message.edit_text(progress_text)
+#
+#                             last_update_time = current_time
+#                     except Exception as e:
+#                         logger.error(f"Progress update error: {e}")
+#
+#         def format_size(size):
+#             # Hajmni formatlash (bytes -> KB/MB)
+#             if size < 1024:
+#                 return f"{size}B"
+#             elif size < 1024 * 1024:
+#                 return f"{size / 1024:.1f}KB"
+#             else:
+#                 return f"{size / (1024 * 1024):.1f}MB"
+#
+#         base_opts = {
+#             'quiet': True,
+#             'no_warnings': True,
+#             'noplaylist': True,
+#             'progress_hooks': [lambda d: asyncio.create_task(show_progress(d))],
+#             'external_downloader': 'aria2c',
+#             'external_downloader_args': [
+#                 '--min-split-size=1M',
+#                 '--max-connection-per-server=16',
+#                 '--max-concurrent-downloads=16',
+#                 '--split=16'
+#             ]
+#         }
+#
+#         try:
+#             # Formatlarni aniqlash
+#             with yt_dlp.YoutubeDL(base_opts) as ydl:
+#                 info = ydl.extract_info(url, download=False)
+#                 formats = info.get('formats', [])
+#
+#                 valid_formats = []
+#                 for f in formats:
+#                     ext = f.get('ext')
+#                     height = f.get('height', 0)
+#                     filesize = f.get('filesize', 0)
+#                     format_id = f.get('format_id', '')
+#
+#                     if (ext == 'mp4' and height and height <= 480
+#                             and (filesize == 0 or filesize < 45000000)):
+#                         valid_formats.append({
+#                             'format_id': format_id,
+#                             'height': height,
+#                             'filesize': filesize
+#                         })
+#
+#                 selected_format = None
+#                 if not valid_formats:
+#                     await message.answer("❌ Подходящие форматы не найдены")
+#                     return
+#                 elif len(valid_formats) == 1:
+#                     selected_format = valid_formats[0]
+#                 elif len(valid_formats) == 2:
+#                     selected_format = min(valid_formats, key=lambda x: x['height'])
+#                 else:
+#                     sorted_formats = sorted(valid_formats, key=lambda x: x['height'])
+#                     middle_index = len(sorted_formats) // 2
+#                     selected_format = sorted_formats[middle_index]
+#
+#                 if selected_format:
+#                     download_opts = {
+#                         **base_opts,
+#                         'format': selected_format['format_id'],
+#                     }
+#
+#                     with yt_dlp.YoutubeDL(download_opts) as ydl:
+#                         info = ydl.extract_info(url, download=True)
+#                         video_path = ydl.prepare_filename(info)
+#
+#                         if os.path.exists(video_path):
+#                             try:
+#                                 if progress_message:
+#                                     await progress_message.delete()
+#
+#                                 video = FSInputFile(video_path)
+#                                 await message.answer("📤 Отправляю видео...")
+#                                 await bot.send_video(
+#                                     chat_id=message.chat.id,
+#                                     video=video,
+#                                     caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
+#                                     supports_streaming=True
+#                                 )
+#                                 await shortcuts.add_to_analitic_data(me.username, url)
+#                             finally:
+#                                 if os.path.exists(video_path):
+#                                     os.remove(video_path)
+#                         else:
+#                             await message.answer("❌ Ошибка при скачивании видео")
+#
+#         except Exception as e:
+#             if progress_message:
+#                 await progress_message.delete()
+#             logger.error(f"YouTube processing error: {str(e)}")
+#             await message.answer("❌ Произошла ошибка при обработке видео")
+#
+#     except Exception as e:
+#         if progress_message:
+#             await progress_message.delete()
+#         logger.error(f"YouTube handler error: {str(e)}")
+#         await message.answer("❌ Произошла общая ошибка")
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
