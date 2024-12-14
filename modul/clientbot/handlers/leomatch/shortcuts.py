@@ -53,6 +53,7 @@ def get_user_uid_sync(leo):
     return leo.user.uid
 
 
+
 async def get_leos_id(me: int):
     try:
         leo_me = await get_leo(me)
@@ -65,13 +66,22 @@ async def get_leos_id(me: int):
 
         age_range = (max(0, leo_me.age - 3), leo_me.age + 3)
 
+        @sync_to_async
+        def filter_leos_sync(kwargs, age_range, my_sex, my_id):
+            return list(LeoMatchModel.objects.filter(
+                Q(active=True) &
+                Q(search=True) &
+                Q(**kwargs) &
+                Q(age__range=age_range) &
+                ~Q(id=my_id)
+            ).select_related('user'))
+
         leos = await filter_leos_sync(kwargs, age_range, leo_me.sex, leo_me.id)
 
         users_id = []
         for leo in leos:
             try:
-                user_uid = await get_user_uid_sync(leo)
-                users_id.append(user_uid)
+                users_id.append(leo.user.uid)
             except Exception as e:
                 print(f"Error getting user_uid for leo {leo.id}: {e}")
                 continue
