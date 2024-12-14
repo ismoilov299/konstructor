@@ -60,9 +60,40 @@ async def next_like(message: types.Message, state: FSMContext):
 
 
 async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid: int, msg: str = None):
-    await message.answer(("Лайк отправлен"), reply_markup=types.ReplyKeyboardRemove())
-    await leo_set_like(from_uid, to_uid, msg)
-    await next_l(message, state)
+    try:
+        # Like qo'shish
+        await leo_set_like(from_uid, to_uid, msg)
+
+        # Agar xabar bo'lsa uni yuborish
+        if msg:
+            to_user = await get_leo(to_uid)
+            if to_user and to_user.user:
+                try:
+                    # Video yoki text ekanini tekshirish
+                    if msg.startswith('bnVid_'):  # Video note ID format
+                        await message.bot.send_video_note(
+                            chat_id=to_user.user.uid,
+                            video_note=msg,
+                            caption=f"💌 Новое сообщение от пользователя {from_uid}"
+                        )
+                    else:
+                        await message.bot.send_message(
+                            chat_id=to_user.user.uid,
+                            text=f"💌 Новое сообщение:\n\n{msg}"
+                        )
+                    await message.answer("✅ Сообщение отправлено!")
+                except Exception as e:
+                    print(f"Error sending message to user {to_uid}: {e}")
+                    await message.answer("❌ Не удалось отправить сообщение")
+        else:
+            await message.answer("Лайк отправлен")
+
+        # Keyingi profilga o'tish
+        await next_l(message, state)
+
+    except Exception as e:
+        print(f"Error in like handler: {e}")
+        await message.answer("Произошла ошибка. Попробуйте позже.")
 
 
 @client_bot_router.callback_query(LeomatchProfileAction.filter(), LeomatchProfiles.LOOCK)
@@ -100,19 +131,21 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 
 @client_bot_router.message(LeomatchProfiles.INPUT_MESSAGE)
-async def bot_start(message: types.Message, state: FSMContext):
+async def process_message(message: types.Message, state: FSMContext):
     data = await state.get_data()
     selected_id = data.get("selected_id")
     await state.update_data(selected_id=None)
     await state.set_state("*")
+
     msg = None
     if message.text:
         msg = message.text
     elif message.video_note:
         msg = message.video_note.file_id
     else:
-        await message.answer(("Пожалуйста, напишите текст или отправьте видео"))
+        await message.answer("Пожалуйста, напишите текст или отправьте видео")
         return
+
     await like(message, state, message.from_user.id, selected_id, msg)
 
 
