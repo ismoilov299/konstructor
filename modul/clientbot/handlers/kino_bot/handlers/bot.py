@@ -888,32 +888,33 @@ class DownloadProgress:
 
 @client_bot_router.callback_query(FormatCallback.filter())
 async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext):
-    try:
-        message = callback.message
-        if not message:
-            return
+    message = callback.message
+    if not message:
+        return
 
+    status_msg = None
+    status_task = None
+    file_path = None
+
+    try:
         try:
             await callback.answer()
         except Exception as e:
             logger.error(f"Callback answer error: {e}")
 
+        # Get data from state
+        data = await state.get_data()
+        url = data.get('url')
+        if not url:
+            await message.answer("❌ Ошибка: ссылка не найдена")
+            return
+
+        formats = data.get('formats', [])
+
         # Send initial status
         status_msg = await message.answer("⏳ Начинаю загрузку...")
 
         progress_handler = DownloadProgress(message)
-
-        download_opts = {
-            'format': callback_data.format_id,
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-            'progress_hooks': [progress_handler.progress_hook],
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-            'merge_output_format': 'mp4'
-        }
 
         # Background task for periodic updates
         async def update_status():
@@ -944,52 +945,88 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         # Start status update task
         status_task = asyncio.create_task(update_status())
 
+        download_opts = {
+            'format': callback_data.format_id,
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'progress_hooks': [progress_handler.progress_hook],
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            'merge_output_format': 'mp4'
+        }
+
         try:
             with yt_dlp.YoutubeDL(download_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 file_path = ydl.prepare_filename(info)
 
                 if os.path.exists(file_path):
-                    try:
-                        if callback_data.type == 'video':
-                            video = FSInputFile(file_path)
-                            await message.answer_video(
-                                video=video,
-                                caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
-                            )
-                        else:
-                            audio = FSInputFile(file_path)
-                            await message.answer_audio(
-                                audio=audio,
-                                title=info.get('title', 'Audio'),
-                                caption="🎵 Аудио версия"
-                            )
-                    finally:
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                        status_task.cancel()
-                        try:
-                            await status_msg.delete()
-                        except Exception:
-                            pass
-                        try:
-                            await message.delete()
-                        except Exception:
-                            pass
+                    if callback_data.type == 'video':
+                        video = FSInputFile(file_path)
+                        await message.answer_video(
+                            video=video,
+                            caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
+                        )
+                    else:
+                        audio = FSInputFile(file_path)
+                        await message.answer_audio(
+                            audio=audio,
+                            title=info.get('title', 'Audio'),
+                            caption="🎵 Аудио версия"
+                        )
 
-                await state.set_state(Download.download)
-                await message.answer("✅ Отправьте новую ссылку на видео:")
+                    await state.set_state(Download.download)
+                    await message.answer("✅ Отправьте новую ссылку на видео:")
+                else:
+                    await message.answer("❌ Ошибка: файл не был загружен")
+                    await state.set_state(Download.download)
 
         except Exception as e:
-            status_task.cancel()
-            logger.error(f"Download error: {e}")
-            await message.answer("❌ Ошибка при скачивании. Попробуйте еще раз.")
+            logger.error(f"Download error: {str(e)}")
+            error_msg = "❌ Ошибка при скачивании. Попробуйте еще раз."
+            if "Too many requests" in str(e):
+                error_msg = "❌ Слишком много запросов. Подождите немного и попробуйте снова."
+            elif "No space left" in str(e):
+                error_msg = "❌ Недостаточно места на сервере. Попробуйте позже."
+            await message.answer(error_msg)
             await state.set_state(Download.download)
 
     except Exception as e:
-        logger.error(f"Process selection error: {e}")
+        logger.error(f"Process selection error: {str(e)}")
+        await message.answer("❌ Произошла ошибка. Попробуйте еще раз.")
         await state.set_state(Download.download)
-        await callback.message.answer("❌ Произошла ошибка. Попробуйте еще раз.")
+
+    finally:
+        # Cleanup
+        try:
+            if status_task and not status_task.done():
+                status_task.cancel()
+                try:
+                    await status_task
+                except asyncio.CancelledError:
+                    pass
+
+            if status_msg:
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    logger.error(f"File cleanup error: {e}")
+
+            try:
+                await message.delete()
+            except Exception:
+                pass
+
+        except Exception as e:
+            logger.error(f"Cleanup error: {e}")
 
 
 async def remove_file(file_path: str):
