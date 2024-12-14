@@ -841,53 +841,22 @@ class DownloadProgress:
     def __init__(self, message: Message):
         self.message = message
         self.progress_message = None
-        self.last_update_time = 0
-        self.last_percentage = 0
+        self.bot = message.bot
+        self.chat_id = message.chat.id
 
-    def format_size(self, bytes):
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if bytes < 1024:
-                return f"{bytes:.1f} {unit}"
-            bytes /= 1024
-        return f"{bytes:.1f} GB"
+    async def init_status(self):
+        """Send initial downloading message"""
+        await self.bot.send_chat_action(self.chat_id, ChatAction.UPLOAD_VIDEO)
 
-    def get_progress_bar(self, percentage):
-        filled = int(percentage / 5)
-        empty = 20 - filled
-        return f"[{'█' * filled}{'▒' * empty}]"
-
-    async def init_progress_message(self):
-        """Initialize progress message"""
-        self.progress_message = await self.message.answer("⏳ Начинаю загрузку...")
-        return self.progress_message
-
-    async def update_progress(self, current: int, total: int, speed: float):
-        """Update progress message"""
-        try:
-            current_time = time.time()
-            if current_time - self.last_update_time >= 0.5:  # Update every 0.5 seconds
-                percentage = (current / total * 100) if total else 0
-
-                # Update only if percentage changed significantly
-                if abs(percentage - self.last_percentage) >= 1 or self.last_percentage == 0:
-                    progress_bar = self.get_progress_bar(percentage)
-                    speed_text = f"{self.format_size(speed)}/s" if speed else "⌛️"
-                    downloaded_text = self.format_size(current)
-                    total_text = self.format_size(total)
-
-                    text = (f"⏳ Загрузка...\n{progress_bar}\n"
-                            f"{percentage:.1f}% • {speed_text}\n"
-                            f"📥 {downloaded_text} / {total_text}")
-
-                    if self.progress_message:
-                        await self.progress_message.edit_text(text)
-
-                    self.last_percentage = percentage
-                    self.last_update_time = current_time
-
-        except Exception as e:
-            if "message is not modified" not in str(e):
-                logger.error(f"Progress update error: {e}")
+    def progress_hook(self, d):
+        if d['status'] == 'downloading':
+            try:
+                # Just keep sending chat action
+                asyncio.create_task(
+                    self.bot.send_chat_action(self.chat_id, ChatAction.UPLOAD_VIDEO)
+                )
+            except Exception as e:
+                logger.error(f"Progress hook error: {e}")
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
@@ -908,24 +877,14 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
         # Create progress handler
         progress_handler = DownloadProgress(message)
-        await progress_handler.init_progress_message()
-
-        def progress_hook(d):
-            if d['status'] == 'downloading':
-                total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
-                downloaded = d.get('downloaded_bytes', 0)
-                speed = d.get('speed', 0)
-
-                asyncio.create_task(
-                    progress_handler.update_progress(downloaded, total, speed)
-                )
+        await progress_handler.init_status()
 
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'progress_hooks': [progress_hook],
+            'progress_hooks': [progress_handler.progress_hook],
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             },
@@ -955,12 +914,6 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                     finally:
                         if os.path.exists(file_path):
                             os.remove(file_path)
-
-                        # Delete progress message
-                        try:
-                            await progress_handler.progress_message.delete()
-                        except Exception:
-                            pass
                         try:
                             await message.delete()
                         except Exception:
