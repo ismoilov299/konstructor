@@ -968,7 +968,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                     except Exception:
                         pass
 
-        await state.set_state(Download.download)
+        await state.set_state(Download.download)#st
         await message.answer("✅ Отправьте новую ссылку на видео:")
 
     except Exception as e:
