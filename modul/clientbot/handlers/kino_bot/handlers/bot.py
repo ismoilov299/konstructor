@@ -893,8 +893,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         return
 
     status_msg = None
-    status_task = None
     file_path = None
+    download_started = False  # Flag to track if download started
 
     try:
         try:
@@ -909,34 +909,35 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             await message.answer("❌ Ошибка: ссылка не найдена")
             return
 
-        formats = data.get('formats', [])
-
         # Send initial status
         status_msg = await message.answer("Загрузка...")
-
-        progress_handler = DownloadProgress(message)
 
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'progress_hooks': [progress_handler.progress_hook],
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
-            'merge_output_format': 'mp4'
+            'merge_output_format': 'mp4',
+            'socket_timeout': 30,  # Increase timeout
+            'retries': 3
         }
 
         try:
             with yt_dlp.YoutubeDL(download_opts) as ydl:
+                download_started = True
                 info = ydl.extract_info(url, download=True)
                 file_path = ydl.prepare_filename(info)
 
                 if os.path.exists(file_path):
-                    # Show "Загружен!" message before sending file
-                    if status_msg:
-                        await status_msg.edit_text("Загружен!")
+                    # Show completion message
+                    try:
+                        if status_msg:
+                            await status_msg.edit_text("Загружен!")
+                    except Exception:
+                        pass
 
                     if callback_data.type == 'video':
                         video = FSInputFile(file_path)
@@ -952,19 +953,20 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                             caption="🎵 Аудио версия"
                         )
 
+                    # Reset state and prompt for new URL
                     await state.set_state(Download.download)
                     await message.answer("✅ Отправьте новую ссылку на видео:")
                 else:
-                    await message.answer("❌ Ошибка: файл не был загружен")
-                    await state.set_state(Download.download)
+                    raise FileNotFoundError("Download failed: file not found")
 
         except Exception as e:
-            logger.error(f"Download error: {str(e)}")
             error_msg = "❌ Ошибка при скачивании. Попробуйте еще раз."
-            if "Too many requests" in str(e):
-                error_msg = "❌ Слишком много запросов. Подождите немного и попробуйте снова."
-            elif "No space left" in str(e):
-                error_msg = "❌ Недостаточно места на сервере. Попробуйте позже."
+            if not download_started:
+                error_msg = "❌ Не удалось начать скачивание. Попробуйте позже."
+            elif "Connection lost" in str(e):
+                error_msg = "❌ Соединение прервано. Попробуйте еще раз."
+
+            logger.error(f"Download error: {str(e)}")
             await message.answer(error_msg)
             await state.set_state(Download.download)
 
@@ -974,9 +976,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         await state.set_state(Download.download)
 
     finally:
-        # Cleanup
         try:
-            await asyncio.sleep(1)  # Short delay before cleanup
+            await asyncio.sleep(1)
 
             if status_msg:
                 try:
