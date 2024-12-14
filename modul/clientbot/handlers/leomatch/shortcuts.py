@@ -12,7 +12,7 @@ from modul.clientbot import shortcuts
 from modul.config import settings_conf
 from modul.loader import bot_session
 from asgiref.sync import sync_to_async
-
+from django.db import transaction
 
 @sync_to_async
 def get_client(uid: int):
@@ -125,30 +125,47 @@ def save_model_sync(model):
     model.save()
 
 
-async def update_leo(uid: int, photo: str, media_type: str, sex: str, age: int, full_name: str, about_me: str,
-                     city: str, which_search: str):
-    leo = await get_leo(uid)
-    bot = await shortcuts.get_bot_by_username(leo.bot_username)
-    print(media_type)
+@sync_to_async
+def update_leo(user_id, photo, media_type, sex, age, full_name, about_me, city, which_search):
+    """Update LeoMatch user information"""
+    try:
+        with transaction.atomic():
+            # Get user first
+            user = UserTG.objects.get(uid=user_id)
 
-    # async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
-    #     format_m = "jpg" if media_type == "PHOTO" else "mp4"
-    #     photo_path = f"clientbot/data/leo{uid}.{format_m}"
-    #     await bot_.download(photo, photo_path)
+            # Get or create LeoMatch instance
+            leo, created = LeoMatchModel.objects.get_or_create(
+                user=user,
+                defaults={
+                    'photo': photo,
+                    'media_type': media_type,
+                    'sex': sex,
+                    'age': age,
+                    'full_name': full_name,
+                    'about_me': about_me,
+                    'city': city,
+                    'which_search': which_search,
+                    'bot_username': 'YOUR_BOT_USERNAME'  # O'zgartiring yoki dinamik qilib oling
+                }
+            )
 
-    # with open(photo_path, 'rb') as f:
-    #     django_file = File(f)
-    #     await sync_to_async(leo.photo.save)(f"{uid}.{format_m}", django_file)
+            if not created:
+                # Update existing record
+                leo.photo = photo
+                leo.media_type = media_type
+                leo.sex = sex
+                leo.age = age
+                leo.full_name = full_name
+                leo.about_me = about_me
+                leo.city = city
+                leo.which_search = which_search
+                leo.save()
 
-    leo.media_type = media_type
-    leo.sex = sex
-    leo.age = age
-    leo.full_name = full_name
-    leo.about_me = about_me
-    leo.city = city
-    leo.which_search = which_search
+            return leo
 
-    leo.save()
+    except Exception as e:
+        print(f"Error updating LeoMatch data for user {user_id}: {e}")
+        raise e
 
 
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
