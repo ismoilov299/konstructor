@@ -361,14 +361,18 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
 
         if not user:
             if command.args and command.args.isdigit():
-                inviter = await shortcuts.get_user(int(command.args), bot)
+                inviter_id = int(command.args)
+                inviter = await shortcuts.get_user(inviter_id, bot)
                 if inviter:
+                    # Referral hisobini yuritish
                     await shortcuts.increase_referral(inviter)
+
+                    # Referral xabarini yuborish
                     with suppress(TelegramForbiddenError):
                         user_link = html.link('реферал', f'tg://user?id={uid}')
                         await bot.send_message(
                             chat_id=command.args,
-                            text=f"У вас новый {user_link}!"  # To'g'ridan to'g'ri xabar matni
+                            text=f"У вас новый {user_link}!"
                         )
             else:
                 inviter = None
