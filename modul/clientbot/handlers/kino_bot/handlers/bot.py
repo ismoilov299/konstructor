@@ -883,36 +883,33 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
 
 
-client_bot_router.callback_query(FormatCallback.filter())
+@client_bot_router.callback_query(FormatCallback.filter())
 async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext):
     try:
         await callback.answer()
         message = callback.message
 
+        # State'dan ma'lumotlarni olish
         data = await state.get_data()
         url = data.get('url')
         formats = data.get('formats', [])
         selected_format = formats[callback_data.index]
-
-        # Create progress handler
-        progress_handler = DownloadProgress(message)
 
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'progress_hooks': [progress_handler.progress_hook],
-            'http_headers': {  # Add custom headers
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            },
-            'format_sort': ['res', 'ext:mp4:m4a'],
-            'merge_output_format': 'mp4'
+            'external_downloader': 'aria2c',
+            'external_downloader_args': [
+                '--min-split-size=1M',
+                '--max-connection-per-server=16',
+                '--max-concurrent-downloads=16',
+                '--split=16'
+            ]
         }
 
-        # Remove external downloader as it's causing issues
-        # 'external_downloader': 'aria2c',
-        # 'external_downloader_args': [...],
+        progress_msg = await message.answer("⏳ Начинаю загрузку...")
 
         with yt_dlp.YoutubeDL(download_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -936,20 +933,15 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 finally:
                     if os.path.exists(file_path):
                         os.remove(file_path)
-                    if progress_handler.current_message:
-                        await progress_handler.current_message.delete()
+                    await progress_msg.delete()
                     await message.delete()
 
-                # Return to initial state and prompt for new URL
-                await state.set_state(Download.download)
-                await message.answer("✅ Отправьте новую ссылку на видео:")
+                # State'ni tozalash
+                await state.clear()
 
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
         await callback.message.answer("❌ Ошибка при скачивании")
-        # Reset state on error
-        await state.set_state(Download.download)
-        await message.answer("Отправьте новую ссылку на видео:")
 
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
