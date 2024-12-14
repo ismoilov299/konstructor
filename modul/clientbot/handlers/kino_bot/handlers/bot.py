@@ -564,34 +564,51 @@ def update_download_analytics(bot_username, domain):
 
 
 
+from aiogram.types import URLInputFile, FSInputFile
+import yt_dlp
+import os
+
 import yt_dlp
 import logging
 from aiogram.types import Message, FSInputFile
-from aiogram.enums import ChatAction
+from aiogram.enums import ChatAction  # To'g'ri import
 from aiogram import Bot
 import os
 
 logger = logging.getLogger(__name__)
 
 
-@client_bot_router.message(Download.download)
-async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+async def youtube_download_handler(message: Message, bot: Bot):
+    try:
+        await message.answer('📥 Скачиваю...')
 
-    if not message.text:
-        await message.answer('Пришлите ссылку на видео')
-        return
+        if not message.text:
+            await message.answer('Пришлите ссылку на видео')
+            return
 
-    url = message.text
-    me = await bot.get_me()
+        if 'streaming' in message.text:
+            await message.answer('❌ Я не могу скачать стримы')
+            return
 
-    if 'tiktok.com' in url:
-        await handle_tiktok(message, url, me, bot)
-    elif 'instagram' in url or 'inst.ae' in url:
-        await handle_instagram(message, url, me, bot)
-    else:
+        me = await bot.get_me()
+        url = message.text
 
-        await handle_youtube(message, url, me, bot, state)
+        # TikTok handler
+        if 'tiktok.com' in message.text:
+            await handle_tiktok(message, url, me, bot)
+            return
 
+        # Instagram handler
+        if 'instagram' in message.text or 'inst.ae' in message.text:
+            await handle_instagram(message, url, me, bot)
+            return
+
+        # YouTube handler
+        await handle_youtube(message, url, me, bot)
+
+    except Exception as e:
+        logger.error(f"General error: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
 async def handle_tiktok(message: Message, url: str, me, bot: Bot):
@@ -608,6 +625,7 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot):
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
+                # Получаем информацию о видео без скачивания
                 info = ydl.extract_info(url, download=False)
                 if info and 'url' in info:
                     try:
@@ -637,13 +655,15 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
 
-
+        # Instagram uchun maxsus optsiyalar
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
             'max_filesize': 45000000,
-
+            # Instagram cookie fayli (agar kerak bo'lsa)
+            # 'cookiefile': 'instagram.com_cookies.txt',
+            # Instagram uchun maxsus headers
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -655,8 +675,10 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
         }
 
         try:
+            # Instagram API dan media_id olish
             media_id = url.split('/')[-1].split('?')[0]
 
+            # Alternativ API endpoint orqali urinish
             api_url = f'https://www.instagram.com/p/{media_id}/?__a=1'
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -664,6 +686,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                     info = ydl.extract_info(url, download=False)
 
                     if 'entries' in info:
+                        # Agar bu carousel/albom bo'lsa
                         entries = info['entries']
                         for entry in entries:
                             if 'url' in entry:
@@ -680,6 +703,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                         caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                                     )
                     else:
+                        # Bitta media
                         if info.get('ext') in ['mp4', 'mov']:
                             await bot.send_video(
                                 chat_id=message.chat.id,
@@ -697,6 +721,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
                 except Exception as e:
                     logger.error(f"Instagram extraction error: {str(e)}")
+                    # Agar birinchi usul ishlamasa, boshqa usul
                     try:
                         ydl_opts['format'] = 'worst'
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
@@ -736,28 +761,28 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
-import base64
+import yt_dlp
+import os
+import asyncio
+import time
 
 
+# Callback data klass
 class FormatCallback(CallbackData, prefix="format"):
     format_id: str
     type: str
     quality: str
-    index: int
+    url: str
 
 
-async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
+async def handle_youtube(message: Message, url: str, me, bot: Bot):
     try:
-        status_message = await message.answer("🔍 Проверяю доступные форматы...")
+        await message.answer("🔍 Проверяю доступные форматы...")
 
         base_opts = {
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'format': 'best[height<=480]', # Default format restriction
-            'http_headers': {  # Add custom headers
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            }
         }
 
         with yt_dlp.YoutubeDL(base_opts) as ydl:
@@ -765,230 +790,229 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             formats = info.get('formats', [])
             title = info.get('title', 'Video')
 
+            # Keyboard yasash
             builder = InlineKeyboardBuilder()
-            valid_formats = []
-            seen_heights = set()
 
-            # Filter and deduplicate video formats
-            video_formats = []
+            # Video formatlar
             for f in formats:
-                if f.get('ext') == 'mp4' and f.get('height', 0) <= 480 and f.get('vcodec') != 'none':
-                    video_formats.append(f)
+                if f.get('ext') == 'mp4' and f.get('height', 0) <= 480:
+                    height = f.get('height', 0)
+                    if height > 0:
+                        builder.button(
+                            text=f"🎥 {height}p",
+                            callback_data=FormatCallback(
+                                format_id=f['format_id'],
+                                type='video',
+                                quality=str(height),
+                                url=url
+                            ).pack()
+                        )
 
-            # Sort by height and preference
-            video_formats.sort(key=lambda x: (x.get('height', 0), x.get('tbr', 0)), reverse=True)
-
-            # Add best formats for each unique height
-            for f in video_formats:
-                height = f.get('height', 0)
-                if height > 0 and height not in seen_heights:
-                    seen_heights.add(height)
-                    format_info = {
-                        'format_id': f'{f["format_id"]}+bestaudio/best',  # Combine with best audio
-                        'type': 'video',
-                        'height': height
-                    }
-                    valid_formats.append(format_info)
-                    builder.button(
-                        text=f"🎥 {height}p",
-                        callback_data=FormatCallback(
-                            format_id=format_info['format_id'],
-                            type='video',
-                            quality=str(height),
-                            index=len(valid_formats) - 1
-                        ).pack()
-                    )
-
-            # Add audio format
-            audio_format = next((f for f in formats if f.get('acodec', 'none') != 'none' and f.get('vcodec') == 'none'), None)
+            # Audio format
+            audio_format = next((f for f in formats if f.get('ext') == 'm4a'), None)
             if audio_format:
-                format_info = {
-                    'format_id': 'bestaudio/best',
-                    'type': 'audio',
-                    'height': 0
-                }
-                valid_formats.append(format_info)
                 builder.button(
                     text="🎵 Аудио",
                     callback_data=FormatCallback(
-                        format_id=format_info['format_id'],
+                        format_id=audio_format['format_id'],
                         type='audio',
                         quality='audio',
-                        index=len(valid_formats) - 1
+                        url=url
                     ).pack()
                 )
 
             builder.adjust(2)
-            await status_message.delete()
 
-            if valid_formats:
-                await state.update_data(url=url, formats=valid_formats)
-                await message.answer(
-                    f"📹 {title}\n\nВыберите формат:",
-                    reply_markup=builder.as_markup()
-                )
-            else:
-                await message.answer("❌ Не найдены подходящие форматы")
-                await state.set_state(Download.download)
+            await message.answer(
+                f"📹 {title}\n\nВыберите формат:",
+                reply_markup=builder.as_markup()
+            )
 
     except Exception as e:
         logger.error(f"YouTube handler error: {str(e)}")
         await message.answer("❌ Ошибка при получении форматов")
-        await state.set_state(Download.download)
-
-
-class DownloadProgress:
-    def __init__(self, message: Message):
-        self.message = message
-        self.current_message = None
-        self.last_update_time = 0
-        self.last_percentage = 0
-        self._lock = asyncio.Lock()
-
-    def get_progress_bar(self, percentage):
-        filled = int(percentage / 5)
-        empty = 20 - filled
-        return f"[{'█' * filled}{'▒' * empty}]"
-
-    def format_size(self, bytes):
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if bytes < 1024:
-                return f"{bytes:.1f} {unit}"
-            bytes /= 1024
-        return f"{bytes:.1f} GB"
-
-    def progress_hook(self, d):
-        try:
-            if d['status'] == 'downloading':
-                current_time = time.time()
-
-                # Update only every 3 seconds to avoid flood control
-                if current_time - self.last_update_time >= 3:
-                    total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
-                    downloaded = d.get('downloaded_bytes', 0)
-
-                    if total > 0:
-                        percentage = (downloaded / total) * 100
-                        # Only update if percentage changed significantly
-                        if abs(percentage - self.last_percentage) >= 5:
-                            self.last_percentage = percentage
-                            self.last_update_time = current_time
-
-                            # Instead of sending messages, just store the progress
-                            self.current_progress = {
-                                'percentage': percentage,
-                                'downloaded': downloaded,
-                                'total': total,
-                                'speed': d.get('speed', 0)
-                            }
-
-        except Exception as e:
-            logger.error(f"Progress hook error: {e}")
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
-async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext):
-    message = callback.message
-    if not message:
-        return
-
-    status_msg = None
-    file_path = None
-
+async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback):
     try:
-        # Get data from state
-        data = await state.get_data()
-        url = data.get('url')
-        if not url:
-            await message.answer("❌ Ошибка: ссылка не найдена")
-            return
-
-        try:
-            await callback.answer()
-        except Exception as e:
-            logger.error(f"Callback answer error: {e}")
-
-        # Create status message
-        status_msg = await message.answer("Загрузка...")
+        await callback.answer()
+        message = callback.message
 
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-            'merge_output_format': 'mp4',
-            'socket_timeout': 30,
-            'retries': 3
         }
 
+        progress_msg = await message.answer("⏳ Начинаю загрузку...")
+
         with yt_dlp.YoutubeDL(download_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            info = ydl.extract_info(callback_data.url, download=True)
             file_path = ydl.prepare_filename(info)
 
-            if not os.path.exists(file_path):
-                raise FileNotFoundError("Download failed: file not found")
+            if os.path.exists(file_path):
+                try:
+                    if callback_data.type == 'video':
+                        video = FSInputFile(file_path)
+                        await message.answer_video(
+                            video=video,
+                            caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
+                        )
+                    else:
+                        audio = FSInputFile(file_path)
+                        await message.answer_audio(
+                            audio=audio,
+                            title=info.get('title', 'Audio'),
+                            caption="🎵 Аудио версия"
+                        )
+                finally:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                    await progress_msg.delete()
+                    await message.delete()
 
-            # Update status before sending file
-            await status_msg.edit_text("Загружен!")
-
-            if callback_data.type == 'video':
-                video = FSInputFile(file_path)
-                await message.answer_video(
-                    video=video,
-                    caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
-                )
-            else:
-                audio = FSInputFile(file_path)
-                await message.answer_audio(
-                    audio=audio,
-                    title=info.get('title', 'Audio'),
-                    caption="🎵 Аудио версия"
-                )
-
-            # Reset state and prompt for new URL
-            await state.set_state(Download.download)
-            await message.answer("✅ Отправьте новую ссылку на видео:")
-
-    except FileNotFoundError:
-        await message.answer("❌ Ошибка: файл не был загружен")
-        await state.set_state(Download.download)
     except Exception as e:
-        logger.error(f"Download error: {str(e)}")
-        error_msg = "❌ Ошибка при скачивании. Попробуйте еще раз."
-        await message.answer(error_msg)
-        await state.set_state(Download.download)
-
-    finally:
-        # Cleanup
-        await asyncio.sleep(1)
-
-        if status_msg:
-            try:
-                await status_msg.delete()
-            except Exception:
-                pass
-
-        if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                logger.error(f"File cleanup error: {e}")
-
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-
-async def remove_file(file_path: str):
-    """Remove file in background"""
-    try:
-        os.remove(file_path)
-    except Exception as e:
-        logger.error(f"Error removing file: {e}")
+        logger.error(f"Format selection error: {str(e)}")
+        await callback.message.answer("❌ Ошибка при скачивании")
+#
+# async def handle_youtube(message: Message, url: str, me, bot: Bot):
+#     try:
+#         progress_message = None
+#         last_update_time = 0
+#
+#         # Progress callback funksiyasi
+#         async def show_progress(d):
+#             nonlocal progress_message, last_update_time
+#
+#             if d['status'] == 'downloading':
+#                 current_time = time.time()
+#                 # Har 2 sekundda yangilaymiz
+#                 if current_time - last_update_time > 2:
+#                     try:
+#                         downloaded = d.get('downloaded_bytes', 0)
+#                         total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
+#                         speed = d.get('speed', 0)
+#                         eta = d.get('eta', 0)
+#
+#                         if total > 0:
+#                             percentage = downloaded / total * 100
+#                             # Progress xabarini formatlash
+#                             progress_text = (
+#                                 f"📥 Загрузка: {percentage:.1f}%\n"
+#                                 f"⬇️ Скорость: {format_size(speed)}/s\n"
+#                                 f"💾 Прогресс: {format_size(downloaded)}/{format_size(total)}\n"
+#                                 f"⏱ Осталось: {eta}s"
+#                             )
+#
+#                             if progress_message is None:
+#                                 progress_message = await message.answer(progress_text)
+#                             else:
+#                                 await progress_message.edit_text(progress_text)
+#
+#                             last_update_time = current_time
+#                     except Exception as e:
+#                         logger.error(f"Progress update error: {e}")
+#
+#         def format_size(size):
+#             # Hajmni formatlash (bytes -> KB/MB)
+#             if size < 1024:
+#                 return f"{size}B"
+#             elif size < 1024 * 1024:
+#                 return f"{size / 1024:.1f}KB"
+#             else:
+#                 return f"{size / (1024 * 1024):.1f}MB"
+#
+#         base_opts = {
+#             'quiet': True,
+#             'no_warnings': True,
+#             'noplaylist': True,
+#             'progress_hooks': [lambda d: asyncio.create_task(show_progress(d))],
+#             'external_downloader': 'aria2c',
+#             'external_downloader_args': [
+#                 '--min-split-size=1M',
+#                 '--max-connection-per-server=16',
+#                 '--max-concurrent-downloads=16',
+#                 '--split=16'
+#             ]
+#         }
+#
+#         try:
+#             # Formatlarni aniqlash
+#             with yt_dlp.YoutubeDL(base_opts) as ydl:
+#                 info = ydl.extract_info(url, download=False)
+#                 formats = info.get('formats', [])
+#
+#                 valid_formats = []
+#                 for f in formats:
+#                     ext = f.get('ext')
+#                     height = f.get('height', 0)
+#                     filesize = f.get('filesize', 0)
+#                     format_id = f.get('format_id', '')
+#
+#                     if (ext == 'mp4' and height and height <= 480
+#                             and (filesize == 0 or filesize < 45000000)):
+#                         valid_formats.append({
+#                             'format_id': format_id,
+#                             'height': height,
+#                             'filesize': filesize
+#                         })
+#
+#                 selected_format = None
+#                 if not valid_formats:
+#                     await message.answer("❌ Подходящие форматы не найдены")
+#                     return
+#                 elif len(valid_formats) == 1:
+#                     selected_format = valid_formats[0]
+#                 elif len(valid_formats) == 2:
+#                     selected_format = min(valid_formats, key=lambda x: x['height'])
+#                 else:
+#                     sorted_formats = sorted(valid_formats, key=lambda x: x['height'])
+#                     middle_index = len(sorted_formats) // 2
+#                     selected_format = sorted_formats[middle_index]
+#
+#                 if selected_format:
+#                     download_opts = {
+#                         **base_opts,
+#                         'format': selected_format['format_id'],
+#                     }
+#
+#                     with yt_dlp.YoutubeDL(download_opts) as ydl:
+#                         info = ydl.extract_info(url, download=True)
+#                         video_path = ydl.prepare_filename(info)
+#
+#                         if os.path.exists(video_path):
+#                             try:
+#                                 if progress_message:
+#                                     await progress_message.delete()
+#
+#                                 video = FSInputFile(video_path)
+#                                 await message.answer("📤 Отправляю видео...")
+#                                 await bot.send_video(
+#                                     chat_id=message.chat.id,
+#                                     video=video,
+#                                     caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
+#                                     supports_streaming=True
+#                                 )
+#                                 await shortcuts.add_to_analitic_data(me.username, url)
+#                             finally:
+#                                 if os.path.exists(video_path):
+#                                     os.remove(video_path)
+#                         else:
+#                             await message.answer("❌ Ошибка при скачивании видео")
+#
+#         except Exception as e:
+#             if progress_message:
+#                 await progress_message.delete()
+#             logger.error(f"YouTube processing error: {str(e)}")
+#             await message.answer("❌ Произошла ошибка при обработке видео")
+#
+#     except Exception as e:
+#         if progress_message:
+#             await progress_message.delete()
+#         logger.error(f"YouTube handler error: {str(e)}")
+#         await message.answer("❌ Произошла общая ошибка")
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
