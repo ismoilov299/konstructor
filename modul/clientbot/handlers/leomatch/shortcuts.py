@@ -281,15 +281,13 @@ async def update_profile(uid: int, kwargs: dict):
 
 
 async def create_like(from_uid: int, to_uid: int, message: str = None):
-    # get_leo async funksiya bo'lgani uchun await ishlatamiz
     from_leo = await get_leo(from_uid)
     to_leo = await get_leo(to_uid)
 
-    # Tekshirish
+
     if not from_leo or not to_leo:
         raise ValueError(f"User not found: from_uid={from_uid}, to_uid={to_uid}")
 
-    # Like yaratish - bu sync operatsiya
     @sync_to_async
     def create_like_sync(from_leo, to_leo, message):
         return LeoMatchLikesBasketModel.objects.create(
@@ -302,7 +300,7 @@ async def create_like(from_uid: int, to_uid: int, message: str = None):
 
 async def leo_set_like(from_uid: int, to_uid: int, message: str = None):
     info = await create_like(from_uid, to_uid, message)
-    return await info
+    return info  #
 
 
 @sync_to_async
