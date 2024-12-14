@@ -840,20 +840,50 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 class DownloadProgress:
     def __init__(self, message: Message):
         self.message = message
-        self.bot = message.bot
-        self.chat_id = message.chat.id
+        self.current_message = None
+        self.last_update_time = 0
+        self.last_percentage = 0
+        self._lock = asyncio.Lock()
 
-    async def init_status(self):
-        await self.bot.send_chat_action(self.chat_id, ChatAction.UPLOAD_VIDEO)
+    def get_progress_bar(self, percentage):
+        filled = int(percentage / 5)
+        empty = 20 - filled
+        return f"[{'█' * filled}{'▒' * empty}]"
+
+    def format_size(self, bytes):
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes < 1024:
+                return f"{bytes:.1f} {unit}"
+            bytes /= 1024
+        return f"{bytes:.1f} GB"
 
     def progress_hook(self, d):
-        if d['status'] == 'downloading':
-            try:
-                asyncio.create_task(
-                    self.bot.send_chat_action(self.chat_id, ChatAction.UPLOAD_VIDEO)
-                )
-            except Exception as e:
-                logger.error(f"Progress hook error: {e}")
+        try:
+            if d['status'] == 'downloading':
+                current_time = time.time()
+
+                # Update only every 3 seconds to avoid flood control
+                if current_time - self.last_update_time >= 3:
+                    total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
+                    downloaded = d.get('downloaded_bytes', 0)
+
+                    if total > 0:
+                        percentage = (downloaded / total) * 100
+                        # Only update if percentage changed significantly
+                        if abs(percentage - self.last_percentage) >= 5:
+                            self.last_percentage = percentage
+                            self.last_update_time = current_time
+
+                            # Instead of sending messages, just store the progress
+                            self.current_progress = {
+                                'percentage': percentage,
+                                'downloaded': downloaded,
+                                'total': total,
+                                'speed': d.get('speed', 0)
+                            }
+
+        except Exception as e:
+            logger.error(f"Progress hook error: {e}")
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
@@ -865,17 +895,14 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
         try:
             await callback.answer()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Callback answer error: {e}")
 
-        data = await state.get_data()
-        url = data.get('url')
+        # Send initial status
+        status_msg = await message.answer("⏳ Начинаю загрузку...")
 
-        # Create progress handler
         progress_handler = DownloadProgress(message)
-        await progress_handler.init_status()
 
-        # Optimized download options
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
@@ -885,19 +912,37 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
-            'socket_timeout': 30,
-            'retries': 3,
-            'file_access_retries': 3,
-            'fragment_retries': 3,
-            'retry_sleep_functions': {'fragment': lambda _: 0},
-            'merge_output_format': 'mp4',
-            'concurrent_fragment_downloads': 8,  # Parallel downloads
-            'buffersize': 1024 * 16,  # Increased buffer size
-            'postprocessor_args': {
-                'ffmpeg': ['-threads', '4']  # Use 4 threads for ffmpeg
-            },
-            'overwrites': True,  # Don't ask about overwriting files
+            'merge_output_format': 'mp4'
         }
+
+        # Background task for periodic updates
+        async def update_status():
+            last_text = ""
+            while True:
+                try:
+                    if hasattr(progress_handler, 'current_progress'):
+                        prog = progress_handler.current_progress
+                        percentage = prog['percentage']
+                        speed = prog['speed']
+                        speed_text = f"{speed / 1024 / 1024:.1f} МБ/с" if speed else "⌛️"
+                        text = f"⚡️ Загрузка... {percentage:.1f}%"
+
+                        if text != last_text:
+                            try:
+                                await status_msg.edit_text(text)
+                                last_text = text
+                            except Exception:
+                                pass
+
+                    await asyncio.sleep(3)  # Wait 3 seconds between updates
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Status update error: {e}")
+                    await asyncio.sleep(3)
+
+        # Start status update task
+        status_task = asyncio.create_task(update_status())
 
         try:
             with yt_dlp.YoutubeDL(download_opts) as ydl:
@@ -910,8 +955,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                             video = FSInputFile(file_path)
                             await message.answer_video(
                                 video=video,
-                                caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)",
-                                supports_streaming=True  # Enable streaming
+                                caption=f"📹 {info.get('title', 'Video')} ({callback_data.quality}p)"
                             )
                         else:
                             audio = FSInputFile(file_path)
@@ -922,24 +966,24 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                             )
                     finally:
                         if os.path.exists(file_path):
-                            # Use background task for file deletion
-                            asyncio.create_task(remove_file(file_path))
+                            os.remove(file_path)
+                        status_task.cancel()
+                        try:
+                            await status_msg.delete()
+                        except Exception:
+                            pass
                         try:
                             await message.delete()
                         except Exception:
                             pass
 
-            await state.set_state(Download.download)
-            await message.answer("✅ Отправьте новую ссылку на видео:")
+                await state.set_state(Download.download)
+                await message.answer("✅ Отправьте новую ссылку на видео:")
 
         except Exception as e:
-            error_msg = str(e)
-            if "Connection lost" in error_msg:
-                await message.answer("❌ Соединение прервано. Попробуйте еще раз.")
-            else:
-                logger.error(f"Download error: {error_msg}")
-                await message.answer("❌ Ошибка при скачивании. Попробуйте еще раз.")
-
+            status_task.cancel()
+            logger.error(f"Download error: {e}")
+            await message.answer("❌ Ошибка при скачивании. Попробуйте еще раз.")
             await state.set_state(Download.download)
 
     except Exception as e:
