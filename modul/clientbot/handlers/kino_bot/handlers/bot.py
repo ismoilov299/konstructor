@@ -648,73 +648,104 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot):
         await message.answer("❌ Ошибка при обработке TikTok видео")
 
 
-import instaloader
-from instaloader import Post
-
-
 async def handle_instagram(message: Message, url: str, me, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
 
-        # Instagram post ID ni olish
-        post_id = url.split('/')[-2] if url.endswith('/') else url.split('/')[-1]
-        post_id = post_id.split('?')[0]  # URL parametrlarini olib tashlash
-
-        # Instaloader instance yaratish
-        L = instaloader.Instaloader(
-            dirname_pattern=f"/tmp/{post_id}",  # Vaqtincha papka
-            download_videos=True,
-            download_geotags=False,
-            download_comments=False,
-            download_video_thumbnails=False,
-            save_metadata=False
-        )
+        # Instagram uchun maxsus optsiyalar
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'max_filesize': 45000000,
+            # Instagram cookie fayli (agar kerak bo'lsa)
+            # 'cookiefile': 'instagram.com_cookies.txt',
+            # Instagram uchun maxsus headers
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+            }
+        }
 
         try:
-            # Post ni yuklab olish
-            post = Post.from_shortcode(L.context, post_id)
+            # Instagram API dan media_id olish
+            media_id = url.split('/')[-1].split('?')[0]
 
-            # Video yoki rasm ekanini tekshirish
-            if post.is_video:
-                # Video yuklab olish
-                video_path = f"/tmp/{post_id}/{post_id}.mp4"
-                L.download_post(post, target=f"/tmp/{post_id}")
+            # Alternativ API endpoint orqali urinish
+            api_url = f'https://www.instagram.com/p/{media_id}/?__a=1'
 
-                if os.path.exists(video_path):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    info = ydl.extract_info(url, download=False)
+
+                    if 'entries' in info:
+                        # Agar bu carousel/albom bo'lsa
+                        entries = info['entries']
+                        for entry in entries:
+                            if 'url' in entry:
+                                if entry.get('ext') in ['mp4', 'mov']:
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=entry['url'],
+                                        caption=f"📹 Instagram video\nСкачано через @{me.username}"
+                                    )
+                                else:
+                                    await bot.send_photo(
+                                        chat_id=message.chat.id,
+                                        photo=entry['url'],
+                                        caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                    )
+                    else:
+                        # Bitta media
+                        if info.get('ext') in ['mp4', 'mov']:
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=info['url'],
+                                caption=f"📹 Instagram video\nСкачано через @{me.username}"
+                            )
+                        else:
+                            await bot.send_photo(
+                                chat_id=message.chat.id,
+                                photo=info['url'],
+                                caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                            )
+
+                    await shortcuts.add_to_analitic_data(me.username, url)
+
+                except Exception as e:
+                    logger.error(f"Instagram extraction error: {str(e)}")
+                    # Agar birinchi usul ishlamasa, boshqa usul
                     try:
-                        video = FSInputFile(video_path)
-                        await bot.send_video(
-                            chat_id=message.chat.id,
-                            video=video,
-                            caption=f"📹 Instagram video\nСкачано через @{me.username}"
-                        )
-                    finally:
-                        # Fayl va papkani tozalash
-                        if os.path.exists(video_path):
-                            os.remove(video_path)
-                        if os.path.exists(f"/tmp/{post_id}"):
-                            os.rmdir(f"/tmp/{post_id}")
-            else:
-                # Rasm yuklab olish
-                photo_path = f"/tmp/{post_id}/{post_id}.jpg"
-                L.download_post(post, target=f"/tmp/{post_id}")
+                        ydl_opts['format'] = 'worst'
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
+                            info = ydl_low.extract_info(url, download=True)
+                            media_path = ydl_low.prepare_filename(info)
 
-                if os.path.exists(photo_path):
-                    try:
-                        photo = FSInputFile(photo_path)
-                        await bot.send_photo(
-                            chat_id=message.chat.id,
-                            photo=photo,
-                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                        )
-                    finally:
-                        # Fayl va papkani tozalash
-                        if os.path.exists(photo_path):
-                            os.remove(photo_path)
-                        if os.path.exists(f"/tmp/{post_id}"):
-                            os.rmdir(f"/tmp/{post_id}")
+                            if os.path.exists(media_path):
+                                try:
+                                    if info.get('ext') in ['mp4', 'mov']:
+                                        await bot.send_video(
+                                            chat_id=message.chat.id,
+                                            video=FSInputFile(media_path),
+                                            caption=f"📹 Instagram video (Низкое качество)\nСкачано через @{me.username}"
+                                        )
+                                    else:
+                                        await bot.send_photo(
+                                            chat_id=message.chat.id,
+                                            photo=FSInputFile(media_path),
+                                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                        )
+                                finally:
+                                    if os.path.exists(media_path):
+                                        os.remove(media_path)
 
-            await shortcuts.add_to_analitic_data(me.username, url)
+                    except Exception as low_quality_error:
+                        logger.error(f"Low quality download error: {str(low_quality_error)}")
+                        await message.answer("❌ Не удалось скачать медиа")
 
         except Exception as e:
             logger.error(f"Instagram download error: {str(e)}")
