@@ -692,11 +692,12 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot):
     try:
-        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)  # ChatAction to'g'ri ishlatildi
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
 
-        # Пробуем сначала получить прямую ссылку
+        # YouTube uchun format optsiyalarini yangilash
         ydl_opts = {
-            'format': 'best[ext=mp4][height<=480]',
+            'format': 'bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/best[ext=mp4][height<=480]/best[ext=mp4]/best',
+            # O'zgartirilgan format
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
@@ -704,26 +705,43 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot):
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
+                # Avval mavjud formatlarni tekshiramiz
                 info = ydl.extract_info(url, download=False)
-                if 'url' in info:
-                    await bot.send_video(
-                        chat_id=message.chat.id,
-                        video=info['url'],
-                        caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
-                        supports_streaming=True
-                    )
-                    await shortcuts.add_to_analitic_data(me.username, url)
-                    return
+                if 'formats' in info:
+                    # Formatlar ro'yxatidan eng mosini tanlaymiz
+                    formats = info['formats']
+                    # mp4 formatdagi videolarni izlaymiz
+                    mp4_formats = [f for f in formats if f.get('ext') == 'mp4']
+                    if mp4_formats:
+                        # Eng yaxshi sifatli mp4 ni tanlaymiz
+                        best_format = max(mp4_formats,
+                                          key=lambda x: x.get('height', 0) if x.get('height', 0) <= 480 else 0)
+                        await bot.send_video(
+                            chat_id=message.chat.id,
+                            video=best_format['url'],
+                            caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
+                            supports_streaming=True
+                        )
+                        await shortcuts.add_to_analitic_data(me.username, url)
+                        return
+
+                # Agar yuqoridagi usul ishlamasa, past sifatda yuklaymiz
+                ydl_opts['format'] = 'best[ext=mp4]/worst[ext=mp4]/best'
+                await download_and_send_video(message, url, ydl_opts, me, bot, "YouTube")
+
             except Exception as e:
                 logger.error(f"YouTube direct link error: {e}")
-                # Если не удалось получить прямую ссылку, пробуем скачать
                 try:
-                    # Пробуем скачать в низком качестве
-                    ydl_opts['format'] = 'worst[ext=mp4]'
+                    # Oxirgi urinish - eng past sifatda
+                    ydl_opts['format'] = 'worstvideo[ext=mp4]'
                     await download_and_send_video(message, url, ydl_opts, me, bot, "YouTube")
                 except Exception as download_error:
                     logger.error(f"YouTube download error: {download_error}")
                     await message.answer("❌ Не удалось скачать видео")
+
+    except Exception as e:
+        logger.error(f"YouTube handler error: {e}")
+        await message.answer("❌ Ошибка при скачивании с YouTube")
 
     except Exception as e:
         logger.error(f"YouTube handler error: {e}")
