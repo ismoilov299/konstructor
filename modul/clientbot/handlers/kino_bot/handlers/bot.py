@@ -30,6 +30,7 @@ from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
+from modul.models import UserTG, AdminInfo
 
 
 class SearchFilmForm(StatesGroup):
@@ -373,9 +374,21 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                             text=f"У вас новый {user_link}!"
                         )
 
-                    # Referral va pul qo'shish
-                    await plus_ref(inviter_id)
-                    await plus_money(inviter_id)
+                    try:
+                        # Process referral in transaction
+                        @sync_to_async
+                        @transaction.atomic
+                        def update_referral():
+                            user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
+                            user_tg.refs += 1
+                            user_tg.balance += float(AdminInfo.objects.first().price or 10.0)
+                            user_tg.save()
+                            return True
+
+                        await update_referral()
+                        logger.info(f"Successfully updated referral stats for user {inviter_id}")
+                    except Exception as e:
+                        logger.error(f"Error updating referral stats: {e}")
             else:
                 inviter = None
 
