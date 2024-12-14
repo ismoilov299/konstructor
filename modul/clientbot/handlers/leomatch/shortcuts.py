@@ -29,11 +29,18 @@ def get_leo_match(user):
 
 
 async def get_leo(uid: int):
-    user = await get_client(uid)
-    if user:
-        leo = await get_leo_match(user)
-        return leo
-    return None
+    try:
+        user = await sync_to_async(LeoMatchModel.objects.select_related('user').get)(user__uid=uid)
+        return user
+    except LeoMatchModel.DoesNotExist:
+        return None
+
+# async def get_leo(uid: int):
+#     user = await get_client(uid)
+#     if user:
+#         leo = await get_leo_match(user)
+#         return leo
+#     return None
 
 
 @sync_to_async
