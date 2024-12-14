@@ -694,59 +694,81 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
 
-        # YouTube uchun format optsiyalarini yangilash
+        # Videoni kichikroq hajmda olish uchun optsiyalar
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/best[ext=mp4][height<=480]/best[ext=mp4]/best',
-            # O'zgartirilgan format
+            'format': 'best[filesize<50M][ext=mp4]/best[height<=480][ext=mp4]/worst[ext=mp4]',
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
+            'outtmpl': '%(id)s.%(ext)s',  # Fayl nomini soddalashtiramiz
+            'max_filesize': 45000000,  # ~45MB (Telegram limit)
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                # Avval mavjud formatlarni tekshiramiz
-                info = ydl.extract_info(url, download=False)
-                if 'formats' in info:
-                    # Formatlar ro'yxatidan eng mosini tanlaymiz
-                    formats = info['formats']
-                    # mp4 formatdagi videolarni izlaymiz
-                    mp4_formats = [f for f in formats if f.get('ext') == 'mp4']
-                    if mp4_formats:
-                        # Eng yaxshi sifatli mp4 ni tanlaymiz
-                        best_format = max(mp4_formats,
-                                          key=lambda x: x.get('height', 0) if x.get('height', 0) <= 480 else 0)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Videoni yuklab olamiz
+                await message.answer("⏳ Загружаю видео...")
+                info = ydl.extract_info(url, download=True)
+                video_path = ydl.prepare_filename(info)
+
+                if os.path.exists(video_path):
+                    try:
+                        file_size = os.path.getsize(video_path)
+                        if file_size > 45000000:  # 45MB check
+                            await message.answer("❌ Видео слишком большое. Попробуйте другое видео.")
+                            return
+
+                        video = FSInputFile(video_path)
+                        await message.answer("📤 Отправляю видео...")
                         await bot.send_video(
                             chat_id=message.chat.id,
-                            video=best_format['url'],
+                            video=video,
                             caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
                             supports_streaming=True
                         )
                         await shortcuts.add_to_analitic_data(me.username, url)
-                        return
+                    finally:
+                        try:
+                            if os.path.exists(video_path):
+                                os.remove(video_path)
+                        except:
+                            pass
+                else:
+                    await message.answer("❌ Ошибка при скачивании видео")
 
-                # Agar yuqoridagi usul ishlamasa, past sifatda yuklaymiz
-                ydl_opts['format'] = 'best[ext=mp4]/worst[ext=mp4]/best'
-                await download_and_send_video(message, url, ydl_opts, me, bot, "YouTube")
+        except Exception as e:
+            logger.error(f"YouTube download error: {str(e)}")
+            # Probuyem v samom nizkom kachestve
+            try:
+                ydl_opts['format'] = 'worst[ext=mp4]'
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    video_path = ydl.prepare_filename(info)
 
-            except Exception as e:
-                logger.error(f"YouTube direct link error: {e}")
-                try:
-                    # Oxirgi urinish - eng past sifatda
-                    ydl_opts['format'] = 'worstvideo[ext=mp4]'
-                    await download_and_send_video(message, url, ydl_opts, me, bot, "YouTube")
-                except Exception as download_error:
-                    logger.error(f"YouTube download error: {download_error}")
-                    await message.answer("❌ Не удалось скачать видео")
+                    if os.path.exists(video_path):
+                        try:
+                            video = FSInputFile(video_path)
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=video,
+                                caption=f"📹 {info.get('title', 'Video')} (Низкое качество)\nСкачано через @{me.username}",
+                                supports_streaming=True
+                            )
+                        finally:
+                            try:
+                                if os.path.exists(video_path):
+                                    os.remove(video_path)
+                            except:
+                                pass
+                    else:
+                        await message.answer("❌ Не удалось скачать видео")
+            except Exception as low_quality_error:
+                logger.error(f"Low quality download error: {str(low_quality_error)}")
+                await message.answer("❌ Не удалось скачать видео даже в низком качестве")
 
     except Exception as e:
-        logger.error(f"YouTube handler error: {e}")
-        await message.answer("❌ Ошибка при скачивании с YouTube")
-
-    except Exception as e:
-        logger.error(f"YouTube handler error: {e}")
-        await message.answer("❌ Ошибка при скачивании с YouTube")
-
+        logger.error(f"YouTube handler error: {str(e)}")
+        await message.answer("❌ Произошла ошибка при скачивании")
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
