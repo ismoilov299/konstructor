@@ -26,6 +26,7 @@ from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
+from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -364,9 +365,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 inviter_id = int(command.args)
                 inviter = await shortcuts.get_user(inviter_id, bot)
                 if inviter:
-                    # Referral hisobini yuritish
-                    await shortcuts.increase_referral(inviter)
-
                     # Referral xabarini yuborish
                     with suppress(TelegramForbiddenError):
                         user_link = html.link('реферал', f'tg://user?id={uid}')
@@ -374,6 +372,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                             chat_id=command.args,
                             text=f"У вас новый {user_link}!"
                         )
+
+                    # Referral va pul qo'shish
+                    await plus_ref(inviter_id)
+                    await plus_money(inviter_id)
             else:
                 inviter = None
 
