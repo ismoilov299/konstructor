@@ -759,23 +759,22 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
-import yt_dlp
-import os
-import asyncio
-import time
+import base64
 
 
-# Callback data klass
 class FormatCallback(CallbackData, prefix="format"):
     format_id: str
     type: str
     quality: str
-    url: str
+    url_encoded: str  # URL ni encode qilgan holda saqlaymiz
 
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot):
     try:
         await message.answer("🔍 Проверяю доступные форматы...")
+
+        # URL ni encode qilish
+        url_encoded = base64.b64encode(url.encode()).decode()
 
         base_opts = {
             'quiet': True,
@@ -788,7 +787,6 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot):
             formats = info.get('formats', [])
             title = info.get('title', 'Video')
 
-            # Keyboard yasash
             builder = InlineKeyboardBuilder()
 
             # Video formatlar
@@ -802,7 +800,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot):
                                 format_id=f['format_id'],
                                 type='video',
                                 quality=str(height),
-                                url=url
+                                url_encoded=url_encoded
                             ).pack()
                         )
 
@@ -815,16 +813,19 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot):
                         format_id=audio_format['format_id'],
                         type='audio',
                         quality='audio',
-                        url=url
+                        url_encoded=url_encoded
                     ).pack()
                 )
 
             builder.adjust(2)
 
-            await message.answer(
-                f"📹 {title}\n\nВыберите формат:",
-                reply_markup=builder.as_markup()
-            )
+            if len(builder.buttons) > 0:
+                await message.answer(
+                    f"📹 {title}\n\nВыберите формат:",
+                    reply_markup=builder.as_markup()
+                )
+            else:
+                await message.answer("❌ Не найдены подходящие форматы")
 
     except Exception as e:
         logger.error(f"YouTube handler error: {str(e)}")
@@ -837,6 +838,9 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         await callback.answer()
         message = callback.message
 
+        # URL ni decode qilish
+        url = base64.b64decode(callback_data.url_encoded).decode()
+
         download_opts = {
             'format': callback_data.format_id,
             'quiet': True,
@@ -847,7 +851,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         progress_msg = await message.answer("⏳ Начинаю загрузку...")
 
         with yt_dlp.YoutubeDL(download_opts) as ydl:
-            info = ydl.extract_info(callback_data.url, download=True)
+            info = ydl.extract_info(url, download=True)
             file_path = ydl.prepare_filename(info)
 
             if os.path.exists(file_path):
