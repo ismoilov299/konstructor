@@ -759,75 +759,95 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 async def handle_youtube(message: Message, url: str, me, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+        await message.answer("📥 Получаю информацию о видео...")
 
-        # Tezroq yuklash uchun optimallashtirilgan optsiyalar
-        ydl_opts = {
-            'format': 'mp4[height<=480]/best[height<=480][ext=mp4]',
-            'noplaylist': True,
+        # Asosiy parametrlar
+        base_opts = {
             'quiet': True,
             'no_warnings': True,
-            'socket_timeout': 3,  # Timeout vaqtini kamaytirish
-            'retries': 1,  # Qayta urinishlar sonini kamaytirish
-            'outtmpl': '%(id)s.%(ext)s',
-            'max_filesize': 45000000,
-            # Tezroq yuklash uchun
+            'noplaylist': True,
             'external_downloader': 'aria2c',
             'external_downloader_args': [
                 '--min-split-size=1M',
                 '--max-connection-per-server=16',
                 '--max-concurrent-downloads=16',
                 '--split=16'
-            ],
+            ]
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                # Ma'lumotlarni olish
+        try:
+            # Mavjud formatlarni aniqlash
+            with yt_dlp.YoutubeDL(base_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 formats = info.get('formats', [])
 
-                # Eng mos formatni tanlash
-                suitable_formats = [
-                    f for f in formats
-                    if f.get('ext') == 'mp4'
-                       and f.get('filesize', 0) < 45000000
-                       and f.get('height', 0) <= 480
-                ]
+                # MP4 formatlarni filtrlash
+                valid_formats = []
+                for f in formats:
+                    ext = f.get('ext')
+                    height = f.get('height', 0)
+                    filesize = f.get('filesize', 0)
+                    format_id = f.get('format_id', '')
 
-                if not suitable_formats:
-                    await message.answer("❌ Не найдены подходящие форматы видео")
+                    if (ext == 'mp4' and height and height <= 480
+                            and (filesize == 0 or filesize < 45000000)):
+                        valid_formats.append({
+                            'format_id': format_id,
+                            'height': height,
+                            'filesize': filesize
+                        })
+
+                # Formatlar soniga qarab tanlash
+                selected_format = None
+                if not valid_formats:
+                    await message.answer("❌ Подходящие форматы не найдены")
                     return
+                elif len(valid_formats) == 1:
+                    selected_format = valid_formats[0]  # Yagona format
+                elif len(valid_formats) == 2:
+                    selected_format = min(valid_formats, key=lambda x: x['height'])  # Eng kichik format
+                else:
+                    # O'rta formatni tanlash
+                    sorted_formats = sorted(valid_formats, key=lambda x: x['height'])
+                    middle_index = len(sorted_formats) // 2
+                    selected_format = sorted_formats[middle_index]
 
-                # Eng yaxshi formatni tanlash
-                best_format = min(suitable_formats, key=lambda x: x.get('filesize', float('inf')))
-                format_id = best_format['format_id']
+                if selected_format:
+                    download_opts = {
+                        **base_opts,
+                        'format': selected_format['format_id'],
+                    }
 
-                # Yuklash
-                ydl_opts['format'] = format_id
-                info = ydl.extract_info(url, download=True)
-                video_path = ydl.prepare_filename(info)
+                    await message.answer(f"📥 Скачиваю видео в {selected_format['height']}p...")
 
-                if os.path.exists(video_path):
-                    try:
-                        video = FSInputFile(video_path)
-                        await bot.send_video(
-                            chat_id=message.chat.id,
-                            video=video,
-                            caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
-                            supports_streaming=True
-                        )
-                        await shortcuts.add_to_analitic_data(me.username, url)
-                    finally:
+                    with yt_dlp.YoutubeDL(download_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        video_path = ydl.prepare_filename(info)
+
                         if os.path.exists(video_path):
-                            os.remove(video_path)
+                            try:
+                                video = FSInputFile(video_path)
+                                await message.answer("📤 Отправляю видео...")
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=video,
+                                    caption=f"📹 {info.get('title', 'Video')}\nСкачано через @{me.username}",
+                                    supports_streaming=True
+                                )
+                                await shortcuts.add_to_analitic_data(me.username, url)
+                            finally:
+                                if os.path.exists(video_path):
+                                    os.remove(video_path)
+                        else:
+                            await message.answer("❌ Ошибка при скачивании видео")
 
-            except Exception as e:
-                logger.error(f"Download error: {e}")
-                await message.answer("❌ Ошибка при скачивании")
+        except Exception as e:
+            logger.error(f"YouTube processing error: {str(e)}")
+            await message.answer("❌ Произошла ошибка при обработке видео")
 
     except Exception as e:
-        logger.error(f"Handler error: {e}")
-        await message.answer("❌ Произошла ошибка")
+        logger.error(f"YouTube handler error: {str(e)}")
+        await message.answer("❌ Произошла общая ошибка")
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
