@@ -989,3 +989,134 @@ async def instagram_handler(message: Message, bot):
     if 'instagram.com' in url or 'instagr.am' in url:
         me = await bot.get_me()
         await handle_instagram(message, url, me, bot)
+
+
+async def handle_tiktok(message: Message, url: str, me, bot: Bot):
+    """TikTok video downloader handler"""
+    try:
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+        progress_msg = await message.answer("⏳ Получаю информацию...")
+
+        # TikTok uchun maxsus optsiyalar
+        ydl_opts = {
+            'format': 'best',  # Eng yaxshi sifatni olish
+            'quiet': True,
+            'no_warnings': True,
+            'max_filesize': 50000000,  # 50MB limit
+            'outtmpl': '%(id)s.%(ext)s',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Origin': 'https://www.tiktok.com',
+                'Referer': 'https://www.tiktok.com/',
+                'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+            }
+        }
+
+        try:
+            # URL ni tozalash
+            if '?' in url:
+                url = url.split('?')[0]
+
+            await progress_msg.edit_text("🔄 Загружаю видео...")
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    # Avval video ma'lumotlarini olish
+                    info = ydl.extract_info(url, download=False)
+
+                    if info and 'url' in info:
+                        # To'g'ridan-to'g'ri URL orqali yuborish
+                        try:
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=info['url'],
+                                caption=f"📱 TikTok видео\nСкачано через @{me.username}"
+                            )
+                            await shortcuts.add_to_analitic_data(me.username, url)
+                            await progress_msg.delete()
+                            return
+                        except Exception as direct_send_error:
+                            logger.error(f"Direct send error: {direct_send_error}")
+                            # Agar to'g'ridan-to'g'ri yuborish ishlamasa, yuklab olishga o'tamiz
+                            pass
+
+                    # Agar to'g'ridan-to'g'ri yuborish ishlamasa
+                    await progress_msg.edit_text("🔄 Загружаю видео другим способом...")
+
+                    # Video yuklab olish
+                    info = ydl.extract_info(url, download=True)
+                    video_path = ydl.prepare_filename(info)
+
+                    if not os.path.exists(video_path):
+                        raise FileNotFoundError("Файл не найден после загрузки")
+
+                    # Videoni yuborish
+                    await bot.send_video(
+                        chat_id=message.chat.id,
+                        video=FSInputFile(video_path),
+                        caption=f"📱 TikTok видео\nСкачано через @{me.username}"
+                    )
+                    await shortcuts.add_to_analitic_data(me.username, url)
+
+                    # Faylni tozalash
+                    if os.path.exists(video_path):
+                        os.remove(video_path)
+
+                    await progress_msg.delete()
+
+                except Exception as download_error:
+                    logger.error(f"Download error: {str(download_error)}")
+                    # Zaxira usul - past sifatli yuklab olish
+                    try:
+                        ydl_opts['format'] = 'worst'
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
+                            await progress_msg.edit_text("🔄 Пробую загрузить в низком качестве...")
+                            info = ydl_low.extract_info(url, download=True)
+                            video_path = ydl_low.prepare_filename(info)
+
+                            if os.path.exists(video_path):
+                                try:
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=FSInputFile(video_path),
+                                        caption=f"📱 TikTok видео (Низкое качество)\nСкачано через @{me.username}"
+                                    )
+                                    await shortcuts.add_to_analitic_data(me.username, url)
+                                finally:
+                                    if os.path.exists(video_path):
+                                        os.remove(video_path)
+                                await progress_msg.delete()
+                            else:
+                                raise FileNotFoundError("Файл не найден после загрузки")
+
+                    except Exception as low_quality_error:
+                        logger.error(f"Low quality download error: {str(low_quality_error)}")
+                        await progress_msg.edit_text("❌ Не удалось загрузить видео")
+
+        except Exception as e:
+            logger.error(f"TikTok download error: {str(e)}")
+            await progress_msg.edit_text("❌ Ошибка при скачивании. Возможно видео недоступно или защищено.")
+
+    except Exception as e:
+        logger.error(f"TikTok handler error: {str(e)}")
+        if 'progress_msg' in locals():
+            await progress_msg.edit_text("❌ Произошла ошибка")
+        else:
+            await message.answer("❌ Произошла ошибка")
+
+
+@client_bot_router.message()
+async def tiktok_handler(message: Message, bot):
+    """TikTok linklar uchun handler"""
+    url = message.text
+    if 'tiktok.com' in url:
+        me = await bot.get_me()
+        await handle_tiktok(message, url, me, bot)
