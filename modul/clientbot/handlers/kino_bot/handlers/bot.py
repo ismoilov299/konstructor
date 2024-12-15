@@ -1018,7 +1018,6 @@ async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me
 
 
 async def handle_tiktok(message: Message, url: str, me, bot: Bot):
-    """TikTok video downloader handler"""
     try:
         ydl_opts = {
             'format': 'mp4',
