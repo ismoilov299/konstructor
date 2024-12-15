@@ -850,83 +850,142 @@ class InstagramDownloader:
         return None
 
 
-async def handle_instagram(message: Message, url: str, bot):
-    """Instagram content downloader with multiple fallback methods"""
+async def handle_instagram(message: Message, url: str, me, bot: Bot):
     try:
-        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_DOCUMENT)
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
+
+        # Instagram uchun maxsus optsiyalar
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'max_filesize': 45000000,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://www.instagram.com/',
+                'Origin': 'https://www.instagram.com',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+            }
+        }
+
         progress_msg = await message.answer("⏳ Получаю информацию...")
 
-        # Clean URL
-        url = url.split('?')[0].split('#')[0]
-        downloader = InstagramDownloader()
+        try:
+            if '?' in url:
+                url = url.split('?')[0]
 
-        async def try_all_methods():
-            me = await bot.get_me()
-            methods = [
-                downloader.download_with_yt_dlp,
-                downloader.download_with_api
-            ]
-
-            for method in methods:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
-                    await progress_msg.edit_text("🔄 Загружаю контент...")
-                    result = await method(url)
+                    info = ydl.extract_info(url, download=False)
 
-                    if result:
-                        if isinstance(result, dict) and 'url' in result:
-                            # API method result
-                            content_url = result['url']
-                            is_video = result['ext'] == 'mp4'
+                    if 'entries' in info:
+                        await progress_msg.edit_text("🔄 Загружаю карусель...")
+                        entries = info['entries']
+                        sent_count = 0
+
+                        for entry in entries:
+                            if 'url' in entry:
+                                try:
+                                    if entry.get('ext') in ['mp4', 'mov']:
+                                        await bot.send_video(
+                                            chat_id=message.chat.id,
+                                            video=entry['url'],
+                                            caption=f"📹 Instagram video\nСкачано через @{me.username}"
+                                        )
+                                    else:
+                                        await bot.send_photo(
+                                            chat_id=message.chat.id,
+                                            photo=entry['url'],
+                                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                        )
+                                    sent_count += 1
+                                except Exception as item_error:
+                                    logger.error(f"Error sending carousel item: {item_error}")
+                                    continue
+
+                        if sent_count > 0:
+                            await shortcuts.add_to_analitic_data(me.username, url)
+                            await progress_msg.delete()
                         else:
-                            # yt-dlp result
-                            content_url = result.get('url') or result.get('webpage_url')
-                            is_video = result.get('ext') in ['mp4', 'mov']
+                            raise Exception("Не удалось загрузить элементы карусели")
 
-                        if is_video:
+                    else:
+                        await progress_msg.edit_text("🔄 Загружаю медиа...")
+
+                        if info.get('ext') in ['mp4', 'mov']:
                             await bot.send_video(
                                 chat_id=message.chat.id,
-                                video=content_url,
-                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                video=info['url'],
+                                caption=f"📹 Instagram video\nСкачано через @{me.username}"
                             )
                         else:
                             await bot.send_photo(
                                 chat_id=message.chat.id,
-                                photo=content_url,
+                                photo=info['url'],
                                 caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                             )
-                        return True
-                except Exception as method_error:
-                    logger.error(f"Method failed: {method_error}")
-                    continue
 
-            return False
+                        await shortcuts.add_to_analitic_data(me.username, url)
+                        await progress_msg.delete()
 
-        success = await asyncio.get_event_loop().run_in_executor(
-            executor,
-            lambda: asyncio.run(try_all_methods())
-        )
+                except Exception as extract_error:
+                    logger.error(f"Instagram extraction error: {str(extract_error)}")
+                    await progress_msg.edit_text("🔄 Пробую альтернативный способ загрузки...")
 
-        if success:
-            await progress_msg.delete()
-        else:
-            await progress_msg.edit_text(
-                "❌ Не удалось загрузить контент. Возможно:\n"
-                "• Пост недоступен или защищен\n"
-                "• Контент удален\n"
-                "• Требуется авторизация"
-            )
+                    try:
+                        ydl_opts['format'] = 'worst'
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
+                            info = ydl_low.extract_info(url, download=True)
+                            media_path = ydl_low.prepare_filename(info)
+
+                            if os.path.exists(media_path):
+                                try:
+                                    if info.get('ext') in ['mp4', 'mov']:
+                                        await bot.send_video(
+                                            chat_id=message.chat.id,
+                                            video=FSInputFile(media_path),
+                                            caption=f"📹 Instagram video (Низкое качество)\nСкачано через @{me.username}"
+                                        )
+                                    else:
+                                        await bot.send_photo(
+                                            chat_id=message.chat.id,
+                                            photo=FSInputFile(media_path),
+                                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                        )
+                                    await shortcuts.add_to_analitic_data(me.username, url)
+                                    await progress_msg.delete()
+                                finally:
+                                    if os.path.exists(media_path):
+                                        os.remove(media_path)
+                            else:
+                                raise FileNotFoundError("Файл не найден после загрузки")
+
+                    except Exception as low_quality_error:
+                        logger.error(f"Low quality download error: {str(low_quality_error)}")
+                        await progress_msg.edit_text("❌ Не удалось загрузить медиа")
+
+        except Exception as e:
+            logger.error(f"Instagram download error: {str(e)}")
+            await progress_msg.edit_text("❌ Ошибка при скачивании. Возможно пост недоступен или защищен.")
 
     except Exception as e:
         logger.error(f"Instagram handler error: {str(e)}")
         if 'progress_msg' in locals():
-            await progress_msg.edit_text("❌ Произошла ошибка при обработке запроса")
+            await progress_msg.edit_text("❌ Произошла ошибка")
         else:
-            await message.answer("❌ Произошла ошибка при обработке запроса")
+            await message.answer("❌ Произошла ошибка")
 
 
 @client_bot_router.message()
 async def instagram_handler(message: Message, bot):
-    """Handler for Instagram links"""
     url = message.text
     if 'instagram.com' in url or 'instagr.am' in url:
-        await handle_instagram(message, url, bot)
+        me = await bot.get_me()
+        await handle_instagram(message, url, me, bot)
