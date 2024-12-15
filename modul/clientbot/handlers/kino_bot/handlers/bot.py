@@ -14,7 +14,7 @@ from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from django.db import transaction
 from django.utils import timezone
-
+import re
 
 from modul import models
 from modul.clientbot import shortcuts
@@ -790,147 +790,131 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         await callback.message.answer("❌ Ошибка при обработке запроса")
 
 
-async def handle_instagram(message: Message, url: str, bot):
-    """Instagram content downloader handler"""
-    try:
-        # Send typing action
-        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_DOCUMENT)
-        progress_msg = await message.answer("⏳ Получаю информацию...")
-
-        # Instagram download options
-        ydl_opts = {
+class InstagramDownloader:
+    def __init__(self):
+        self.ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': False,  # Need full extraction for Instagram
-            'max_filesize': 50000000,  # 50MB limit
-            'format': 'best',  # Best available format
-            # Headers to mimic browser
+            'extract_flat': False,
+            'max_filesize': 50000000,
+            'format': 'best',
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'DNT': '1',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Origin': 'https://www.instagram.com',
+                'Referer': 'https://www.instagram.com/',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
                 'Connection': 'keep-alive',
             }
         }
 
-        try:
-            # Clean URL (remove query parameters)
-            if '?' in url:
-                url = url.split('?')[0]
+    async def download_with_yt_dlp(self, url):
+        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+            return ydl.extract_info(url, download=False)
 
-            async def download_and_process():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    try:
-                        # Get video info
-                        info = ydl.extract_info(url, download=False)
+    async def download_with_api(self, url):
+        # API endpoints for different Instagram content types
+        api_endpoints = [
+            "https://api.instagram.com/oembed/?url={}",
+            "https://www.instagram.com/api/v1/media/{}/info/",
+            "https://www.instagram.com/p/{}/?__a=1&__d=1"
+        ]
 
-                        # Get bot username for caption
-                        me = await bot.get_me()
+        # Extract media ID from URL
+        media_id = re.search(r'/p/([^/]+)', url)
+        if not media_id:
+            media_id = re.search(r'/reel/([^/]+)', url)
+        if not media_id:
+            return None
 
-                        if 'entries' in info:  # Playlist/carousel
-                            await progress_msg.edit_text("🔄 Загружаю карусель...")
-                            entries = info['entries']
-                            sent_count = 0
+        media_id = media_id.group(1)
 
-                            for entry in entries:
-                                if entry.get('duration', 0) > 150:  # Skip videos longer than 2.5 minutes
-                                    continue
+        async with aiohttp.ClientSession() as session:
+            for endpoint in api_endpoints:
+                try:
+                    formatted_url = endpoint.format(url if '{}' in endpoint else media_id)
+                    async with session.get(formatted_url) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if 'video_url' in data:
+                                return {'url': data['video_url'], 'ext': 'mp4'}
+                            elif 'thumbnail_url' in data:
+                                return {'url': data['thumbnail_url'], 'ext': 'jpg'}
+                except Exception as e:
+                    logger.error(f"API endpoint error: {e}")
+                    continue
+        return None
 
-                                try:
-                                    if entry.get('ext') in ['mp4', 'mov']:
-                                        # Send video
-                                        await bot.send_video(
-                                            chat_id=message.chat.id,
-                                            video=entry['url'],
-                                            caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                                        )
-                                    else:
-                                        # Send photo
-                                        await bot.send_photo(
-                                            chat_id=message.chat.id,
-                                            photo=entry['url'],
-                                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                                        )
-                                    sent_count += 1
-                                except Exception as item_error:
-                                    logger.error(f"Error sending carousel item: {item_error}")
-                                    continue
 
-                            if sent_count == 0:
-                                raise Exception("Не удалось загрузить ни одного элемента карусели")
+async def handle_instagram(message: Message, url: str, bot):
+    """Instagram content downloader with multiple fallback methods"""
+    try:
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_DOCUMENT)
+        progress_msg = await message.answer("⏳ Получаю информацию...")
 
-                        else:  # Single post
-                            if info.get('duration', 0) > 150:  # Skip long videos
-                                raise Exception("Видео слишком длинное (более 2.5 минут)")
+        # Clean URL
+        url = url.split('?')[0].split('#')[0]
+        downloader = InstagramDownloader()
 
-                            if info.get('ext') in ['mp4', 'mov']:
-                                # Send video
-                                await bot.send_video(
-                                    chat_id=message.chat.id,
-                                    video=info['url'],
-                                    caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                                )
-                            else:
-                                # Send photo
-                                await bot.send_photo(
-                                    chat_id=message.chat.id,
-                                    photo=info['url'],
-                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                                )
+        async def try_all_methods():
+            me = await bot.get_me()
+            methods = [
+                downloader.download_with_yt_dlp,
+                downloader.download_with_api
+            ]
 
-                    except Exception as e:
-                        logger.error(f"Error in primary method: {e}")
-                        # Fallback method - download and send
-                        try:
-                            await progress_msg.edit_text("🔄 Пробую альтернативный метод загрузки...")
+            for method in methods:
+                try:
+                    await progress_msg.edit_text("🔄 Загружаю контент...")
+                    result = await method(url)
 
-                            # Download the content
-                            info = ydl.extract_info(url, download=True)
-                            file_path = ydl.prepare_filename(info)
+                    if result:
+                        if isinstance(result, dict) and 'url' in result:
+                            # API method result
+                            content_url = result['url']
+                            is_video = result['ext'] == 'mp4'
+                        else:
+                            # yt-dlp result
+                            content_url = result.get('url') or result.get('webpage_url')
+                            is_video = result.get('ext') in ['mp4', 'mov']
 
-                            if os.path.exists(file_path):
-                                try:
-                                    # Determine content type and send
-                                    if info.get('ext') in ['mp4', 'mov']:
-                                        await bot.send_video(
-                                            chat_id=message.chat.id,
-                                            video=FSInputFile(file_path),
-                                            caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                                        )
-                                    else:
-                                        await bot.send_photo(
-                                            chat_id=message.chat.id,
-                                            photo=FSInputFile(file_path),
-                                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                                        )
-                                finally:
-                                    # Clean up downloaded file
-                                    if os.path.exists(file_path):
-                                        os.remove(file_path)
-                            else:
-                                raise FileNotFoundError("Файл не найден после загрузки")
+                        if is_video:
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=content_url,
+                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                            )
+                        else:
+                            await bot.send_photo(
+                                chat_id=message.chat.id,
+                                photo=content_url,
+                                caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                            )
+                        return True
+                except Exception as method_error:
+                    logger.error(f"Method failed: {method_error}")
+                    continue
 
-                        except Exception as fallback_error:
-                            logger.error(f"Fallback method failed: {fallback_error}")
-                            raise Exception("Не удалось загрузить контент")
+            return False
 
-            # Run download and processing in thread pool
-            await asyncio.get_event_loop().run_in_executor(executor, lambda: asyncio.run(download_and_process()))
+        success = await asyncio.get_event_loop().run_in_executor(
+            executor,
+            lambda: asyncio.run(try_all_methods())
+        )
 
-            # Success - delete progress message
+        if success:
             await progress_msg.delete()
-
-        except Exception as e:
-            error_message = str(e)
-            if "Видео слишком длинное" in error_message:
-                await progress_msg.edit_text("❌ Видео слишком длинное для загрузки")
-            elif "login" in error_message.lower():
-                await progress_msg.edit_text("❌ Этот контент доступен только для авторизованных пользователей")
-            else:
-                await progress_msg.edit_text("❌ Не удалось загрузить контент. Возможно, он недоступен или защищен.")
-            logger.error(f"Instagram download error: {error_message}")
+        else:
+            await progress_msg.edit_text(
+                "❌ Не удалось загрузить контент. Возможно:\n"
+                "• Пост недоступен или защищен\n"
+                "• Контент удален\n"
+                "• Требуется авторизация"
+            )
 
     except Exception as e:
         logger.error(f"Instagram handler error: {str(e)}")
@@ -940,7 +924,6 @@ async def handle_instagram(message: Message, url: str, bot):
             await message.answer("❌ Произошла ошибка при обработке запроса")
 
 
-# Handler registration
 @client_bot_router.message()
 async def instagram_handler(message: Message, bot):
     """Handler for Instagram links"""
