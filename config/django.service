@@ -1,0 +1,13 @@
+[Unit]
+Description=Django Constructor Service
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/constructor
+Environment="PATH=/home/ubuntu/constructor/venv/bin"
+ExecStart=/home/ubuntu/constructor/venv/bin/uvicorn constructor.asgi:application --host 0.0.0.0 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
