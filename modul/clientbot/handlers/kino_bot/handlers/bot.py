@@ -641,14 +641,27 @@ def download_video(url, format_id):
 
 
 @client_bot_router.message(Download.download)
-async def youtube_download_handler(message: Message, state: FSMContext, bot):
-    """YouTube video download handler with optimized format selection"""
-    url = message.text
-
-    if not url:
+async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+    """
+    YouTube, Instagram, TikTok linklar uchun universal handler
+    """
+    if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
 
+    url = message.text.strip()
+    me = await bot.get_me()
+
+    if 'tiktok.com' in url:
+        await handle_tiktok(message, url, me, bot)
+    elif 'instagram.com' in url or 'instagr.am' in url or 'inst.ae' in url:
+        await handle_instagram(message, url, me, bot)
+    elif 'youtube.com' in url or 'youtu.be' in url:
+        await handle_youtube(message, url, me, bot, state)
+    else:
+        await message.answer("❗ Отправьте ссылку на видео с YouTube, Instagram или TikTok")
+
+async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
     try:
@@ -983,12 +996,12 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
             await message.answer("❌ Произошла ошибка")
 
 
-@client_bot_router.message()
-async def instagram_handler(message: Message, bot):
-    url = message.text
-    if 'instagram.com' in url or 'instagr.am' in url:
-        me = await bot.get_me()
-        await handle_instagram(message, url, me, bot)
+# @client_bot_router.message()
+# async def instagram_handler(message: Message, bot):
+#     url = message.text
+#     if 'instagram.com' in url or 'instagr.am' in url:
+#         me = await bot.get_me()
+#         await handle_instagram(message, url, me, bot)
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
     try:
@@ -1056,10 +1069,10 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot):
         logger.error(f"TikTok handler error: {e}")
         await message.answer("❌ Ошибка при обработке TikTok видео")
 
-@client_bot_router.message()
-async def tiktok_handler(message: Message, bot):
-    """TikTok linklar uchun handler"""
-    url = message.text
-    if 'tiktok.com' in url:
-        me = await bot.get_me()
-        await handle_tiktok(message, url, me, bot)
+# @client_bot_router.message()
+# async def tiktok_handler(message: Message, bot):
+#     """TikTok linklar uchun handler"""
+#     url = message.text
+#     if 'tiktok.com' in url:
+#         me = await bot.get_me()
+#         await handle_tiktok(message, url, me, bot)
