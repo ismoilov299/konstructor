@@ -991,6 +991,7 @@ async def instagram_handler(message: Message, bot):
         await handle_instagram(message, url, me, bot)
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
+    """Video yuklab olish va yuborish uchun yordamchi funksiya"""
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -1057,7 +1058,7 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot):
 
 @client_bot_router.message()
 async def tiktok_handler(message: Message, bot):
-
+    """TikTok linklar uchun handler"""
     url = message.text
     if 'tiktok.com' in url:
         me = await bot.get_me()
