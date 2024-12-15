@@ -33,6 +33,16 @@ from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
 from modul.models import UserTG, AdminInfo
 
+import yt_dlp
+import logging
+from aiogram.types import Message, FSInputFile
+from aiogram.enums import ChatAction
+from aiogram import Bot
+import os
+from aiogram.filters.callback_data import CallbackData
+from concurrent.futures import ThreadPoolExecutor
+logger = logging.getLogger(__name__)
+
 
 class SearchFilmForm(StatesGroup):
     query = State()
@@ -44,6 +54,18 @@ class AddChannelSponsorForm(StatesGroup):
 
 class SendMessagesForm(StatesGroup):
     message = State()
+
+class Download(StatesGroup):
+    download = State()
+
+
+# Callback data
+class FormatCallback(CallbackData, prefix="format"):
+    format_id: str
+    type: str
+    quality: str
+    index: int
+executor = ThreadPoolExecutor(max_workers=4)
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
@@ -107,7 +129,6 @@ async def get_films_kb(data: dict) -> types.InlineKeyboardMarkup:
 
     return kb.adjust(1).as_markup()
 
-
 async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
@@ -116,13 +137,11 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
         kb.button(
             text=channel_data.full_name,
             callback_data=f'remove_channel|{channel}'
-
         )
 
     kb.button(text='Отменить', callback_data='cancel')
 
     return kb.as_markup()
-
 
 async def send_message(message: types.Message, users: list):
     good = []
@@ -562,36 +581,6 @@ def update_download_analytics(bot_username, domain):
     DownloadAnalyticsModel.objects.filter(id=analytics.id).update(count=F('count') + 1)
 
 
-
-
-from aiogram.types import URLInputFile, FSInputFile
-import yt_dlp
-import os
-
-import yt_dlp
-import logging
-from aiogram.types import Message, FSInputFile
-from aiogram.enums import ChatAction  # To'g'ri import
-from aiogram import Bot
-import os
-from aiogram.filters.callback_data import CallbackData
-from concurrent.futures import ThreadPoolExecutor
-logger = logging.getLogger(__name__)
-
-
-class Download(StatesGroup):
-    download = State()
-
-
-# Callback data
-class FormatCallback(CallbackData, prefix="format"):
-    format_id: str
-    type: str
-    quality: str
-    index: int
-executor = ThreadPoolExecutor(max_workers=4)
-
-
 def get_best_formats(formats):
     """Get the best video and audio formats"""
     video_formats = {}
@@ -642,9 +631,7 @@ def download_video(url, format_id):
 
 @client_bot_router.message(Download.download)
 async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
-    """
-    YouTube, Instagram, TikTok linklar uchun universal handler
-    """
+
     if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
@@ -733,9 +720,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
 @client_bot_router.callback_query(FormatCallback.filter())
 async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext, bot):
-    """Optimized format download handler"""
     try:
-        # Remove inline keyboard
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("⏳ Начинаю загрузку...")
 
@@ -866,8 +851,6 @@ class InstagramDownloader:
 async def handle_instagram(message: Message, url: str, me, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
-
-        # Instagram uchun maxsus optsiyalar
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
