@@ -788,3 +788,162 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
         await callback.message.answer("❌ Ошибка при обработке запроса")
+
+
+async def handle_instagram(message: Message, url: str, bot):
+    """Instagram content downloader handler"""
+    try:
+        # Send typing action
+        await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_DOCUMENT)
+        progress_msg = await message.answer("⏳ Получаю информацию...")
+
+        # Instagram download options
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,  # Need full extraction for Instagram
+            'max_filesize': 50000000,  # 50MB limit
+            'format': 'best',  # Best available format
+            # Headers to mimic browser
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+            }
+        }
+
+        try:
+            # Clean URL (remove query parameters)
+            if '?' in url:
+                url = url.split('?')[0]
+
+            async def download_and_process():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    try:
+                        # Get video info
+                        info = ydl.extract_info(url, download=False)
+
+                        # Get bot username for caption
+                        me = await bot.get_me()
+
+                        if 'entries' in info:  # Playlist/carousel
+                            await progress_msg.edit_text("🔄 Загружаю карусель...")
+                            entries = info['entries']
+                            sent_count = 0
+
+                            for entry in entries:
+                                if entry.get('duration', 0) > 150:  # Skip videos longer than 2.5 minutes
+                                    continue
+
+                                try:
+                                    if entry.get('ext') in ['mp4', 'mov']:
+                                        # Send video
+                                        await bot.send_video(
+                                            chat_id=message.chat.id,
+                                            video=entry['url'],
+                                            caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                        )
+                                    else:
+                                        # Send photo
+                                        await bot.send_photo(
+                                            chat_id=message.chat.id,
+                                            photo=entry['url'],
+                                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                        )
+                                    sent_count += 1
+                                except Exception as item_error:
+                                    logger.error(f"Error sending carousel item: {item_error}")
+                                    continue
+
+                            if sent_count == 0:
+                                raise Exception("Не удалось загрузить ни одного элемента карусели")
+
+                        else:  # Single post
+                            if info.get('duration', 0) > 150:  # Skip long videos
+                                raise Exception("Видео слишком длинное (более 2.5 минут)")
+
+                            if info.get('ext') in ['mp4', 'mov']:
+                                # Send video
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=info['url'],
+                                    caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                )
+                            else:
+                                # Send photo
+                                await bot.send_photo(
+                                    chat_id=message.chat.id,
+                                    photo=info['url'],
+                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                )
+
+                    except Exception as e:
+                        logger.error(f"Error in primary method: {e}")
+                        # Fallback method - download and send
+                        try:
+                            await progress_msg.edit_text("🔄 Пробую альтернативный метод загрузки...")
+
+                            # Download the content
+                            info = ydl.extract_info(url, download=True)
+                            file_path = ydl.prepare_filename(info)
+
+                            if os.path.exists(file_path):
+                                try:
+                                    # Determine content type and send
+                                    if info.get('ext') in ['mp4', 'mov']:
+                                        await bot.send_video(
+                                            chat_id=message.chat.id,
+                                            video=FSInputFile(file_path),
+                                            caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                        )
+                                    else:
+                                        await bot.send_photo(
+                                            chat_id=message.chat.id,
+                                            photo=FSInputFile(file_path),
+                                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                        )
+                                finally:
+                                    # Clean up downloaded file
+                                    if os.path.exists(file_path):
+                                        os.remove(file_path)
+                            else:
+                                raise FileNotFoundError("Файл не найден после загрузки")
+
+                        except Exception as fallback_error:
+                            logger.error(f"Fallback method failed: {fallback_error}")
+                            raise Exception("Не удалось загрузить контент")
+
+            # Run download and processing in thread pool
+            await asyncio.get_event_loop().run_in_executor(executor, lambda: asyncio.run(download_and_process()))
+
+            # Success - delete progress message
+            await progress_msg.delete()
+
+        except Exception as e:
+            error_message = str(e)
+            if "Видео слишком длинное" in error_message:
+                await progress_msg.edit_text("❌ Видео слишком длинное для загрузки")
+            elif "login" in error_message.lower():
+                await progress_msg.edit_text("❌ Этот контент доступен только для авторизованных пользователей")
+            else:
+                await progress_msg.edit_text("❌ Не удалось загрузить контент. Возможно, он недоступен или защищен.")
+            logger.error(f"Instagram download error: {error_message}")
+
+    except Exception as e:
+        logger.error(f"Instagram handler error: {str(e)}")
+        if 'progress_msg' in locals():
+            await progress_msg.edit_text("❌ Произошла ошибка при обработке запроса")
+        else:
+            await message.answer("❌ Произошла ошибка при обработке запроса")
+
+
+# Handler registration
+@client_bot_router.message()
+async def instagram_handler(message: Message, bot):
+    """Handler for Instagram links"""
+    url = message.text
+    if 'instagram.com' in url or 'instagr.am' in url:
+        await handle_instagram(message, url, bot)
