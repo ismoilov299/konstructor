@@ -991,7 +991,6 @@ async def instagram_handler(message: Message, bot):
         await handle_instagram(message, url, me, bot)
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
-    """Video yuklab olish va yuborish uchun yordamchi funksiya"""
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -1003,10 +1002,11 @@ async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me
                     await bot.send_video(
                         chat_id=message.chat.id,
                         video=video,
-                        caption=f"📹 {platform} video\nСкачано через @{me.username}",
+                        caption=f"📹 {info.get('title', 'Video')} (Низкое качество)\nСкачано через @{me.username}",
                         supports_streaming=True
                     )
                 finally:
+                    # Всегда удаляем файл после отправки
                     if os.path.exists(video_path):
                         os.remove(video_path)
             else:
@@ -1015,6 +1015,7 @@ async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me
     except Exception as e:
         logger.error(f"Error downloading and sending video from {platform}: {e}")
         await message.answer(f"❌ Не удалось скачать видео из {platform}")
+
 
 async def handle_tiktok(message: Message, url: str, me, bot: Bot):
     """TikTok video downloader handler"""
