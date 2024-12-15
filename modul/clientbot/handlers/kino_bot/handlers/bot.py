@@ -599,8 +599,11 @@ def get_best_formats(formats):
 
     # Filter and find best formats
     for f in formats:
-        if f.get('ext') == 'mp4' and f.get('height', 0) <= 720:  # Increased max height to 720p
+        if f.get('ext') == 'mp4' and f.get('height', 0) <= 720:
             height = f.get('height', 0)
+            if height <= 0:  # Skip invalid heights
+                continue
+
             filesize = f.get('filesize', float('inf'))
 
             # Only keep formats with better quality or smaller size
@@ -649,7 +652,6 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot):
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
     try:
-        # Optimized options for faster extraction
         base_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -667,17 +669,16 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot):
             formats = info.get('formats', [])
             title = info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')
 
-            # Get optimized formats
             video_formats, audio_format = get_best_formats(formats)
-
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
-            # Add video formats
-            for fmt in video_formats:
+            # Add video formats (sorted by quality)
+            for fmt in sorted(video_formats, key=lambda x: int(x['quality'].rstrip('p')), reverse=True):
                 valid_formats.append(fmt)
                 builder.button(
-                    text=f"🎥 {fmt['quality']} ({fmt['filesize'] // 1024 // 1024}MB)" if 'filesize' in fmt else f"🎥 {fmt['quality']}",
+                    text=f"🎥 {fmt['quality']}" + (
+                        f" ({fmt['filesize'] // 1024 // 1024}MB)" if fmt.get('filesize') else ""),
                     callback_data=FormatCallback(
                         format_id=fmt['format_id'],
                         type='video',
@@ -690,7 +691,8 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot):
             if audio_format:
                 valid_formats.append(audio_format)
                 builder.button(
-                    text=f"🎵 Аудио ({audio_format['filesize'] // 1024 // 1024}MB)" if 'filesize' in audio_format else "🎵 Аудио",
+                    text=f"🎵 Аудио" + (
+                        f" ({audio_format['filesize'] // 1024 // 1024}MB)" if audio_format.get('filesize') else ""),
                     callback_data=FormatCallback(
                         format_id=audio_format['format_id'],
                         type='audio',
@@ -705,7 +707,7 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot):
                 await state.update_data(url=url, formats=valid_formats, title=title)
                 await status_message.edit_text(
                     f"🎥 {title}\n\n"
-                    f"Выберите формат (размер указан в МБ):",
+                    f"Выберите формат:",
                     reply_markup=builder.as_markup()
                 )
             else:
@@ -720,6 +722,8 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot):
 async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext, bot):
     """Optimized format download handler"""
     try:
+        # Remove inline keyboard
+        await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("⏳ Начинаю загрузку...")
 
         data = await state.get_data()
@@ -750,9 +754,11 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             await progress_msg.edit_text("📤 Отправляю файл...")
 
             try:
+                me = await bot.get_me()
                 caption = f"🎥 {title}"
                 if callback_data.type == 'video':
                     caption += f" ({callback_data.quality})"
+                caption += f"\nСкачано через @{me.username}"
 
                 if callback_data.type == 'video':
                     await bot.send_video(
