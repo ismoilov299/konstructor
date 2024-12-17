@@ -661,6 +661,21 @@
     <script>
     document.addEventListener("DOMContentLoaded", function () {
         // Открытие модального окна с настройками бота
+        document.getElementById('openModalBtn').addEventListener('click', function () {
+        const modal = document.getElementById('custom-botSettingsModal');
+
+        // Очищаем поля модального окна, если нужно
+        document.getElementById('custom-botToken').value = '';
+        document.getElementById('custom-module').value = '';
+
+        // Устанавливаем дефолтный статус кнопок
+        const disableBtn = document.getElementById('custom-disableBtn');
+        disableBtn.textContent = 'Выключить';
+        disableBtn.setAttribute('data-status', 'on');
+
+        // Показываем модальное окно
+        modal.style.display = 'flex';
+        });
         document.querySelectorAll('.bot-item').forEach(item => {
             item.addEventListener('click', function () {
                 const botId = this.getAttribute('data-bot-id');
