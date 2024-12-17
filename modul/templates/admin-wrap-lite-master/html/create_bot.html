@@ -565,7 +565,7 @@
                     enctype="multipart/form-data">
                     {% csrf_token %}
                     <label for="custom-botToken">Ваш токен</label>
-                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}" >
+                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}" readonly>
 
                     <label for="custom-module">Модуль заработка</label>
                     <select id="custom-module" name="module" >
@@ -676,6 +676,32 @@
         // Показываем модальное окно
         modal.style.display = 'flex';
         });
+          document.getElementById("custom-saveSettingsBtn").addEventListener("click", function (event) {
+        event.preventDefault(); // Предотвращаем перезагрузку формы
+        const form = document.getElementById("custom-botSettingsForm");
+        const formData = new FormData(form);
+
+        fetch(form.action, {
+            method: "POST",
+            body: formData,
+            headers: {
+                'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Настройки успешно сохранены!');
+                document.getElementById('custom-botSettingsModal').style.display = 'none'; // Закрываем окно
+            } else {
+                alert('Произошла ошибка при сохранении настроек.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Ошибка сети или сервера.');
+        });
+    });
         document.querySelectorAll('.bot-item').forEach(item => {
             item.addEventListener('click', function () {
                 const botId = this.getAttribute('data-bot-id');
