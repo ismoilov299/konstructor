@@ -565,7 +565,7 @@
                     enctype="multipart/form-data">
                     {% csrf_token %}
                     <label for="custom-botToken">Ваш токен</label>
-                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}" >
+                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}" readonly>
 
                     <label for="custom-module">Модуль заработка</label>
                     <select id="custom-module" name="module" >
@@ -678,7 +678,7 @@
         });
           document.getElementById("custom-saveSettingsBtn").addEventListener("click", function (event) {
         event.preventDefault(); // Предотвращаем перезагрузку формы
-        const form = document.getElementById("custom-botSettingsForm");
+<!--        const form = document.getElementById("custom-botSettingsForm");-->
         const formData = new FormData(form);
 
         fetch(form.action, {
@@ -741,30 +741,55 @@
             }
         });
 
-        // Обработка отправки формы сохранения настроек
-        document.getElementById("custom-botSettingsForm").addEventListener("submit", function (event) {
-            event.preventDefault();
-            const form = this;
-            const formData = new FormData(form);
 
-            fetch(form.action, {
-                method: "POST",
-                body: formData,
-                headers: {
-                    'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    alert('Настройки успешно сохранены!');
-                    window.location.reload();
-                } else {
-                    alert('Произошла ошибка при сохранении настроек.');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
+
+        // Обработка отправки формы сохранения настроек
+<!--        document.getElementById("custom-botSettingsForm").addEventListener("submit", function (event) {-->
+<!--            event.preventDefault();-->
+<!--            const form = this;-->
+<!--            const formData = new FormData(form);-->
+
+<!--            fetch(form.action, {-->
+<!--                method: "POST",-->
+<!--                body: formData,-->
+<!--                headers: {-->
+<!--                    'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value-->
+<!--                }-->
+<!--            })-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                if (data.status === 'success') {-->
+<!--                    alert('Настройки успешно сохранены!');-->
+<!--                    window.location.reload();-->
+<!--                } else {-->
+<!--                    alert('Произошла ошибка при сохранении настроек.');-->
+<!--                }-->
+<!--            })-->
+<!--            .catch(error => console.error('Error:', error));-->
+<!--        });-->
+            $(document).ready(function () {
+                $('#custom-botSettingsForm').on('submit', function (e) {
+                    e.preventDefault();
+                    var form = $(this);
+                    var formData = $(this).serialize();
+                    $.ajax({
+                        url: $(this).attr('action'),
+                        type: 'POST',
+                        data: formData,
+                        success: function (response) {
+                            if (response.status === 'success') {
+                                form.find('#custom-module').val(response.module);
+                                window.location.reload(false);
+                            } else {
+                                window.location.reload(false);
+                            }
+                        },
+                        error: function () {
+                            window.location.reload(false);
+                        }
+                    });
+                });
+            });
 
         // Обработка кнопки включения/выключения бота
         document.getElementById("custom-disableBtn").addEventListener("click", function () {
