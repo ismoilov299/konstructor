@@ -314,26 +314,43 @@ def toggle_bot(request):
 
 @login_required
 @csrf_exempt
-@require_POST
 def delete_bot(request):
-    bot_token = request.POST.get('bot_token')
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8'))  # Получаем JSON-данные
+            bot_token = data.get('bot_token')
 
-    bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
+            if not bot_token:
+                return JsonResponse({'status': 'error', 'message': 'Токен бота не предоставлен.'})
 
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        response = loop.run_until_complete(delete_webhook_async(bot_token))
-        loop.close()
+            # Найти и удалить бота
+            bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
 
-        if response.get('ok'):
-            bot.delete()
-            return JsonResponse({'status': 'success', 'message': 'Бот успешно удален'})
-        else:
-            return JsonResponse(
-                {'status': 'error', 'message': f'Ошибка при удалении вебхука: {response.get("description")}'})
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'Ошибка при удалении бота: {str(e)}'})
+            # Асинхронное удаление вебхука
+            async def delete_webhook_async(token):
+                import aiohttp
+                telegram_url = f"https://api.telegram.org/bot{token}/deleteWebhook"
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(telegram_url) as response:
+                        return await response.json()
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response = loop.run_until_complete(delete_webhook_async(bot_token))
+            loop.close()
+
+            if response.get('ok'):
+                bot.delete()
+                return JsonResponse({'status': 'success', 'message': 'Бот успешно удален'})
+            else:
+                return JsonResponse({'status': 'error', 'message': f'Ошибка при удалении вебхука: {response.get("description")}'})
+
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Ошибка декодирования JSON.'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Произошла ошибка: {str(e)}'})
+
+    return JsonResponse({'status': 'error', 'message': 'Используйте метод POST.'})
 
 
 User = get_user_model()
