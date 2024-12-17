@@ -579,7 +579,7 @@
                     </select>
 
                     <div class="custom-button-group">
-                        <button onclick="deleteBot('{{ bot.token }}')">Удалить</button>
+                        <button type="button" id="custom-archiveBtn" data-token="">Удалить</button>
                         <button type="button" id="custom-disableBtn"></button>
                         <button type="submit" id="custom-saveSettingsBtn">Сохранить настройки</button>
                     </div>
@@ -755,29 +755,7 @@
         });
 
         // Обработка кнопки удаления бота
-        function deleteBot(botToken) {
-        fetch('/delete_bot/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',  // Добавляем CSRF-токен
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ bot_token: botToken })  // Передаём bot_token
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                alert('Бот успешно удален');
-                location.reload();  // Перезагрузка страницы
-            } else {
-                alert('Ошибка: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Ошибка при удалении бота:', error);
-            alert('Произошла ошибка при удалении бота');
-        });
-    }
+
         document.getElementById("custom-archiveBtn").addEventListener("click", function () {
             const button = this;
             const token = button.getAttribute('data-token');
