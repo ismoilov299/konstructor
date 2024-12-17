@@ -659,226 +659,130 @@
 
     <script src="{% static 'assets/node_modules/jquery/jquery.min.js'%}"></script>
     <script>
-        document.addEventListener("DOMContentLoaded", function () {
-        // Получаем элементы
-        const openModalBtn = document.getElementById('openModalBtn');
-        const modal = document.getElementById('myModal');
-        const closeModalBtn = document.getElementById('closeModalBtn');
-
-        // Открываем модальное окно при нажатии на кнопку
-        openModalBtn.addEventListener('click', () => {
-            modal.style.display = 'flex';
-        });
-
-        // Закрываем модальное окно при нажатии на кнопку закрытия
-        closeModalBtn.addEventListener('click', () => {
-            modal.style.display = 'none';
-        });
-
-        // Закрываем модальное окно при клике вне его содержимого
-        window.addEventListener('click', (event) => {
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        });
-
-    });
-        // scripts.js
-
-        document.addEventListener("DOMContentLoaded", function () {
-        // Add click event to bot items
+    document.addEventListener("DOMContentLoaded", function () {
+        // Открытие модального окна с настройками бота
         document.querySelectorAll('.bot-item').forEach(item => {
-            item.addEventListener('click', function() {
+            item.addEventListener('click', function () {
                 const botId = this.getAttribute('data-bot-id');
+
                 fetch(`/get_bot_info/${botId}/`)
                     .then(response => response.json())
                     .then(data => {
-                        // Get modal elements
                         const modal = document.getElementById('custom-botSettingsModal');
-                        const tokenInput = document.getElementById('custom-botToken');
-                        const moduleSelect = document.getElementById('custom-module');
+                        document.getElementById('custom-botToken').value = data.token;
+                        document.getElementById('custom-module').value = data.module;
+
+                        // Установка кнопок
                         const disableBtn = document.getElementById('custom-disableBtn');
-                        const archiveBtn = document.getElementById('custom-archiveBtn');
-
-                        // Populate form with bot data
-                        tokenInput.value = data.token;
-                        moduleSelect.value = data.module;
-
-                        // Change button text based on bot status
                         disableBtn.textContent = data.is_enabled ? 'Выключить' : 'Включить';
+                        disableBtn.setAttribute('data-token', data.token);
+                        disableBtn.setAttribute('data-status', data.is_enabled ? 'on' : 'off');
 
-                        // Save token to delete button
-                        archiveBtn.setAttribute('data-token', data.token);
+                        document.getElementById('custom-archiveBtn').setAttribute('data-token', data.token);
 
-                        // Show modal
+                        // Показ модального окна
                         modal.style.display = 'flex';
                     })
                     .catch(error => console.error('Error:', error));
             });
         });
 
-        // Close modal functions
-        document.querySelector('.custom-close').onclick = function() {
+        // Закрытие модального окна при клике на "x"
+        document.querySelector('.custom-close').onclick = function () {
             document.getElementById('custom-botSettingsModal').style.display = 'none';
-        }
+        };
 
-        // Close modal when clicking outside
-        window.addEventListener('click', function(event) {
+        // Закрытие модального окна при клике вне его
+        window.addEventListener('click', function (event) {
             const modal = document.getElementById('custom-botSettingsModal');
             if (event.target == modal) {
                 modal.style.display = 'none';
             }
         });
-    });
-    fetch(`/get_bot_info/${botToken}`)
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('custom-botToken').value = data.token;
 
-            document.getElementById('custom-disableBtn').textContent = data.is_enabled ? 'Выключить' : 'Включить';
-            document.getElementById('custom-archiveBtn').setAttribute('data-token', data.token);
+        // Обработка отправки формы сохранения настроек
+        document.getElementById("custom-botSettingsForm").addEventListener("submit", function (event) {
+            event.preventDefault();
+            const form = this;
+            const formData = new FormData(form);
 
-            const moduleSelect = document.getElementById('custom-module');
-        moduleSelect.value = data.module;
-
-            document.getElementById('custom-botSettingsModal').style.display = 'flex';
-        })
-        .catch(error => console.error('Error:', error));
-
-    document.querySelectorAll('.bot-item').forEach(item => {
-    item.addEventListener('click', function() {
-        openBotSettingsModal(this.getAttribute('data-bot-id'));
-    });
-});
-
-
-
-
-            // Закрытие модального окна при нажатии на "x"
-            closeModalSpan.onclick = function () {
-                modal.style.display = "none";
-            }
-
-            // Закрытие модального окна при клике вне его
-            window.onclick = function (event) {
-                if (event.target == modal) {
-                    modal.style.display = "none";
-                }
-            }
-
-            // Обработка отправки формы
-            document.getElementById("custom-botSettingsForm").addEventListener("submit", function (event) {
-                event.preventDefault();
-
-                // Получаем данные формы
-                var formData = new FormData(this);
-
-                // Здесь можно добавить логику отправки данных на сервер или обработки
-
-                // Закрытие модального окна
-                modal.style.display = "none";
-            });
-
-            // Дополнительные действия на кнопки, если нужно
-            document.getElementById("custom-archiveBtn").onclick = function () {
-                modal.style.display = "none";
-            }
-
-            document.getElementById("custom-disableBtn").onclick = function () {
-                modal.style.display = "none";
-            }
-
-
-
-
-
-        $(document).ready(function () {
-            $('#custom-botSettingsForm').on('submit', function (e) {
-                e.preventDefault();
-                var form = $(this);
-                var formData = $(this).serialize();
-                $.ajax({
-                    url: $(this).attr('action'),
-                    type: 'POST',
-                    data: formData,
-                    success: function (response) {
-                        if (response.status === 'success') {
-                            form.find('#custom-module').val(response.module);
-                            window.location.reload(false);
-                        } else {
-                            window.location.reload(false);
-                        }
-                    },
-                    error: function () {
-                        window.location.reload(false);
-                    }
-                });
-            });
-            $('.custom-button-group').on('click', '#custom-disableBtn', function () {
-                var button = $(this);
-                var token = button.data('token');
-                var currentStatus = button.data('status');
-                var action = currentStatus === 'on' ? 'off' : 'on';
-
-                $.ajax({
-                    url: '{% url "toggle_bot" %}',
-                    type: 'POST',
-                    data: {
-                        bot_token: token,
-                        action: action
-                    },
-                    success: function (response) {
-                        if (response.status === 'success') {
-                            window.location.reload(false);
-                            if (response.new_status === 'on') {
-                                button.text('Выключить');
-                                button.data('status', 'on');
-                            } else {
-                                button.text('Включить');
-                                button.data('status', 'off');
-                            }
-                            // Обновляем статус бота на странице
-                            button.closest('form').find('.bot-status').text(response.new_status === 'on' ? 'Включен' : 'Отключен');
-                        } else {
-                            window.location.reload(true);
-                        }
-                    },
-                    error: function () {
-                       window.location.reload(false);
-                    }
-                });
-            });
-
-            $('.custom-button-group').on('click', '#custom-archiveBtn', function () {
-                var button = $(this);
-                var token = button.data('token');
-
-                if (confirm('Вы уверены, что хотите удалить этого бота?')) {
-                    $.ajax({
-                        url: '{% url "delete_bot" %}',
-                        type: 'POST',
-                        data: {
-                            bot_token: token
-                        },
-                        success: function (response) {
-                            if (response.status === 'success') {
-                                window.location.reload(false);
-                                // Удаляем форму бота со страницы
-                                button.closest('form').remove();
-                            } else {
-                               window.location.reload(true);
-                            }
-                        },
-                        error: function () {
-                            window.location.reload(true);
-                        }
-                    });
+            fetch(form.action, {
+                method: "POST",
+                body: formData,
+                headers: {
+                    'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
                 }
             })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Настройки успешно сохранены!');
+                    window.location.reload();
+                } else {
+                    alert('Произошла ошибка при сохранении настроек.');
+                }
+            })
+            .catch(error => console.error('Error:', error));
         });
 
+        // Обработка кнопки включения/выключения бота
+        document.getElementById("custom-disableBtn").addEventListener("click", function () {
+            const button = this;
+            const token = button.getAttribute('data-token');
+            const currentStatus = button.getAttribute('data-status');
+            const action = currentStatus === 'on' ? 'off' : 'on';
 
-    </script>
+            fetch('{% url "toggle_bot" %}', {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ bot_token: token, action: action })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    button.textContent = action === 'on' ? 'Выключить' : 'Включить';
+                    button.setAttribute('data-status', action);
+                    alert('Статус бота обновлён.');
+                    window.location.reload();
+                } else {
+                    alert('Ошибка при обновлении статуса бота.');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        // Обработка кнопки удаления бота
+        document.getElementById("custom-archiveBtn").addEventListener("click", function () {
+            const button = this;
+            const token = button.getAttribute('data-token');
+
+            if (confirm('Вы уверены, что хотите удалить этого бота?')) {
+                fetch('{% url "delete_bot" %}', {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ bot_token: token })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Бот успешно удалён.');
+                        window.location.reload();
+                    } else {
+                        alert('Ошибка при удалении бота.');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        });
+    });
+</script>
+
 
     <!-- ============================================================== -->
     <!-- End Wrapper -->
