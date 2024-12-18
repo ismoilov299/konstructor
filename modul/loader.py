@@ -4,7 +4,7 @@ from aiogram import Router, Bot, Dispatcher
 bot_session = AiohttpSession()
 # from shazamio import Shazam
 
-main_bot = Bot(token="6746881064:AAEkmJuIEaTc8ENXZa1ntB9nwVwOqnG58gQ", session=bot_session)
+main_bot = Bot(token="6746881064:AAFeVCH1odRrxqqHLkBKvW39wABT3PO37-w", session=bot_session)
 dp = Dispatcher()
 
 client_bot_router = Router()
