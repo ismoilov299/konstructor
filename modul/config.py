@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     WEBHOOK_PATH: str = "bot/webhook/{token}"
     WEBHOOK_URL: str = 'https://f7d7-35-202-195-251.ngrok-free.app/bot/webhook/{token}/'
 
-    BOT_TOKEN: str = '7400666200:AAE0q92yJUwJ-FVdAq88HK2HBjo7vOqX3_0'
+    BOT_TOKEN: str = '6746881064:AAFeVCH1odRrxqqHLkBKvW39wABT3PO37-w'
     # ERROR_CHANNEL: str
     ADMIN: int = 889121031
     # ADMIN_LIST = [ADMIN, 302942780]
