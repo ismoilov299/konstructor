@@ -565,7 +565,7 @@
                     enctype="multipart/form-data">
                     {% csrf_token %}
                     <label for="custom-botToken">Ваш токен</label>
-                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}" readonly>
+                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}">
 
                     <label for="custom-module">Модуль заработка</label>
                     <select id="custom-module" name="module" >
