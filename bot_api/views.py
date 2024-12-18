@@ -37,7 +37,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-def setup_routers():
+async def setup_routers():
     logger.info("Setting up routers")
     if not hasattr(dp, 'routers_setup'):
         try:
@@ -47,7 +47,6 @@ def setup_routers():
 
             # Handler'larni sozlash
             chat_gpt_bot_handlers()
-            # start_bot_client()
             admin_panel()
             init_bot_handlers()
             anon_bot_handlers()
@@ -105,6 +104,7 @@ def telegram_webhook(request, token):
     return HttpResponse(status=200)
 
 
+
 async def feed_update(token, update):
     # logger.info(f"Received update: {update}")
     start_time = time.time()
@@ -136,7 +136,7 @@ async def startup():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        setup_routers()
+        await setup_routers()  # To'g'ridan-to'g'ri await qilamiz
         await set_webhook()
         logger.info("Application startup completed")
     except Exception as e:

@@ -71,7 +71,7 @@ def get_bot(bot: Bot):
 
 @sync_to_async
 def get_bot_by_token(token: str):
-    return models.Bot.objects.filter(token=token).first()
+    return models.Bot.objects.filter(token=token).select_related('owner').first()
 
 
 @sync_to_async
