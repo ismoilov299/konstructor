@@ -111,33 +111,42 @@ def create_bot(request):
         raise e
 
 
-def get_bot_info(request, id):
+@login_required
+def get_bot_info(request, bot_id):
     try:
-        bot = Bot.objects.get(owner=request.user, id=id)
+        bot = get_object_or_404(Bot, id=bot_id, owner=request.user)
 
-        module = "no_module"
-        if bot.enable_leo:
-            module = 'leo'
-        elif bot.enable_refs:
-            module = 'refs'
-        elif bot.enable_kino:
-            module = 'kino'
-        elif bot.enable_chatgpt:
-            module = 'chatgpt'
-        elif bot.enable_anon:
-            module = 'anon'
-        elif bot.enable_download:
-            module = 'download'
-
-        bot_info = {
-            'token': bot.token,
-            'module': module,
-            'is_enabled': bot.bot_enable,
-            'username': bot.username
+        # Get active module
+        module_mapping = {
+            'enable_leo': 'leo',
+            'enable_refs': 'refs',
+            'enable_kino': 'kino',
+            'enable_download': 'download',
+            'enable_anon': 'anon',
+            'enable_chatgpt': 'chatgpt',
+            'enable_music': 'music',
+            'enable_sms': 'sms',
+            'enable_horoscope': 'horoscope'
         }
-        return JsonResponse(bot_info)
-    except Bot.DoesNotExist:
-        return JsonResponse({'error': 'Bot not found'}, status=404)
+
+        active_module = 'no_module'
+        for model_field, frontend_value in module_mapping.items():
+            if getattr(bot, model_field):
+                active_module = frontend_value
+                break
+
+        return JsonResponse({
+            'status': 'success',
+            'token': bot.token,
+            'username': bot.username,
+            'is_enabled': bot.bot_enable,
+            'module': active_module
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
 
 
 def error_404(request):
@@ -267,90 +276,60 @@ async def delete_webhook_async(token):
 
 
 @login_required
-@csrf_exempt
 @require_POST
 def toggle_bot(request):
-    bot_token = request.POST.get('bot_token')
-    action = request.POST.get('action')  # 'on' или 'off'
+    try:
+        data = json.loads(request.body)
+        bot_token = data.get('bot_token')
+        action = data.get('action')
 
-    bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
+        if not bot_token or action not in ['on', 'off']:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Неверные параметры'
+            })
 
-    if action == 'on':
-        url = settings_conf.WEBHOOK_URL.format(token=bot_token)
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(set_webhook_async(bot_token, url))
-            loop.close()
+        bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
+        bot.bot_enable = (action == 'on')
+        bot.save()
 
-            if response.get('ok'):
-                bot.bot_enable = True
-                bot.save()
-                return JsonResponse({'status': 'success', 'message': 'Бот включен', 'new_status': 'on'})
-            else:
-                return JsonResponse(
-                    {'status': 'error', 'message': f'Ошибка при включении бота: {response.get("description")}'})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Ошибка при включении бота: {str(e)}'})
-    elif action == 'off':
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(delete_webhook_async(bot_token))
-            loop.close()
+        send_message_to_restart(bot_token, request.user.uid)
 
-            if response.get('ok'):
-                bot.bot_enable = False
-                bot.save()
-                return JsonResponse({'status': 'success', 'message': 'Бот выключен', 'new_status': 'off'})
-            else:
-                return JsonResponse(
-                    {'status': 'error', 'message': f'Ошибка при выключении бота: {response.get("description")}'})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Ошибка при выключении бота: {str(e)}'})
-    else:
-        return JsonResponse({'status': 'error', 'message': 'Неверное действие. Попробуйте ещё раз'})
+        return JsonResponse({
+            'status': 'success',
+            'is_enabled': bot.bot_enable
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
 
 
 @login_required
-@csrf_exempt
+@require_POST
 def delete_bot(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body.decode('utf-8'))  # Получаем JSON-данные
-            bot_token = data.get('bot_token')
+    try:
+        data = json.loads(request.body)
+        bot_token = data.get('bot_token')
 
-            if not bot_token:
-                return JsonResponse({'status': 'error', 'message': 'Токен бота не предоставлен.'})
+        if not bot_token:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Не указан токен бота'
+            })
 
-            # Найти и удалить бота
-            bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
+        bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
+        bot.delete()
 
-            # Асинхронное удаление вебхука
-            async def delete_webhook_async(token):
-                import aiohttp
-                telegram_url = f"https://api.telegram.org/bot{token}/deleteWebhook"
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(telegram_url) as response:
-                        return await response.json()
-
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(delete_webhook_async(bot_token))
-            loop.close()
-
-            if response.get('ok'):
-                bot.delete()
-                return JsonResponse({'status': 'success', 'message': 'Бот успешно удален'})
-            else:
-                return JsonResponse({'status': 'error', 'message': f'Ошибка при удалении вебхука: {response.get("description")}'})
-
-        except json.JSONDecodeError:
-            return JsonResponse({'status': 'error', 'message': 'Ошибка декодирования JSON.'})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': f'Произошла ошибка: {str(e)}'})
-
-    return JsonResponse({'status': 'error', 'message': 'Используйте метод POST.'})
+        return JsonResponse({
+            'status': 'success'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
 
 
 User = get_user_model()
@@ -403,46 +382,71 @@ def send_message_to_restart(bot_token, owner_id):
 
 
 @login_required
-@csrf_exempt
 @require_POST
 def update_bot_settings(request):
-    if request.method == 'POST':
+    try:
         bot_token = request.POST.get('bot_token')
         module = request.POST.get('module')
 
+        if not bot_token or not module:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Не указан токен бота или модуль'
+            })
+
         bot = get_object_or_404(Bot, token=bot_token, owner=request.user)
 
-        # Обновляем настройки бота в зависимости от выбранного модуля
+        # Reset all module flags
+        module_flags = [
+            'enable_music', 'enable_download', 'enable_leo',
+            'enable_chatgpt', 'enable_horoscope', 'enable_anon',
+            'enable_sms', 'enable_refs', 'enable_kino'
+        ]
 
-        enable_module = f'enable_{module}'
-        print(enable_module)
-        bot.enable_music = False
-        bot.enable_download = False
-        bot.enable_leo = False
-        bot.enable_chatgpt = False
-        bot.enable_horoscope = False
-        bot.enable_anon = False
-        bot.enable_sms = False
-        bot.enable_refs = False
-        bot.enable_kino = False
+        for flag in module_flags:
+            setattr(bot, flag, False)
 
-        if not hasattr(bot, enable_module):
-            bot.save()
-            print(bot, "no module")
-            return JsonResponse({'status': 'error', 'message': 'Нет модуля'})
+        # Map frontend module values to model fields
+        module_mapping = {
+            'leo': 'enable_leo',
+            'refs': 'enable_refs',
+            'kino': 'enable_kino',
+            'download': 'enable_download',
+            'anon': 'enable_anon',
+            'chatgpt': 'enable_chatgpt',
+            'music': 'enable_music',
+            'sms': 'enable_sms',
+            'horoscope': 'enable_horoscope'
+        }
 
-        if hasattr(bot, enable_module):
-            setattr(bot, enable_module, not getattr(bot, enable_module))
-            bot.save()
-            send_message_to_restart(bot_token, request.user.uid)
+        if module != 'no_module':
+            module_field = module_mapping.get(module)
+            if module_field:
+                setattr(bot, module_field, True)
+            else:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Неизвестный модуль'
+                })
 
-            new_state = getattr(bot, enable_module)
-            print(bot, new_state)
-            return JsonResponse({'status': 'success', 'enabled': new_state, "module": module})
-        else:
-            return JsonResponse({'status': 'error', 'message': 'Неверный модуль'}, status=400)
+        bot.save()
+        send_message_to_restart(bot_token, request.user.uid)
 
-    return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)
+        return JsonResponse({
+            'status': 'success',
+            'module': module
+        })
+
+    except Bot.DoesNotExist:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Бот не найден'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
 
 
 def statistics_view(request):
