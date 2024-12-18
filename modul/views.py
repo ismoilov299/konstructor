@@ -112,9 +112,9 @@ def create_bot(request):
 
 
 @login_required
-def get_bot_info(request, bot_id):
+def get_bot_info(request, id):
     try:
-        bot = get_object_or_404(Bot, id=bot_id, owner=request.user)
+        bot = get_object_or_404(Bot, id=id, owner=request.user)
 
         # Get active module
         module_mapping = {
