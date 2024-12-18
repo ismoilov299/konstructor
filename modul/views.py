@@ -217,7 +217,7 @@ def save_token(request):
             bot_username = get_bot_username(token)
             url = settings_conf.WEBHOOK_URL.format(token=token)
 
-            # Create Bot object with selected module
+            # Bot obyektini yaratamiz, lekin hali saqlamaymiz
             bot = Bot(
                 token=token,
                 owner=request.user,
@@ -230,38 +230,50 @@ def save_token(request):
                 enable_chatgpt=module == 'chatgpt',
             )
 
-            # Установка вебхука
             try:
+                # Webhook o'rnatish
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 response = loop.run_until_complete(set_webhook_async(token, url))
                 loop.close()
 
                 if response.get('ok'):
+                    # Webhook muvaffaqiyatli o'rnatilgandan keyin botni saqlaymiz
                     bot.save()
                     logger.info(f"Bot token {token} saved successfully with webhook {url}.")
-                    print(f"Bot token {token} saved successfully with webhook {url}.")
-                    return redirect('create_bot')
+                    # AJAX so'rov uchun JsonResponse qaytaramiz
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': 'Bot successfully created'
+                    })
                 else:
-                    bot.delete()
                     error_message = response.get('description', 'Unknown error occurred')
                     logger.error(f"Error setting webhook for bot {bot_username}: {error_message}")
-                    return JsonResponse({'status': 'error', 'message': f"Failed to set webhook: {error_message}"})
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': f"Failed to set webhook: {error_message}"
+                    })
 
             except Exception as e:
-                bot.delete()  # Удаляем запись, если не удалось установить вебхук
                 logger.error(f"Error setting webhook for bot {bot_username}: {e}")
-                return JsonResponse({'status': 'error', 'message': f"Failed to set webhook: {str(e)}"})
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f"Failed to set webhook: {str(e)}"
+                })
 
         except ValidationError as e:
             logger.error(f"Invalid token {token}: {e}")
-            return JsonResponse({'status': 'error', 'message': f"Invalid token: {str(e)}"})
+            return JsonResponse({
+                'status': 'error',
+                'message': f"Invalid token: {str(e)}"
+            })
 
-    else:
-        logger.error(f"Invalid form submission: {form.errors}")
-        return JsonResponse({'status': 'error', 'message': 'Invalid form submission.', 'errors': form.errors})
-
-    return HttpResponseBadRequest("Invalid request method. Use POST.")
+    logger.error(f"Invalid form submission: {form.errors}")
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Invalid form data',
+        'errors': form.errors
+    })
 
 
 async def delete_webhook_async(token):
