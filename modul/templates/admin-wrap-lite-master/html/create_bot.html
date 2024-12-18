@@ -1,26 +1,47 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- Tell the browser to be responsive to screen width -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="keywords"
+        content="wrappixel, admin dashboard, html css dashboard, web dashboard, bootstrap 5 admin, bootstrap 5, css3 dashboard, bootstrap 5 dashboard, AdminWrap lite admin bootstrap 5 dashboard, frontend, responsive bootstrap 5 admin template, AdminWrap lite design, AdminWrap lite dashboard bootstrap 5 dashboard template">
+    <meta name="description"
+        content="AdminWrap Lite is powerful and clean admin dashboard template, inpired from Bootstrap Framework">
+    <meta name="robots" content="noindex,nofollow">
     <title>DxBot.ru</title>
+    <link rel="canonical" href="https://www.wrappixel.com/templates/adminwrap-lite/" />
+    <!-- Favicon icon -->
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'assets/images/favicon.png'%}">
     <link href="{% static 'assets/node_modules/bootstrap/css/bootstrap.min.css'%}" rel="stylesheet">
     <link href="{% static 'assets/node_modules/perfect-scrollbar/css/perfect-scrollbar.css'%}" rel="stylesheet">
+    <!-- This page CSS -->
+    <!-- chartist CSS -->
     <link href="{% static 'assets/node_modules/morrisjs/morris.css'%}" rel="stylesheet">
+    <!--c3 CSS -->
     <link href="{% static 'assets/node_modules/c3-master/c3.min.css'%}" rel="stylesheet">
+    <!-- Custom CSS -->
     <link href="{% static 'css/style.css'%}" rel="stylesheet">
+    <!-- Dashboard 1 Page CSS -->
     <link href="{% static 'css/pages/dashboard1.css'%}" rel="stylesheet">
+    <!-- You can change the theme colors from here -->
     <link href="{% static 'css/colors/default.css'%}" id="theme" rel="stylesheet">
-
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
     <style>
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }
+
         .section {
             background-color: #ffffff;
             border-radius: 8px;
@@ -28,17 +49,20 @@
             margin-bottom: 20px;
             padding: 20px;
         }
+
         .section h2 {
             margin-top: 0;
             font-size: 18px;
             margin-bottom: 15px;
             color: #333;
         }
+
         .buttons {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
         }
+
         .buttons button {
             display: inline-block;
             padding: 10px 20px;
@@ -51,198 +75,444 @@
             max-width: calc(50% - 20px);
             transition: background-color 0.3s ease;
         }
+
         .buttons button:hover {
             background-color: #0056b3;
         }
-        .custom-modal {
+
+        .modal {
             display: none;
             position: fixed;
-            z-index: 1000;
-            left: 0;
             top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.5);
             justify-content: center;
             align-items: center;
-            overflow-y: auto;
+	    overflow-y: auto;
         }
-        .custom-modal-content {
-            background-color: #fff;
+
+        .modal-content {
+            background-color: #ffffff;
             padding: 30px;
             border-radius: 10px;
-            width: 90%;
             max-width: 500px;
+            width: 90%;
+	    max-height: 90%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             position: relative;
-            margin: 40px auto;
+	    overflow-y: auto;
         }
-        .custom-close {
-            position: absolute;
-            right: 20px;
-            top: 10px;
-            font-size: 24px;
-            cursor: pointer;
-            color: #666;
-        }
-        .custom-close:hover {
-            color: #333;
-        }
-        .bot-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        .bot-item {
+
+        .modal-header {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            padding: 15px;
-            margin-bottom: 10px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            border: 1px solid #e9ecef;
-        }
-        .bot-item:hover {
-            background-color: #e9ecef;
-        }
-        .bot-item img {
-            width: 30px;
-            height: 30px;
-            margin-right: 15px;
-            border-radius: 4px;
-        }
-        .bot-name {
-            font-size: 16px;
-            font-weight: 500;
-            color: #333;
-            flex-grow: 1;
-        }
-        .bot-status {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .bot-status.active {
-            background-color: #28a745;
-            color: white;
-        }
-        .bot-status.inactive {
-            background-color: #dc3545;
-            color: white;
-        }
-        .form-group {
             margin-bottom: 20px;
         }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 24px;
             color: #333;
         }
-        .form-control {
+
+        .modal-header .close-btn {
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            text-align: left;
+        }
+
+        .modal-body p {
+            margin: 10px 0;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .modal-body img {
+            display: block;
+            margin: 0 auto 20px;
+            width: 50px;
+            height: 50px;
+        }
+
+        .modal-body input[type="text"] {
             width: 100%;
             padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .modal-footer {
+            text-align: right;
+        }
+
+        .modal-footer button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .modal-footer button:hover {
+            background-color: #0056b3;
+        }
+
+        .modal-footer a {
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .modal-footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .buttons button {
+                flex: 1 1 100%;
+                max-width: 100%;
+            }
+        }
+
+        .custom-modal {
+            display: none;
+            /* Скрываем по умолчанию */
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .custom-modal-content {
+            background-color: #fff;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .custom-close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .custom-close:hover,
+        .custom-close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        .bot-status {
+            color: green;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            margin-bottom: 15px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            font-size: 14px;
         }
-        .form-control:focus {
-            border-color: #007bff;
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+
+        .custom-checkbox-group {
+            display: flex;
+            flex-direction: column;
         }
+
+        .custom-checkbox-group label {
+            margin-bottom: 5px;
+        }
+
+        .custom-checkbox-group input[type="checkbox"] {
+            margin-right: 10px;
+        }
+
         .custom-button-group {
             display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
             gap: 10px;
-            margin-top: 25px;
+            flex-direction: column;
         }
-        .custom-button-group button {
-            flex: 1;
+
+        button {
             padding: 10px 20px;
             border: none;
             border-radius: 4px;
-            font-weight: 500;
             cursor: pointer;
-            transition: background-color 0.2s;
+            font-size: 16px;
         }
-        #custom-archiveBtn {
-            background-color: #dc3545;
+
+        button#custom-archiveBtn {
+            background-color: #dcdcdc;
+        }
+
+        button#custom-disableBtn {
+            background-color: #ff6b6b;
             color: white;
         }
-        #custom-archiveBtn:hover {
-            background-color: #c82333;
-        }
-        #custom-disableBtn {
-            background-color: #ffc107;
-            color: #000;
-        }
-        #custom-disableBtn:hover {
-            background-color: #e0a800;
-        }
-        #custom-saveSettingsBtn {
-            background-color: #28a745;
+
+        button#custom-saveSettingsBtn {
+            background-color: #3498db;
             color: white;
         }
-        #custom-saveSettingsBtn:hover {
-            background-color: #218838;
+
+        .bot-item {
+            margin-top: 10px;
+        }
+
+         .module-selection {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .module-selection label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .module-selection input[type="radio"] {
+            display: none;
+        }
+
+        .module-selection .radio-custom {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #007bff;
+            border-radius: 50%;
+            margin-right: 10px;
+            position: relative;
+        }
+
+        .module-selection .radio-custom::after {
+            content: '';
+            width: 12px;
+            height: 12px;
+            background-color: #007bff;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .module-selection input[type="radio"]:checked + .radio-custom::after {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        input[type="text"], button[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button[type="submit"] {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        button[type="submit"]:hover {
+            background-color: #0056b3;
         }
     </style>
 </head>
 
 <body class="fix-header card-no-border fix-sidebar">
+    <!-- ============================================================== -->
+    <!-- Preloader - style you can find in spinners.css -->
+    <!-- ============================================================== -->
     <div class="preloader">
         <div class="loader">
             <div class="loader__figure"></div>
-            <p class="loader__label">DxBot.ru</p>
+            <p class="loader__label">Admin Wrap</p>
         </div>
     </div>
-
+    <!-- ============================================================== -->
+    <!-- Main wrapper - style you can find in pages.scss -->
+    <!-- ============================================================== -->
     <div id="main-wrapper">
-        <!-- Header -->
+        <!-- ============================================================== -->
+        <!-- Topbar header - style you can find in pages.scss -->
+        <!-- ============================================================== -->
         <header class="topbar">
             <nav class="navbar top-navbar navbar-expand-md navbar-light">
-                <div class="navbar-header">
-                    <a class="navbar-brand" href="{% url 'main' %}">
-                        <b>
-                            <img src="{% static 'assets/images/logo-icon.png' %}" alt="logo" class="dark-logo">
+                <!-- ============================================================== -->
+                <!-- Logo -->
+                <!-- ============================================================== -->
+                    <div class="navbar-header">
+                <a class="navbar-brand" href="{% url 'main' %}">
+                    <!-- Logo icon -->
+                    <b>
+                            <!--You can put here icon as well // <i class="wi wi-sunset"></i> //-->
+                            <!-- Dark Logo icon -->
+                            <img src="{% static  'assets/images/logo-icon.png'%}" alt="homepage" class="dark-logo" />
+                            <!-- Light Logo icon -->
+                            <img src="{% static  'assets/images/logo-light-icon.png'%}" alt="homepage" class="light-logo" />
                         </b>
-                        <span>
-                            <img src="{% static 'assets/images/logo-text.png' %}" alt="text" class="dark-logo">
-                        </span>
-                    </a>
+                        <!--End Logo icon -->
+                        <!-- Logo text --><span>
+                            <!-- dark Logo text -->
+                            <img src="{% static 'assets/images/logo-text.png' %}" alt="homepage" class="dark-logo" />
+                            <!-- Light Logo text -->
+                            <img src="{% static 'assets/images/logo-light-text.png' %}" class="light-logo" alt="homepage" /></span>
+                </a>
+            </div>
+                <!-- ============================================================== -->
+                <!-- End Logo -->
+                <!-- ============================================================== -->
+                <div class="navbar-collapse">
+                    <!-- ============================================================== -->
+                    <!-- toggle and nav items -->
+                    <!-- ============================================================== -->
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item"><a class="nav-link nav-toggler hidden-md-up waves-effect waves-dark"
+                                href="javascript:void(0)"><i class="fa fa-bars"></i></a></li>
+                        <!-- ============================================================== -->
+                        <!-- Search -->
+                        <!-- ============================================================== -->
+                        <li class="nav-item hidden-xs-down search-box"><a
+                                class="nav-link hidden-sm-down waves-effect waves-dark" href="javascript:void(0)"><i
+                                    class="fa fa-search"></i></a>
+                            <form class="app-search">
+                                <input type="text" class="form-control" placeholder="Search & enter"> <a
+                                    class="srh-btn"><i class="fa fa-times"></i></a>
+                            </form>
+                        </li>
+                    </ul>
+                    <!-- ============================================================== -->
+                    <!-- User profile and search -->
+                    <!-- ============================================================== -->
+                    <ul class="navbar-nav my-lg-0">
+                        <!-- ============================================================== -->
+                        <!-- Profile -->
+                        <!-- ============================================================== -->
+                        <li class="nav-item dropdown u-pro">
+                            <a class="nav-link dropdown-toggle waves-effect waves-dark profile-pic" href=""
+                                data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><img
+                                    src="{% static '/assets/images/users/1.jpg' %}" alt="user" class="" /> <span
+                                    class="hidden-md-down">{{ user.username }} &nbsp;</span> </a>
+                            <ul class="dropdown-menu" aria-labelledby="navbarDropdown"></ul>
+                        </li>
+                    </ul>
                 </div>
             </nav>
         </header>
-
-        <!-- Sidebar -->
+        <!-- ============================================================== -->
+        <!-- End Topbar header -->
+        <!-- ============================================================== -->
+        <!-- ============================================================== -->
+        <!-- Left Sidebar - style you can find in sidebar.scss  -->
+        <!-- ============================================================== -->
         <aside class="left-sidebar">
+            <!-- Sidebar scroll-->
             <div class="scroll-sidebar">
+                <!-- Sidebar navigation-->
                 <nav class="sidebar-nav">
                     <ul id="sidebarnav">
                         <li>
-                            <a href="{% url 'main' %}" class="waves-effect">
-                                <i class="fa fa-tachometer"></i>
-                                <span class="hide-menu">Главная</span>
+                            <a class="waves-effect waves-dark" href="{% url 'main' %}" aria-expanded="false">
+                                <i class="fa fa-tachometer"></i><span class="hide-menu">Рабочий стол</span>
                             </a>
                         </li>
                         <li>
-                            <a href="{% url 'create_bot' %}" class="waves-effect">
-                                <i class="fa fa-robot"></i>
-                                <span class="hide-menu">Боты</span>
+                            <a class="waves-effect waves-dark" href="{% url 'profile' %}" aria-expanded="false">
+                                <i class="fa fa-user-circle-o"></i><span class="hide-menu">Профиль</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="waves-effect waves-dark" href="{% url 'create_bot' %}" aria-expanded="false">
+                                <i class="fa fa-table"></i><span class="hide-menu">Боты</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="waves-effect waves-dark" href="{% url 'error_404' %}" aria-expanded="false">
+                                <i class="fa fa-question-circle"></i><span class="hide-menu">404</span>
                             </a>
                         </li>
                     </ul>
-                </nav>
-            </div>
-        </aside>
 
-        <!-- Page wrapper -->
+                </nav>
+                <!-- End Sidebar navigation -->
+            </div>
+            <!-- End Sidebar scroll-->
+        </aside>
+        <!-- ============================================================== -->
+        <!-- End Left Sidebar - style you can find in sidebar.scss  -->
+        <!-- ============================================================== -->
+        <!-- ============================================================== -->
+        <!-- Page wrapper  -->
+        <!-- ============================================================== -->
         <div class="page-wrapper">
+            <!-- ============================================================== -->
+            <!-- Container fluid  -->
+            <!-- ============================================================== -->
             <div class="container-fluid">
-                <!-- Content -->
+                <!-- ============================================================== -->
+                <!-- Bread crumb and right sidebar toggle -->
+                <!-- ============================================================== -->
+                <div class="row page-titles">
+                    <div class="col-md-5 align-self-center">
+                        <h3 class="text-themecolor">БОТЫ ‍💻</h3>
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="javascript:void(0)">Home</a></li>
+                            <li class="breadcrumb-item active">БОТЫ ‍💻</li>
+                        </ol>
+                    </div>
+
+                </div>
+                <!-- ============================================================== -->
+                <!-- End Bread crumb and right sidebar toggle -->
+                <!-- ============================================================== -->
+                <!-- ============================================================== -->
+                <!-- Start Page Content -->
+                <!-- ============================================================== -->
                 <div class="row">
+                    <!-- column -->
                     <div class="container">
                         <div class="section">
                             <h2>Подключение нового бота</h2>
@@ -254,218 +524,358 @@
                         <div class="section">
                             <h2>Ваши Telegram боты</h2>
                             <ul class="bot-list">
-                                {% for item in all_user_bot %}
-                                <li data-bot-id="{{ item.id }}" class="bot-item">
-                                    <img src="https://telegram.org/img/t_logo.png" alt="Bot">
-                                    <span class="bot-name">{{ item.username }}</span>
-                                    <span class="bot-status {% if item.bot_enable %}active{% else %}inactive{% endif %}">
-                                        {% if item.bot_enable %}Работает{% else %}Отключен{% endif %}
-                                    </span>
-                                </li>
+                                {% for item in all_user_bot%}
+                                    <li data-bot-id="{{ item.id }}" class="bot-item">
+                                        <img src="https://static.vecteezy.com/system/resources/previews/023/986/562/original/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png"
+                                             alt="Bot"
+                                             style="width: 30px; height: 26px;">
+                                        <span class="bot-name">{{item.username}}</span>
+                                        <span class="bot-status">
+                                            {% if item.bot_enable %}Работает{% else %}Отключен{% endif %}
+                                        </span>
+                                    </li>
                                 {% endfor %}
                             </ul>
                         </div>
                     </div>
                 </div>
+                <!-- ============================================================== -->
+                <!-- End PAge Content -->
+                <!-- ============================================================== -->
+            </div>
+            <!-- ============================================================== -->
+            <!-- End Container fluid  -->
+            <!-- ============================================================== -->
+            <!-- ============================================================== -->
+            <!-- footer -->
+            <!-- ============================================================== -->
+
+            <!-- ============================================================== -->
+            <!-- End footer -->
+            <!-- ============================================================== -->
+        </div>
+
+
+        <!-- Модальное окно -->
+        <div id="custom-botSettingsModal" class="custom-modal">
+            <div class="custom-modal-content">
+                <span class="custom-close">&times;</span>
+                <h2>Настройка вашего бота</h2>
+                <form id="custom-botSettingsForm" action="{% url 'update_bot_settings' %}" method="post"
+                    enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <label for="custom-botToken">Ваш токен</label>
+                    <input type="text" id="custom-botToken" name="bot_token" value="{{item.token}}">
+
+                    <label for="custom-module">Модуль заработка</label>
+                    <select id="custom-module" name="module" >
+                        <option value="no_module">Нет модуля</option>
+                        <option value="leo" >Дайвинчик</option>
+                        <option value="refs" >Реферальный бот</option>
+                        <option value="kino">Кино бот</option>
+                        <option value="download">All save бот</option>
+			<option value="anon">Аноним чат бот</option>
+			<option value="chatgpt">ChatGPT бот</option>
+                    </select>
+
+                    <div class="custom-button-group">
+                        <button type="button" id="custom-archiveBtn" data-token="">Удалить</button>
+                        <button type="button" id="custom-disableBtn"></button>
+                        <button type="submit" id="custom-saveSettingsBtn">Сохранить настройки</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+
+        <!-- ============================================================== -->
+        <!-- End Page wrapper  -->
+        <!-- ============================================================== -->
+    </div>
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Подключение Telegram бота</h2>
+                <span class="close-btn" id="closeModalBtn">&times;</span>
+            </div>
+            <div class="modal-body">
+                <img src="https://via.placeholder.com/50" alt="icon">
+                <p>1. Для подключения бота Вам нужно зарегистрировать собственного бота с помощью @BotFather. Откройте
+                    его.</p>
+                <p>2. Стартуем и вводим команду /newbot. Вам выдаст выбор названия бота, далее имени бота.</p>
+                <p>3. После всех действий Вам выдаст Token HTTP API. Вам его нужно ввести в это окошко.</p>
+                <!-- Форма для ввода токена -->
+                <form id="tokenForm" action="{% url 'save_token' %}" method="POST">
+                    {% csrf_token %}
+                    <input type="text" name="token" placeholder="Введите Токен" required>
+                     <h3>Выберите модуль:</h3>
+                <div class="module-selection">
+                        <label>
+                            <input type="radio" name="module" value="no_module" checked>
+                            <span class="radio-custom"></span>
+                            Нет модуля
+                        </label>
+                        <label>
+                            <input type="radio" name="module" value="leo">
+                            <span class="radio-custom"></span>
+                            Дайвинчик
+                        </label>
+                        <label>
+                            <input type="radio" name="module" value="refs">
+                            <span class="radio-custom"></span>
+                            Реферальный бот
+                        </label>
+                        <label>
+                            <input type="radio" name="module" value="kino">
+                            <span class="radio-custom"></span>
+                            Кино бот
+                        </label>
+                        <label>
+                            <input type="radio" name="module" value="download">
+                            <span class="radio-custom"></span>
+                            All save бот
+                        </label>
+ 			<label>
+                            <input type="radio" name="module" value="anon">
+                            <span class="radio-custom"></span>
+                            Аноним чат бот
+                        </label>
+                    <label>
+                            <input type="radio" name="module" value="chatgpt">
+                            <span class="radio-custom"></span>
+                            ChatGPT бот
+                        </label>
+                    </div>
+                <div class="modal-footer">
+                    <button type="submit">Сохранить токен и настройки</button>
+                </div>
+                </form>
+
             </div>
         </div>
     </div>
 
-    <!-- Bot Settings Modal -->
-    <div id="custom-botSettingsModal" class="custom-modal">
-        <div class="custom-modal-content">
-            <span class="custom-close">&times;</span>
-            <h2>Настройка бота</h2>
-            <form id="custom-botSettingsForm" enctype="multipart/form-data">
-                {% csrf_token %}
-                <div class="form-group">
-                    <label for="custom-botToken">Токен бота</label>
-                    <input type="text" id="custom-botToken" name="bot_token" class="form-control" readonly>
-                </div>
 
-                <div class="form-group">
-                    <label for="custom-module">Модуль</label>
-                    <select id="custom-module" name="module" class="form-control">
-                        <option value="no_module">Нет модуля</option>
-                        <option value="leo">Дайвинчик</option>
-                        <option value="refs">Реферальный бот</option>
-                        <option value="kino">Кино бот</option>
-                        <option value="download">All save бот</option>
-                        <option value="anon">Аноним чат бот</option>
-                        <option value="chatgpt">ChatGPT бот</option>
-                    </select>
-                </div>
 
-                <div class="custom-button-group">
-                    <button type="button" id="custom-archiveBtn">Удалить</button>
-                    <button type="button" id="custom-disableBtn">Выключить</button>
-                    <button type="submit" id="custom-saveSettingsBtn">Сохранить</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Scripts -->
-    <script src="{% static 'assets/node_modules/jquery/jquery.min.js' %}"></script>
+    <script src="{% static 'assets/node_modules/jquery/jquery.min.js'%}"></script>
     <script>
-        $(document).ready(function() {
-            // Bot item click - open settings
-            $('.bot-item').click(function() {
-                const botId = $(this).data('bot-id');
+    document.addEventListener("DOMContentLoaded", function () {
+        // Открытие модального окна с настройками бота
+        document.getElementById('openModalBtn').addEventListener('click', function () {
+        const modal = document.getElementById('custom-botSettingsModal');
 
-                $.ajax({
-                    url: `/get_bot_info/${botId}/`,
-                    type: 'GET',
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            $('#custom-botToken').val(response.token);
-                            $('#custom-module').val(response.module);
+        // Очищаем поля модального окна, если нужно
+        document.getElementById('custom-botToken').value = '';
+        document.getElementById('custom-module').value = '';
 
-                            const disableBtn = $('#custom-disableBtn');
-                            if (response.is_enabled) {
-                                disableBtn.text('Выключить');
-                                disableBtn.data('status', 'on');
-                            } else {
-                                disableBtn.text('Включить');
-                                disableBtn.data('status', 'off');
-                            }
+        // Устанавливаем дефолтный статус кнопок
+        const disableBtn = document.getElementById('custom-disableBtn');
+        disableBtn.textContent = 'Выключить';
+        disableBtn.setAttribute('data-status', 'on');
 
-                            disableBtn.data('token', response.token);
-                            $('#custom-archiveBtn').data('token', response.token);
+        // Показываем модальное окно
+        modal.style.display = 'flex';
+        });
+          document.getElementById("custom-saveSettingsBtn").addEventListener("click", function (event) {
+        event.preventDefault(); // Предотвращаем перезагрузку формы
+<!--        const form = document.getElementById("custom-botSettingsForm");-->
+        const formData = new FormData(form);
 
-                            $('#custom-botSettingsModal').css('display', 'flex');
-                        } else {
-                            alert('Ошибка при получении информации о боте: ' + response.message);
-                        }
-                    },
-                    error: function(xhr) {
-                        alert('Ошибка при получении информации о боте');
-                        console.error('Error:', xhr);
-                    }
-                });
-            });
+        fetch(form.action, {
+            method: "POST",
+            body: formData,
+            headers: {
+                'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Настройки успешно сохранены!');
+                document.getElementById('custom-botSettingsModal').style.display = 'none'; // Закрываем окно
+            } else {
+                alert('Произошла ошибка при сохранении настроек.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Ошибка сети или сервера.');
+        });
+    });
+        document.querySelectorAll('.bot-item').forEach(item => {
+            item.addEventListener('click', function () {
+                const botId = this.getAttribute('data-bot-id');
 
-            // Save settings
-            $('#custom-botSettingsForm').on('submit', function(e) {
-                e.preventDefault();
+                fetch(`/get_bot_info/${botId}/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const modal = document.getElementById('custom-botSettingsModal');
+                        document.getElementById('custom-botToken').value = data.token;
+                        document.getElementById('custom-module').value = data.module;
 
-                const formData = new FormData();
-                formData.append('bot_token', $('#custom-botToken').val());
-                formData.append('module', $('#custom-module').val());
+                        // Установка кнопок
+                        const disableBtn = document.getElementById('custom-disableBtn');
+                        disableBtn.textContent = data.is_enabled ? 'Выключить' : 'Включить';
+                        disableBtn.setAttribute('data-token', data.token);
+                        disableBtn.setAttribute('data-status', data.is_enabled ? 'on' : 'off');
 
-                $.ajax({
-                    url: '{% url "update_bot_settings" %}',
-                    type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    headers: {
-                        'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-                    },
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            alert('Настройки успешно сохранены');
-                            location.reload();
-                        } else {
-                            alert('Ошибка: ' + response.message);
-                        }
-                    },
-                    error: function(xhr) {
-                        let errorMessage = 'Ошибка при сохранении настроек';
-                        if (xhr.responseJSON && xhr.responseJSON.message) {
-                            errorMessage = xhr.responseJSON.message;
-                        }
-                        alert(errorMessage);
-                    }
-                });
-            });
+                        document.getElementById('custom-archiveBtn').setAttribute('data-token', data.token);
 
-            // Toggle bot status
-            $('#custom-disableBtn').click(function() {
-                const token = $(this).data('token');
-                const currentStatus = $(this).data('status');
-                const action = currentStatus === 'on' ? 'off' : 'on';
-
-                $.ajax({
-                    url: '{% url "toggle_bot" %}',
-                    type: 'POST',
-                    data: JSON.stringify({
-                        bot_token: token,
-                        action: action
-                    }),
-                    contentType: 'application/json',
-                    headers: {
-                        'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-                    },
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            alert(action === 'on' ? 'Бот включен' : 'Бот выключен');
-                            location.reload();
-                        } else {
-                            alert('Ошибка: ' + response.message);
-                        }
-                    },
-                    error: function() {
-                        alert('Ошибка при изменении статуса бота');
-                    }
-                });
-            });
-
-            // Delete bot
-            $('#custom-archiveBtn').click(function() {
-                if (!confirm('Вы действительно хотите удалить этого бота?')) {
-                    return;
-                }
-
-                const token = $(this).data('token');
-
-                $.ajax({
-                    url: '{% url "delete_bot" %}',
-                    type: 'POST',
-                    data: JSON.stringify({
-                        bot_token: token
-                    }),
-                    contentType: 'application/json',
-                    headers: {
-                        'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-                    },
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            alert('Бот успешно удален');
-                            location.reload();
-                        } else {
-                            alert('Ошибка при удалении бота: ' + response.message);
-                        }
-                    },
-                    error: function() {
-                        alert('Ошибка при удалении бота');
-                    }
-                });
-            });
-
-            // Close modal handlers
-            $('.custom-close').click(function() {
-                $('#custom-botSettingsModal').hide();
-            });
-
-            $(window).click(function(event) {
-                if ($(event.target).is('#custom-botSettingsModal')) {
-                    $('#custom-botSettingsModal').hide();
-                }
+                        // Показ модального окна
+                        modal.style.display = 'flex';
+                    })
+                    .catch(error => console.error('Error:', error));
             });
         });
-    </script>
 
-    <!-- Bootstrap and other scripts -->
+        // Закрытие модального окна при клике на "x"
+        document.querySelector('.custom-close').onclick = function () {
+            document.getElementById('custom-botSettingsModal').style.display = 'none';
+        };
+
+        // Закрытие модального окна при клике вне его
+        window.addEventListener('click', function (event) {
+            const modal = document.getElementById('custom-botSettingsModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+
+
+        // Обработка отправки формы сохранения настроек
+<!--        document.getElementById("custom-botSettingsForm").addEventListener("submit", function (event) {-->
+<!--            event.preventDefault();-->
+<!--            const form = this;-->
+<!--            const formData = new FormData(form);-->
+
+<!--            fetch(form.action, {-->
+<!--                method: "POST",-->
+<!--                body: formData,-->
+<!--                headers: {-->
+<!--                    'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value-->
+<!--                }-->
+<!--            })-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                if (data.status === 'success') {-->
+<!--                    alert('Настройки успешно сохранены!');-->
+<!--                    window.location.reload();-->
+<!--                } else {-->
+<!--                    alert('Произошла ошибка при сохранении настроек.');-->
+<!--                }-->
+<!--            })-->
+<!--            .catch(error => console.error('Error:', error));-->
+<!--        });-->
+            $(document).ready(function () {
+                $('#custom-botSettingsForm').on('submit', function (e) {
+                    e.preventDefault();
+                    var form = $(this);
+                    var formData = $(this).serialize();
+                    $.ajax({
+                        url: $(this).attr('action'),
+                        type: 'POST',
+                        data: formData,
+                        success: function (response) {
+                            if (response.status === 'success') {
+                                form.find('#custom-module').val(response.module);
+                                window.location.reload(false);
+                            } else {
+                                window.location.reload(false);
+                            }
+                        },
+                        error: function () {
+                            window.location.reload(false);
+                        }
+                    });
+                });
+            });
+
+        // Обработка кнопки включения/выключения бота
+        document.getElementById("custom-disableBtn").addEventListener("click", function () {
+            const button = this;
+            const token = button.getAttribute('data-token');
+            const currentStatus = button.getAttribute('data-status');
+            const action = currentStatus === 'on' ? 'off' : 'on';
+
+            fetch('{% url "toggle_bot" %}', {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ bot_token: token, action: action })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    button.textContent = action === 'on' ? 'Выключить' : 'Включить';
+                    button.setAttribute('data-status', action);
+                    alert('Статус бота обновлён.');
+                    window.location.reload();
+                } else {
+                    alert('Ошибка при обновлении статуса бота.');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        // Обработка кнопки удаления бота
+
+        document.getElementById("custom-archiveBtn").addEventListener("click", function () {
+            const button = this;
+            const token = button.getAttribute('data-token');
+
+            if (confirm('Вы уверены, что хотите удалить этого бота?')) {
+                fetch('{% url "delete_bot" %}', {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ bot_token: token })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Бот успешно удалён.');
+                        window.location.reload();
+                    } else {
+                        alert('Ошибка при удалении бота.');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        });
+    });
+</script>
+
+
+    <!-- ============================================================== -->
+    <!-- End Wrapper -->
+    <!-- ============================================================== -->
+    <!-- ============================================================== -->
+    <!-- All Jquery -->
+
+    <!-- Bootstrap popper Core JavaScript -->
     <script src="{% static 'assets/node_modules/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+    <!-- slimscrollbar scrollbar JavaScript -->
     <script src="{% static 'js/perfect-scrollbar.jquery.min.js' %}"></script>
+    <!--Wave Effects -->
     <script src="{% static 'js/waves.js' %}"></script>
+    <!--Menu sidebar -->
     <script src="{% static 'js/sidebarmenu.js' %}"></script>
+    <!--Custom JavaScript -->
     <script src="{% static 'js/custom.min.js' %}"></script>
+    <!-- ============================================================== -->
+    <!-- This page plugins -->
+    <!-- ============================================================== -->
+    <!--morris JavaScript -->
     <script src="{% static 'assets/node_modules/morrisjs/morris.min.js' %}"></script>
     <script src="{% static 'assets/node_modules/raphael/raphael-min.js' %}"></script>
     <script src="{% static 'assets/node_modules/d3/d3.min.js' %}"></script>
     <script src="{% static 'assets/node_modules/c3-master/c3.min.js' %}"></script>
     <script src="{% static 'js/dashboard1.js' %}"></script>
 </body>
+
 </html>
