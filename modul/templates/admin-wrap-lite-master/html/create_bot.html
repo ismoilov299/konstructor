@@ -660,86 +660,50 @@
     <script src="{% static 'assets/node_modules/jquery/jquery.min.js'%}"></script>
     <script>
     document.addEventListener("DOMContentLoaded", function () {
-        // Открытие модального окна с настройками бота
-        document.getElementById('openModalBtn').addEventListener('click', function () {
-        const modal = document.getElementById('custom-botSettingsModal');
+   // Bot modal oynasini ochish
+   document.getElementById('openModalBtn').addEventListener('click', function() {
+       document.getElementById('myModal').style.display = 'flex';
+   });
 
-        // Очищаем поля модального окна, если нужно
-        document.getElementById('custom-botToken').value = '';
-        document.getElementById('custom-module').value = '';
+   // Modal oynani yopish
+   document.getElementById('closeModalBtn').addEventListener('click', function() {
+       document.getElementById('myModal').style.display = 'none';
+   });
 
-        // Устанавливаем дефолтный статус кнопок
-        const disableBtn = document.getElementById('custom-disableBtn');
-        disableBtn.textContent = 'Выключить';
-        disableBtn.setAttribute('data-status', 'on');
+   // Bot ma'lumotlarini olish va modal oynasini ochish
+   document.querySelectorAll('.bot-item').forEach(item => {
+       item.addEventListener('click', function() {
+           const botId = this.getAttribute('data-bot-id');
 
-        // Показываем модальное окно
-        modal.style.display = 'flex';
-        });
-          document.getElementById("custom-saveSettingsBtn").addEventListener("click", function (event) {
-        event.preventDefault(); // Предотвращаем перезагрузку формы
-<!--        const form = document.getElementById("custom-botSettingsForm");-->
-        const formData = new FormData(form);
+           fetch(`/get_bot_info/${botId}/`)
+               .then(response => response.json())
+               .then(data => {
+                   if (data.status === 'success') {
+                       const modal = document.getElementById('custom-botSettingsModal');
+                       document.getElementById('custom-botToken').value = data.token;
+                       document.getElementById('custom-module').value = data.module;
 
-        fetch(form.action, {
-            method: "POST",
-            body: formData,
-            headers: {
-                'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                alert('Настройки успешно сохранены!');
-                document.getElementById('custom-botSettingsModal').style.display = 'none'; // Закрываем окно
-            } else {
-                alert('Произошла ошибка при сохранении настроек.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Ошибка сети или сервера.');
-        });
-    });
-        document.querySelectorAll('.bot-item').forEach(item => {
-            item.addEventListener('click', function () {
-                const botId = this.getAttribute('data-bot-id');
+                       // Disable/Enable tugmasini sozlash
+                       const disableBtn = document.getElementById('custom-disableBtn');
+                       disableBtn.textContent = data.is_enabled ? 'Выключить' : 'Включить';
+                       disableBtn.setAttribute('data-token', data.token);
+                       disableBtn.setAttribute('data-status', data.is_enabled ? 'on' : 'off');
 
-                fetch(`/get_bot_info/${botId}/`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const modal = document.getElementById('custom-botSettingsModal');
-                        document.getElementById('custom-botToken').value = data.token;
-                        document.getElementById('custom-module').value = data.module;
+                       // O'chirish tugmasiga tokenni berish
+                       document.getElementById('custom-archiveBtn').setAttribute('data-token', data.token);
 
-                        // Установка кнопок
-                        const disableBtn = document.getElementById('custom-disableBtn');
-                        disableBtn.textContent = data.is_enabled ? 'Выключить' : 'Включить';
-                        disableBtn.setAttribute('data-token', data.token);
-                        disableBtn.setAttribute('data-status', data.is_enabled ? 'on' : 'off');
-
-                        document.getElementById('custom-archiveBtn').setAttribute('data-token', data.token);
-
-                        // Показ модального окна
-                        modal.style.display = 'flex';
-                    })
-                    .catch(error => console.error('Error:', error));
-            });
-        });
-
-        // Закрытие модального окна при клике на "x"
-        document.querySelector('.custom-close').onclick = function () {
-            document.getElementById('custom-botSettingsModal').style.display = 'none';
-        };
-
-        // Закрытие модального окна при клике вне его
-        window.addEventListener('click', function (event) {
-            const modal = document.getElementById('custom-botSettingsModal');
-            if (event.target == modal) {
-                modal.style.display = 'none';
-            }
-        });
+                       // Modalni ko'rsatish
+                       modal.style.display = 'flex';
+                   } else {
+                       alert('Ошибка при получении информации о боте: ' + data.message);
+                   }
+               })
+               .catch(error => {
+                   console.error('Error:', error);
+                   alert('Ошибка при получении информации о боте');
+               });
+       });
+   });
 
 
 
@@ -767,87 +731,136 @@
 <!--            })-->
 <!--            .catch(error => console.error('Error:', error));-->
 <!--        });-->
-            $(document).ready(function () {
-                $('#custom-botSettingsForm').on('submit', function (e) {
-                    e.preventDefault();
-                    var form = $(this);
-                    var formData = $(this).serialize();
-                    $.ajax({
-                        url: $(this).attr('action'),
-                        type: 'POST',
-                        data: formData,
-                        success: function (response) {
-                            if (response.status === 'success') {
-                                form.find('#custom-module').val(response.module);
-                                window.location.reload(false);
-                            } else {
-                                window.location.reload(false);
-                            }
-                        },
-                        error: function () {
-                            window.location.reload(false);
-                        }
-                    });
-                });
-            });
+            document.getElementById('custom-botSettingsForm').addEventListener('submit', function(e) {
+                   e.preventDefault();
+
+                   const formData = new FormData(this);
+
+                   fetch(this.action, {
+                       method: 'POST',
+                       body: formData,
+                       headers: {
+                           'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                       }
+                   })
+                   .then(response => response.json())
+                   .then(data => {
+                       if (data.status === 'success') {
+                           alert('Настройки успешно сохранены!');
+                           location.reload();
+                       } else {
+                           alert(data.message || 'Произошла ошибка при сохранении настроек');
+                       }
+                   })
+                   .catch(error => {
+                       console.error('Error:', error);
+                       alert('Ошибка при сохранении настроек');
+                   });
+               });
 
         // Обработка кнопки включения/выключения бота
-        document.getElementById("custom-disableBtn").addEventListener("click", function () {
-            const button = this;
-            const token = button.getAttribute('data-token');
-            const currentStatus = button.getAttribute('data-status');
-            const action = currentStatus === 'on' ? 'off' : 'on';
+        document.getElementById('custom-disableBtn').addEventListener('click', function() {
+           const token = this.getAttribute('data-token');
+           const currentStatus = this.getAttribute('data-status');
+           const action = currentStatus === 'on' ? 'off' : 'on';
 
-            fetch('{% url "toggle_bot" %}', {
-                method: "POST",
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({ bot_token: token, action: action })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    button.textContent = action === 'on' ? 'Выключить' : 'Включить';
-                    button.setAttribute('data-status', action);
-                    alert('Статус бота обновлён.');
-                    window.location.reload();
-                } else {
-                    alert('Ошибка при обновлении статуса бота.');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
+           fetch('{% url "toggle_bot" %}', {
+               method: 'POST',
+               headers: {
+                   'Content-Type': 'application/json',
+                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+               },
+               body: JSON.stringify({ bot_token: token, action: action })
+           })
+           .then(response => response.json())
+           .then(data => {
+               if (data.status === 'success') {
+                   this.textContent = action === 'on' ? 'Выключить' : 'Включить';
+                   this.setAttribute('data-status', action);
+                   alert('Статус бота обновлён');
+                   location.reload();
+               } else {
+                   alert('Ошибка при обновлении статуса бота');
+               }
+           })
+           .catch(error => {
+               console.error('Error:', error);
+               alert('Ошибка при изменении статуса бота');
+           });
+       });
 
         // Обработка кнопки удаления бота
 
-        document.getElementById("custom-archiveBtn").addEventListener("click", function () {
-            const button = this;
-            const token = button.getAttribute('data-token');
+       document.getElementById('custom-archiveBtn').addEventListener('click', function() {
+           const token = this.getAttribute('data-token');
 
-            if (confirm('Вы уверены, что хотите удалить этого бота?')) {
-                fetch('{% url "delete_bot" %}', {
-                    method: "POST",
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    },
-                    body: JSON.stringify({ bot_token: token })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        alert('Бот успешно удалён.');
-                        window.location.reload();
-                    } else {
-                        alert('Ошибка при удалении бота.');
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            }
-        });
-    });
+           if (!confirm('Вы действительно хотите удалить этого бота?')) {
+               return;
+           }
+
+           fetch('{% url "delete_bot" %}', {
+               method: 'POST',
+               headers: {
+                   'Content-Type': 'application/json',
+                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+               },
+               body: JSON.stringify({ bot_token: token })
+           })
+           .then(response => response.json())
+           .then(data => {
+               if (data.status === 'success') {
+                   alert('Бот успешно удалён');
+                   location.reload();
+               } else {
+                   alert('Ошибка при удалении бота: ' + data.message);
+               }
+           })
+           .catch(error => {
+               console.error('Error:', error);
+               alert('Ошибка при удалении бота');
+           });
+       });
+
+        document.querySelectorAll('.custom-close').forEach(closeBtn => {
+       closeBtn.addEventListener('click', function() {
+           this.closest('.custom-modal').style.display = 'none';
+       });
+   });
+
+   window.addEventListener('click', function(event) {
+       if (event.target.classList.contains('custom-modal')) {
+           event.target.style.display = 'none';
+       }
+   });
+
+   // Yangi bot qo'shish formasi
+   document.getElementById('tokenForm').addEventListener('submit', function(e) {
+       e.preventDefault();
+
+       const formData = new FormData(this);
+
+       fetch(this.action, {
+           method: 'POST',
+           body: formData,
+           headers: {
+               'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+           }
+       })
+       .then(response => response.json())
+       .then(data => {
+           if (data.status === 'success') {
+               alert('Бот успешно добавлен!');
+               location.reload();
+           } else {
+               alert(data.message || 'Ошибка при добавлении бота');
+           }
+       })
+       .catch(error => {
+           console.error('Error:', error);
+           alert('Ошибка при добавлении бота');
+       });
+   });
+});
 </script>
 
 
