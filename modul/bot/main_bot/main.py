@@ -12,7 +12,7 @@ import requests
 
 # Замените <bot_token> на ваш токен
 #bot_token = '996043954:AAGbwv9SCRyklY4-hMsy3yMkZsiDJbDJ6YU'
-webhook_url = 'https://f7d7-35-202-195-251.ngrok-free.app//login'
+webhook_url = 'https://f7d7-35-202-195-251.ngrok-free.app/login/'
 
 
 # set_webhook_url = f'https://api.telegram.org/bot{bot_token}/setWebhook'
