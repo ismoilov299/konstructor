@@ -238,18 +238,16 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     try:
         channel_id = int(message.text)
 
-        # Faqat asosiy ma'lumotlarni olish
         chat_info_raw = await bot.get_chat(channel_id)
 
-        # Javobni tozalash
-        chat_info = chat_info_raw.dict()  # JSON shaklida konvertatsiya qilish
+        chat_info = chat_info_raw.as_json()
+
         if "available_reactions" in chat_info and isinstance(chat_info["available_reactions"], list):
             chat_info["available_reactions"] = [
                 reaction for reaction in chat_info["available_reactions"]
                 if reaction.get("type") in ["emoji", "custom_emoji"]
             ]
 
-        # Kanal ekanligini tekshirish
         if chat_info["type"] != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
@@ -257,7 +255,6 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Bot adminligini tekshirish
         bot_member = await bot.get_chat_member(channel_id, bot.id)
         if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
@@ -266,12 +263,10 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Kanalga a'zo bo'lish linkini olish
         invite_link = chat_info.get("invite_link")
         if not invite_link:
             invite_link = await bot.create_chat_invite_link(channel_id)
 
-        # Bazaga saqlash
         create_channel_sponsor(channel_id)
         await state.clear()
 
