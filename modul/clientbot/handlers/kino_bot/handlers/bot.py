@@ -288,15 +288,10 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         channel_id = int(message.text)
 
         # Get raw chat info using native aiogram methods
-        raw_response = await bot.session.make_request(
-            "getChat",
-            {"chat_id": channel_id}
-        )
-
-        chat_info = raw_response["result"]
+        chat_info = await bot.get_chat(channel_id)
 
         # Validate channel type
-        if chat_info['type'] != "channel":
+        if chat_info.type != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
@@ -304,13 +299,9 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             return
 
         # Check bot admin status
-        bot_member_response = await bot.session.make_request(
-            "getChatMember",
-            {"chat_id": channel_id, "user_id": bot.id}
-        )
-        bot_member = bot_member_response["result"]
+        bot_member = await bot.get_chat_member(chat_id=channel_id, user_id=bot.id)
 
-        if bot_member['status'] not in ["administrator", "creator"]:
+        if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
                 "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
                 reply_markup=cancel_kb
@@ -318,13 +309,9 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             return
 
         # Get invite link
-        invite_link = chat_info.get('invite_link')
+        invite_link = chat_info.invite_link
         if not invite_link:
-            create_link_response = await bot.session.make_request(
-                "createChatInviteLink",
-                {"chat_id": channel_id}
-            )
-            invite_link = create_link_response["result"]["invite_link"]
+            invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
 
         # Add channel to database
         create_channel_sponsor(channel_id)
@@ -333,17 +320,17 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         # Build success message
         channel_info = [
             "✅ Канал успешно добавлен!",
-            f"📣 Название: {chat_info['title']}",
+            f"📣 Название: {chat_info.title}",
             f"🆔 ID: {channel_id}",
             f"🔗 Ссылка: {invite_link}"
         ]
 
         # Add reactions info if available (safely)
-        if 'available_reactions' in chat_info:
+        if hasattr(chat_info, 'available_reactions') and chat_info.available_reactions:
             try:
-                reaction_types = [r['type'] for r in chat_info['available_reactions']]
+                reaction_types = [r.type for r in chat_info.available_reactions]
                 channel_info.append(f"💫 Доступные реакции: {', '.join(reaction_types)}")
-            except (KeyError, TypeError):
+            except (AttributeError, TypeError):
                 pass  # Skip reactions if there's any issue parsing them
 
         await message.answer(
