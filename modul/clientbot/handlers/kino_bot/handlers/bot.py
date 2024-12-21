@@ -282,44 +282,40 @@ class ChatInfo(BaseModel):
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext):
     """
-    Eng yaxshi va eng oddiy yechim: faqat message.bot
+    Handler for adding a sponsor channel with proper API request handling.
     """
     try:
         channel_id = int(message.text)
-
-        # 1) Aiogram Bot obyektini message.bot orqali olamiz
+        # Mana shu yerda Aiogram Bot obyektini to'g'ridan to'g'ri message.bot dan olyapmiz:
         bot = message.bot
 
-        # 2) getChat
         raw_response = await bot.session.make_request(
             "getChat",
             {"chat_id": channel_id}
         )
         chat_info = raw_response["result"]
 
-        # 3) Kanal turini tekshirish
-        if chat_info["type"] != "channel":
+        if chat_info['type'] != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # 4) Bot adminligini tekshirish
         bot_member_response = await bot.session.make_request(
             "getChatMember",
             {"chat_id": channel_id, "user_id": bot.id}
         )
         bot_member = bot_member_response["result"]
-        if bot_member["status"] not in ["administrator", "creator"]:
+
+        if bot_member['status'] not in ["administrator", "creator"]:
             await message.answer(
                 "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # 5) Invite link mavjudmi yoki yaratish
-        invite_link = chat_info.get("invite_link")
+        invite_link = chat_info.get('invite_link')
         if not invite_link:
             create_link_response = await bot.session.make_request(
                 "createChatInviteLink",
@@ -327,11 +323,9 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             )
             invite_link = create_link_response["result"]["invite_link"]
 
-        # 6) Bazaga yozish (o‘z funksiyangiz)
         create_channel_sponsor(channel_id)
         await state.clear()
 
-        # 7) Yakuniy xabar
         channel_info = [
             "✅ Канал успешно добавлен!",
             f"📣 Название: {chat_info['title']}",
@@ -339,19 +333,17 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             f"🔗 Ссылка: {invite_link}"
         ]
 
-        # 8) Agar kanalda `available_reactions` bo‘lsa, qo‘shib yuborish
-        if "available_reactions" in chat_info:
+        if 'available_reactions' in chat_info:
             try:
-                reactions = chat_info["available_reactions"]
+                reactions = chat_info['available_reactions']
                 if reactions:
-                    reaction_types = [r.get("type", "unknown") for r in reactions]
+                    reaction_types = [r.get('type', 'unknown') for r in reactions]
                     channel_info.append(
                         f"💫 Доступные реакции: {', '.join(reaction_types)}"
                     )
             except Exception as e:
                 logger.warning(f"Failed to process reactions: {e}")
 
-        # 9) Xabarni jo‘natish
         await message.answer(
             "\n\n".join(channel_info),
             disable_web_page_preview=True
@@ -375,6 +367,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
 
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
