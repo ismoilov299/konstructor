@@ -241,9 +241,10 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         # Telegram API orqali kanal haqida ma'lumot olish
         chat_info_raw = await bot.get_chat(channel_id)
 
-        # Javobni JSON formatga o‘tkazish va available_reactions ni tozalash
+        # Javobni JSON formatga o‘tkazish va `available_reactions` ni tozalash
         chat_info = chat_info_raw.as_json()
 
+        # `available_reactions` ni tozalash
         if "available_reactions" in chat_info:
             chat_info["available_reactions"] = [
                 reaction for reaction in chat_info["available_reactions"]
@@ -289,9 +290,9 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             "Неверный формат. Пожалуйста, введите числовой ID канала.",
             reply_markup=cancel_kb
         )
-    except TelegramBadRequest:
+    except TelegramBadRequest as e:
         await message.answer(
-            "Бот не смог найти канал. Пожалуйста, проверьте ID канала.",
+            f"Ошибка Telegram API: {e.message}\nПроверьте ID канала и попробуйте снова.",
             reply_markup=cancel_kb
         )
     except Exception as e:
@@ -300,6 +301,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
 
 
 
