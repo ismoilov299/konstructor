@@ -17,15 +17,18 @@ async def get_admin_id(bot: Bot):
     return bot_db.owner.uid
 
 
-def admin_panel():
-    @client_bot_router.message(Command(commands=["admin"]), AnonBotFilter())
-    async def admin_mm(message: Message):
-        # TODO проверку админа после добавления админа
-        if message.from_user.id == await get_admin_id(message.bot):
-            count = await get_users_count()
-            await message.bot.send_message(message.from_user.id, f"🕵Панель админа\n"
-                                                                 f"Количество юзеров в боте: {count}",
-                                           reply_markup=await admin_menu_in())
+@client_bot_router.message(Command(commands=["admin"]), AnonBotFilter())
+async def admin_mm(message: Message):
+    """
+    Admin panelga kirish funksiyasi.
+    Faqat admin va 'anon' moduliga ega botlar uchun ishlaydi.
+    """
+    count = await get_users_count()
+    await message.answer(
+        f"🕵 Панель админа\n"
+        f"Количество юзеров в боте: {count}",
+        reply_markup=await admin_menu_in()
+    )
 
 
 @client_bot_router.callback_query(F.data.in_(["cancel", "none",
