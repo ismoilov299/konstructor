@@ -289,14 +289,11 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
 
         # Make raw API request to get chat info
         raw_response = await bot.session.make_request(
-            bot.session.build_api_request(
-                bot=bot,
-                method="getChat",
-                data={"chat_id": channel_id}
-            )
+            "getChat",
+            json={"chat_id": channel_id}
         )
 
-        chat_info = raw_response.json()['result']
+        chat_info = raw_response["result"]
 
         # Validate channel type
         if chat_info['type'] != "channel":
@@ -306,15 +303,12 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Check bot admin status using raw request to avoid validation issues
+        # Check bot admin status using raw request
         bot_member_response = await bot.session.make_request(
-            bot.session.build_api_request(
-                bot=bot,
-                method="getChatMember",
-                data={"chat_id": channel_id, "user_id": bot.id}
-            )
+            "getChatMember",
+            json={"chat_id": channel_id, "user_id": bot.id}
         )
-        bot_member = bot_member_response.json()['result']
+        bot_member = bot_member_response["result"]
 
         if bot_member['status'] not in ["administrator", "creator"]:
             await message.answer(
@@ -327,13 +321,10 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         invite_link = chat_info.get('invite_link')
         if not invite_link:
             create_link_response = await bot.session.make_request(
-                bot.session.build_api_request(
-                    bot=bot,
-                    method="createChatInviteLink",
-                    data={"chat_id": channel_id}
-                )
+                "createChatInviteLink",
+                json={"chat_id": channel_id}
             )
-            invite_link = create_link_response.json()['result']['invite_link']
+            invite_link = create_link_response["result"]["invite_link"]
 
         # Add channel to database
         create_channel_sponsor(channel_id)
