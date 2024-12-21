@@ -281,17 +281,19 @@ class ChatInfo(BaseModel):
 
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext):
-    """
-    Handler for adding a sponsor channel with proper API request handling.
-    """
     try:
         channel_id = int(message.text)
-        bot = message.bot
 
-        raw_response = await bot.session.make_request("getChat", {"chat_id": channel_id})
+        # Получаем объект Bot напрямую из message:
+        bot = message.bot  # <-- здесь bot точно aiogram.Bot, а не строка
+
+        raw_response = await bot.session.make_request(
+            "getChat",
+            {"chat_id": channel_id}
+        )
         chat_info = raw_response["result"]
 
-        if chat_info['type'] != "channel":
+        if chat_info["type"] != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
@@ -304,14 +306,14 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
         )
         bot_member = bot_member_response["result"]
 
-        if bot_member['status'] not in ["administrator", "creator"]:
+        if bot_member["status"] not in ["administrator", "creator"]:
             await message.answer(
                 "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        invite_link = chat_info.get('invite_link')
+        invite_link = chat_info.get("invite_link")
         if not invite_link:
             create_link_response = await bot.session.make_request(
                 "createChatInviteLink",
@@ -329,11 +331,11 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             f"🔗 Ссылка: {invite_link}"
         ]
 
-        if 'available_reactions' in chat_info:
+        if "available_reactions" in chat_info:
             try:
-                reactions = chat_info['available_reactions']
+                reactions = chat_info["available_reactions"]
                 if reactions:
-                    reaction_types = [r.get('type', 'unknown') for r in reactions]
+                    reaction_types = [r.get("type", "unknown") for r in reactions]
                     channel_info.append(
                         f"💫 Доступные реакции: {', '.join(reaction_types)}"
                     )
@@ -363,6 +365,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
 
 
 
