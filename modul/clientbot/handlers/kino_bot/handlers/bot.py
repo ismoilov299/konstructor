@@ -230,16 +230,68 @@ async def admin_add_channel(call: CallbackQuery, state: FSMContext):
                                  reply_markup=cancel_kb)
 
 
+from enum import Enum
+from typing import Optional, List, Union
+from pydantic import BaseModel
+
+
+# Define ReactionType enum to include all possible types
+class ReactionTypeType(str, Enum):
+    EMOJI = "emoji"
+    CUSTOM_EMOJI = "custom_emoji"
+    PAID = "paid"
+
+
+# Base class for all reaction types
+class ReactionTypeBase(BaseModel):
+    type: ReactionTypeType
+
+
+# Specific reaction type models
+class ReactionTypeEmoji(ReactionTypeBase):
+    type: ReactionTypeType = ReactionTypeType.EMOJI
+    emoji: str
+
+
+class ReactionTypeCustomEmoji(ReactionTypeBase):
+    type: ReactionTypeType = ReactionTypeType.CUSTOM_EMOJI
+    custom_emoji_id: str
+
+
+class ReactionTypePaid(ReactionTypeBase):
+    type: ReactionTypeType = ReactionTypeType.PAID
+
+
+# Union type for all possible reactions
+ReactionType = Union[ReactionTypeEmoji, ReactionTypeCustomEmoji, ReactionTypePaid]
+
+
+class ChatInfo(BaseModel):
+    id: int
+    title: str
+    type: str
+    description: Optional[str] = None
+    invite_link: Optional[str] = None
+    has_visible_history: Optional[bool] = None
+    can_send_paid_media: Optional[bool] = None
+    available_reactions: Optional[List[ReactionType]] = None
+    max_reaction_count: Optional[int] = None
+    accent_color_id: Optional[int] = None
+
+
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     """
-    Handler for adding a sponsor channel with proper reaction type handling.
+    Handler for adding a sponsor channel with support for all reaction types.
     """
     try:
         channel_id = int(message.text)
 
         # Get channel information via Telegram API
-        chat_info = await bot.get_chat(channel_id)
+        chat_response = await bot.get_chat(channel_id)
+
+        # Parse the response using our updated model
+        chat_info = ChatInfo.model_validate(chat_response.model_dump())
 
         # Validate channel type
         if chat_info.type != "channel":
@@ -268,18 +320,20 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         await state.clear()
 
         # Prepare channel info message
-        channel_info = f"✅ Канал успешно добавлен!\n\n" \
-                      f"📣 Название: {chat_info.title}\n" \
-                      f"🆔 ID: {channel_id}\n" \
-                      f"🔗 Ссылка: {invite_link}"
+        channel_info = [
+            "✅ Канал успешно добавлен!",
+            f"📣 Название: {chat_info.title}",
+            f"🆔 ID: {channel_id}",
+            f"🔗 Ссылка: {invite_link}"
+        ]
 
         # Add reactions info if available
-        if hasattr(chat_info, "available_reactions") and chat_info.available_reactions:
-            reaction_types = [reaction.type for reaction in chat_info.available_reactions]
-            channel_info += f"\n💫 Доступные реакции: {', '.join(reaction_types)}"
+        if chat_info.available_reactions:
+            reaction_types = [r.type.value for r in chat_info.available_reactions]
+            channel_info.append(f"💫 Доступные реакции: {', '.join(reaction_types)}")
 
         await message.answer(
-            channel_info,
+            "\n\n".join(channel_info),
             disable_web_page_preview=True
         )
 
@@ -289,13 +343,14 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             reply_markup=cancel_kb
         )
     except TelegramBadRequest as e:
-        logger.error(f"Telegram API xatosi: {e}")
+        logger.error(f"Telegram API error: {e}")
         await message.answer(
             "Бот не смог найти канал. Пожалуйста, проверьте ID канала.",
             reply_markup=cancel_kb
         )
     except Exception as e:
         logger.error(f"Channel add error: channel_id={channel_id}, error={str(e)}")
+        logger.exception("Detailed error:")  # Add full traceback to logs
         await message.answer(
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
