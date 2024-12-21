@@ -285,39 +285,38 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     Handler for adding a sponsor channel with proper API request handling.
     """
     try:
+        # Matndan kanal ID sini int() ga aylantirish
         channel_id = int(message.text)
 
-        # Get raw chat info using direct API request to avoid pydantic validation issues
+        # 1) getChat API chaqirig'i
         raw_response = await bot.session.make_request(
             "getChat",
             {"chat_id": channel_id}
         )
-
         chat_info = raw_response["result"]
 
-        # Validate channel type
-        if chat_info['type'] != "channel":
+        # 2) Channel turini tekshirish
+        if chat_info["type"] != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # Check bot admin status
+        # 3) Botning kanalga adminligi tekshirish
         bot_member_response = await bot.session.make_request(
             "getChatMember",
             {"chat_id": channel_id, "user_id": bot.id}
         )
         bot_member = bot_member_response["result"]
-
-        if bot_member['status'] not in ["administrator", "creator"]:
+        if bot_member["status"] not in ["administrator", "creator"]:
             await message.answer(
                 "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # Get invite link
+        # 4) Invite link mavjudligini tekshirish / yaratish
         invite_link = chat_info.get('invite_link')
         if not invite_link:
             create_link_response = await bot.session.make_request(
@@ -326,11 +325,11 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             invite_link = create_link_response["result"]["invite_link"]
 
-        # Add channel to database
+        # 5) Bazaga qo'shish
         create_channel_sponsor(channel_id)
         await state.clear()
 
-        # Build success message
+        # 6) Muvaffaqiyatli yakun xabari
         channel_info = [
             "✅ Канал успешно добавлен!",
             f"📣 Название: {chat_info['title']}",
@@ -338,16 +337,19 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             f"🔗 Ссылка: {invite_link}"
         ]
 
-        # Safely handle reactions
+        # 7) Reaksiyalarni tekshirish (agar bo'lsa)
         if 'available_reactions' in chat_info:
             try:
                 reactions = chat_info['available_reactions']
                 if reactions:
                     reaction_types = [r.get('type', 'unknown') for r in reactions]
-                    channel_info.append(f"💫 Доступные реакции: {', '.join(reaction_types)}")
-            except Exception as e:
-                logger.warning(f"Failed to process reactions: {e}")
+                    channel_info.append(
+                        f"💫 Доступные реакции: {', '.join(reaction_types)}"
+                    )
+            except Exception as exc:
+                logger.warning(f"Failed to process reactions: {exc}")
 
+        # 8) Javob xabarini jo'natish
         await message.answer(
             "\n\n".join(channel_info),
             disable_web_page_preview=True
@@ -365,12 +367,13 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             reply_markup=cancel_kb
         )
     except Exception as e:
-        logger.error(f"Channel add error: channel_id={channel_id}, error={str(e)}")
+        logger.error(f"Channel add error: channel_id=?, error={str(e)}")
         logger.exception("Detailed error:")
         await message.answer(
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
 
 
 
