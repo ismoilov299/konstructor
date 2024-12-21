@@ -3,7 +3,7 @@ import time
 from contextlib import suppress
 
 from aiogram import Bot, F, html
-from aiogram.exceptions import TelegramForbiddenError
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart, CommandObject, Filter, BaseFilter, command
 from aiogram.fsm.context import FSMContext
 from aiogram.filters.state import State, StatesGroup, StateFilter
@@ -232,24 +232,67 @@ async def admin_add_channel(call: CallbackQuery, state: FSMContext):
 
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
-    channel_id = int(message.text)
+    """
+    Обработчик для добавления спонсорского канала.
+
+    Args:
+        message (Message): Telegram сообщение (ID канала)
+        state (FSMContext): Состояние FSM
+        bot (Bot): Объект бота
+    """
     try:
+        # Преобразование ID канала в число
+        channel_id = int(message.text)
+
+        # Проверка канала
         chat_info = await bot.get_chat(channel_id)
 
-        if hasattr(chat_info, "available_reactions"):
-            chat_info.available_reactions = [
-                reaction for reaction in chat_info.available_reactions
-                if reaction.get("type") in ["emoji", "custom_emoji"]
-            ]
+        # Проверка что это канал
+        if chat_info.type != "channel":
+            await message.answer(
+                "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
+                reply_markup=cancel_kb
+            )
+            return
 
+        # Проверка что бот админ
+        bot_member = await bot.get_chat_member(chat_id=channel_id, user_id=bot.id)
+        if not bot_member.status in ["administrator", "creator"]:
+            await message.answer(
+                "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
+                reply_markup=cancel_kb
+            )
+            return
+
+        # Добавление канала в базу
         create_channel_sponsor(channel_id)
 
+        # Очистка состояния FSM
         await state.clear()
-        await message.answer("Канал успешно добавлен!")
-    except Exception as e:
-        print(f"Xatolik yuz berdi: {e}")
+
+        # Сообщение об успехе
         await message.answer(
-            "Ошибка при добавлении канала!\n\nСкорее всего, дело в том, что бот не является администратором в канале.",
+            f"✅ Канал успешно добавлен!\n\n"
+            f"📣 Канал: {chat_info.title}\n"
+            f"🆔 ID канала: {channel_id}"
+        )
+
+    except ValueError:
+        await message.answer(
+            "Неверный формат. Пожалуйста, введите числовой ID канала.",
+            reply_markup=cancel_kb
+        )
+    except TelegramBadRequest:
+        await message.answer(
+            "Бот не смог найти канал. Пожалуйста, проверьте ID канала.",
+            reply_markup=cancel_kb
+        )
+    except Exception as e:
+        # Логирование ошибки
+        logger.error(f"Channel add error: {channel_id=}, error={str(e)}")
+
+        await message.answer(
+            "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
 
