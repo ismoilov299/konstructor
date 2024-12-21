@@ -229,19 +229,31 @@ async def admin_add_channel(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text('Отправьте id канала\n\nУбедитесь в том, что бот является администратором в канале',
                                  reply_markup=cancel_kb)
 
+
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     channel_id = int(message.text)
     try:
-        await bot.get_chat(channel_id)
+        chat_info = await bot.get_chat(channel_id)
+
+        if hasattr(chat_info, "available_reactions"):
+            delattr(chat_info, "available_reactions")
+
         create_channel_sponsor(channel_id)
+
         await state.clear()
-        await message.answer('Канал успешно добавлен!')
-    except Exception as e:
-        print(e)
+        await message.answer("Канал успешно добавлен!")
+    except ValueError:
         await message.answer(
-            'Ошибка при добавлении канала!\n\nСкорее всего, дело в том, что бот не является администратором в канале',
-            reply_markup=cancel_kb)
+            "Ошибка! Убедитесь, что вы отправляете корректный ID канала.",
+            reply_markup=cancel_kb
+        )
+    except Exception as e:
+        print(f"Xatolik yuz berdi: {e}")
+        await message.answer(
+            "Ошибка при добавлении канала!\n\nСкорее всего, дело в том, что бот не является администратором в канале.",
+            reply_markup=cancel_kb
+        )
 
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
