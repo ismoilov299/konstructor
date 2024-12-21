@@ -241,8 +241,8 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         # Telegram API orqali kanal haqida ma'lumot olish
         chat_info = await bot.get_chat(channel_id)
 
-        # available_reactions ni tozalash
-        if hasattr(chat_info, "available_reactions"):
+        # `available_reactions` ni filtrlash
+        if hasattr(chat_info, "available_reactions") and chat_info.available_reactions:
             chat_info.available_reactions = [
                 reaction for reaction in chat_info.available_reactions
                 if reaction.type in {"emoji", "custom_emoji"}
@@ -299,6 +299,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
 
 
 
