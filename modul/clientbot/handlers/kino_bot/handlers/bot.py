@@ -306,6 +306,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
 
 
 
+
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     """
     Kino bot boshlanish funksiyasi
