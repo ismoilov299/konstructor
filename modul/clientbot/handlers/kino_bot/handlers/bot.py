@@ -237,28 +237,21 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         chat_info = await bot.get_chat(channel_id)
 
         if hasattr(chat_info, "available_reactions"):
-            chat_info['available_reactions'] = [
-                reaction for reaction in chat_info['available_reactions']
-                if reaction.get('type') in ['emoji', 'custom_emoji']
+            chat_info.available_reactions = [
+                reaction for reaction in chat_info.available_reactions
+                if reaction.get("type") in ["emoji", "custom_emoji"]
             ]
 
         create_channel_sponsor(channel_id)
+
         await state.clear()
         await message.answer("Канал успешно добавлен!")
-    except ValueError:
-        await message.answer(
-            "Ошибка! Убедитесь, что вы отправляете корректный ID канала.",
-            reply_markup=cancel_kb
-        )
     except Exception as e:
         print(f"Xatolik yuz berdi: {e}")
         await message.answer(
             "Ошибка при добавлении канала!\n\nСкорее всего, дело в том, что бот не является администратором в канале.",
             reply_markup=cancel_kb
         )
-
-
-
 
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
