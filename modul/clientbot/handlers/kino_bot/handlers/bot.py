@@ -282,15 +282,15 @@ class ChatInfo(BaseModel):
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     """
-    Handler for adding a sponsor channel that bypasses reaction validation.
+    Handler for adding a sponsor channel with proper API request handling.
     """
     try:
         channel_id = int(message.text)
 
-        # Make raw API request to get chat info
+        # Get raw chat info using native aiogram methods
         raw_response = await bot.session.make_request(
             "getChat",
-            json={"chat_id": channel_id}
+            {"chat_id": channel_id}
         )
 
         chat_info = raw_response["result"]
@@ -303,10 +303,10 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Check bot admin status using raw request
+        # Check bot admin status
         bot_member_response = await bot.session.make_request(
             "getChatMember",
-            json={"chat_id": channel_id, "user_id": bot.id}
+            {"chat_id": channel_id, "user_id": bot.id}
         )
         bot_member = bot_member_response["result"]
 
@@ -322,7 +322,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
         if not invite_link:
             create_link_response = await bot.session.make_request(
                 "createChatInviteLink",
-                json={"chat_id": channel_id}
+                {"chat_id": channel_id}
             )
             invite_link = create_link_response["result"]["invite_link"]
 
