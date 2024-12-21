@@ -233,13 +233,20 @@ async def admin_add_channel(call: CallbackQuery, state: FSMContext):
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     """
-    Спонсор канали qo'shish uchun handler.
+    Обработчик для добавления спонсорского канала.
     """
     try:
         channel_id = int(message.text)
 
         # Telegram API orqali kanal haqida ma'lumot olish
         chat_info = await bot.get_chat(channel_id)
+
+        # available_reactions ni tozalash
+        if hasattr(chat_info, "available_reactions"):
+            chat_info.available_reactions = [
+                reaction for reaction in chat_info.available_reactions
+                if reaction.type in {"emoji", "custom_emoji"}
+            ]
 
         # Kanal ekanligini tekshirish
         if chat_info.type != "channel":
@@ -258,7 +265,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Invite linkni olish yoki yaratish
+        # Kanalga a'zo bo‘lish uchun taklif linkini olish
         invite_link = chat_info.invite_link
         if not invite_link:
             invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
@@ -292,6 +299,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
 
 
 
