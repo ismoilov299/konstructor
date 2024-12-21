@@ -233,22 +233,15 @@ async def admin_add_channel(call: CallbackQuery, state: FSMContext):
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     """
-    Обработчик для добавления спонсорского канала.
+    Handler for adding a sponsor channel with proper reaction type handling.
     """
     try:
         channel_id = int(message.text)
 
-        # Telegram API orqali kanal haqida ma'lumot olish
+        # Get channel information via Telegram API
         chat_info = await bot.get_chat(channel_id)
 
-        # `available_reactions` ni filtrlash
-        if hasattr(chat_info, "available_reactions") and chat_info.available_reactions:
-            chat_info.available_reactions = [
-                reaction for reaction in chat_info.available_reactions
-                if reaction.type in {"emoji", "custom_emoji"}
-            ]
-
-        # Kanal ekanligini tekshirish
+        # Validate channel type
         if chat_info.type != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
@@ -256,7 +249,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Bot adminligini tekshirish
+        # Check bot admin status
         bot_member = await bot.get_chat_member(channel_id, bot.id)
         if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
@@ -265,20 +258,28 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Kanalga a'zo bo‘lish uchun taklif linkini olish
+        # Get or create invite link
         invite_link = chat_info.invite_link
         if not invite_link:
             invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
 
-        # Kanalni bazaga qo‘shish
+        # Add channel to database
         create_channel_sponsor(channel_id)
         await state.clear()
 
+        # Prepare channel info message
+        channel_info = f"✅ Канал успешно добавлен!\n\n" \
+                      f"📣 Название: {chat_info.title}\n" \
+                      f"🆔 ID: {channel_id}\n" \
+                      f"🔗 Ссылка: {invite_link}"
+
+        # Add reactions info if available
+        if hasattr(chat_info, "available_reactions") and chat_info.available_reactions:
+            reaction_types = [reaction.type for reaction in chat_info.available_reactions]
+            channel_info += f"\n💫 Доступные реакции: {', '.join(reaction_types)}"
+
         await message.answer(
-            f"✅ Канал успешно добавлен!\n\n"
-            f"📣 Название: {chat_info.title}\n"
-            f"🆔 ID: {channel_id}\n"
-            f"🔗 Ссылка: {invite_link}",
+            channel_info,
             disable_web_page_preview=True
         )
 
