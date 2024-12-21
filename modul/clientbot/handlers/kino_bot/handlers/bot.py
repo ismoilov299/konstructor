@@ -238,21 +238,26 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     try:
         channel_id = int(message.text)
 
-        chat = await bot.get_chat(channel_id)
+        # Faqat asosiy ma'lumotlarni olish
+        chat_info_raw = await bot.get_chat(channel_id)
 
-        if hasattr(chat, "available_reactions") and isinstance(chat.available_reactions, list):
-            chat.available_reactions = [
-                reaction for reaction in chat.available_reactions
+        # Javobni tozalash
+        chat_info = chat_info_raw.dict()  # JSON shaklida konvertatsiya qilish
+        if "available_reactions" in chat_info and isinstance(chat_info["available_reactions"], list):
+            chat_info["available_reactions"] = [
+                reaction for reaction in chat_info["available_reactions"]
                 if reaction.get("type") in ["emoji", "custom_emoji"]
             ]
 
-        if chat.type != "channel":
+        # Kanal ekanligini tekshirish
+        if chat_info["type"] != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
             )
             return
 
+        # Bot adminligini tekshirish
         bot_member = await bot.get_chat_member(channel_id, bot.id)
         if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
@@ -261,10 +266,10 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        try:
-            invite_link = chat.invite_link or await bot.create_chat_invite_link(channel_id)
-        except:
-            invite_link = "Не удалось получить ссылку"
+        # Kanalga a'zo bo'lish linkini olish
+        invite_link = chat_info.get("invite_link")
+        if not invite_link:
+            invite_link = await bot.create_chat_invite_link(channel_id)
 
         # Bazaga saqlash
         create_channel_sponsor(channel_id)
@@ -272,7 +277,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
 
         await message.answer(
             f"✅ Канал успешно добавлен!\n\n"
-            f"📣 Название: {chat.title}\n"
+            f"📣 Название: {chat_info['title']}\n"
             f"🆔 ID: {channel_id}\n"
             f"🔗 Ссылка: {invite_link}",
             disable_web_page_preview=True
@@ -289,11 +294,12 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             reply_markup=cancel_kb
         )
     except Exception as e:
-        logger.error(f"Channel add error: {channel_id=}, error={str(e)}")
+        logger.error(f"Channel add error: channel_id={channel_id}, error={str(e)}")
         await message.answer(
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
 
 
 
