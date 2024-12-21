@@ -233,26 +233,16 @@ async def admin_add_channel(call: CallbackQuery, state: FSMContext):
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     """
-    Обработчик для добавления спонсорского канала.
+    Спонсор канали qo'shish uchun handler.
     """
     try:
         channel_id = int(message.text)
 
         # Telegram API orqali kanal haqida ma'lumot olish
-        chat_info_raw = await bot.get_chat(channel_id)
-
-        # Javobni JSON formatga o‘tkazish va `available_reactions` ni tozalash
-        chat_info = chat_info_raw.as_json()
-
-        # `available_reactions` ni tozalash
-        if "available_reactions" in chat_info:
-            chat_info["available_reactions"] = [
-                reaction for reaction in chat_info["available_reactions"]
-                if isinstance(reaction, dict) and reaction.get("type") in {"emoji", "custom_emoji"}
-            ]
+        chat_info = await bot.get_chat(channel_id)
 
         # Kanal ekanligini tekshirish
-        if chat_info["type"] != "channel":
+        if chat_info.type != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
@@ -268,10 +258,10 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Kanalga a'zo bo‘lish uchun taklif linkini olish
-        invite_link = chat_info.get("invite_link")
+        # Invite linkni olish yoki yaratish
+        invite_link = chat_info.invite_link
         if not invite_link:
-            invite_link = await bot.create_chat_invite_link(channel_id)
+            invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
 
         # Kanalni bazaga qo‘shish
         create_channel_sponsor(channel_id)
@@ -279,7 +269,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
 
         await message.answer(
             f"✅ Канал успешно добавлен!\n\n"
-            f"📣 Название: {chat_info['title']}\n"
+            f"📣 Название: {chat_info.title}\n"
             f"🆔 ID: {channel_id}\n"
             f"🔗 Ссылка: {invite_link}",
             disable_web_page_preview=True
@@ -291,8 +281,9 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             reply_markup=cancel_kb
         )
     except TelegramBadRequest as e:
+        logger.error(f"Telegram API xatosi: {e}")
         await message.answer(
-            f"Ошибка Telegram API: {e.message}\nПроверьте ID канала и попробуйте снова.",
+            "Бот не смог найти канал. Пожалуйста, проверьте ID канала.",
             reply_markup=cancel_kb
         )
     except Exception as e:
