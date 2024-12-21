@@ -282,55 +282,78 @@ class ChatInfo(BaseModel):
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     """
-    Handler for adding a sponsor channel with support for all reaction types.
+    Handler for adding a sponsor channel that bypasses reaction validation.
     """
     try:
         channel_id = int(message.text)
 
-        # Get channel information via Telegram API
-        chat_response = await bot.get_chat(channel_id)
+        # Make raw API request to get chat info
+        raw_response = await bot.session.make_request(
+            bot.session.build_api_request(
+                bot=bot,
+                method="getChat",
+                data={"chat_id": channel_id}
+            )
+        )
 
-        # Parse the response using our updated model
-        chat_info = ChatInfo.model_validate(chat_response.model_dump())
+        chat_info = raw_response.json()['result']
 
         # Validate channel type
-        if chat_info.type != "channel":
+        if chat_info['type'] != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # Check bot admin status
-        bot_member = await bot.get_chat_member(channel_id, bot.id)
-        if bot_member.status not in ["administrator", "creator"]:
+        # Check bot admin status using raw request to avoid validation issues
+        bot_member_response = await bot.session.make_request(
+            bot.session.build_api_request(
+                bot=bot,
+                method="getChatMember",
+                data={"chat_id": channel_id, "user_id": bot.id}
+            )
+        )
+        bot_member = bot_member_response.json()['result']
+
+        if bot_member['status'] not in ["administrator", "creator"]:
             await message.answer(
                 "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # Get or create invite link
-        invite_link = chat_info.invite_link
+        # Get invite link
+        invite_link = chat_info.get('invite_link')
         if not invite_link:
-            invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
+            create_link_response = await bot.session.make_request(
+                bot.session.build_api_request(
+                    bot=bot,
+                    method="createChatInviteLink",
+                    data={"chat_id": channel_id}
+                )
+            )
+            invite_link = create_link_response.json()['result']['invite_link']
 
         # Add channel to database
         create_channel_sponsor(channel_id)
         await state.clear()
 
-        # Prepare channel info message
+        # Build success message
         channel_info = [
             "✅ Канал успешно добавлен!",
-            f"📣 Название: {chat_info.title}",
+            f"📣 Название: {chat_info['title']}",
             f"🆔 ID: {channel_id}",
             f"🔗 Ссылка: {invite_link}"
         ]
 
-        # Add reactions info if available
-        if chat_info.available_reactions:
-            reaction_types = [r.type.value for r in chat_info.available_reactions]
-            channel_info.append(f"💫 Доступные реакции: {', '.join(reaction_types)}")
+        # Add reactions info if available (safely)
+        if 'available_reactions' in chat_info:
+            try:
+                reaction_types = [r['type'] for r in chat_info['available_reactions']]
+                channel_info.append(f"💫 Доступные реакции: {', '.join(reaction_types)}")
+            except (KeyError, TypeError):
+                pass  # Skip reactions if there's any issue parsing them
 
         await message.answer(
             "\n\n".join(channel_info),
