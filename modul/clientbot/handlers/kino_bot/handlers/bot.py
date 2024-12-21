@@ -234,47 +234,46 @@ async def admin_add_channel(call: CallbackQuery, state: FSMContext):
 async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
     """
     Обработчик для добавления спонсорского канала.
-
-    Args:
-        message (Message): Telegram сообщение (ID канала)
-        state (FSMContext): Состояние FSM
-        bot (Bot): Объект бота
     """
     try:
-        # Преобразование ID канала в число
         channel_id = int(message.text)
 
-        # Проверка канала
-        chat_info = await bot.get_chat(channel_id)
+        # Faqat asosiy ma'lumotlarni olish
+        chat = await bot.get_chat(channel_id)
 
-        # Проверка что это канал
-        if chat_info.type != "channel":
+        # Kanal ekanligini tekshirish
+        if chat.type != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # Проверка что бот админ
-        bot_member = await bot.get_chat_member(chat_id=channel_id, user_id=bot.id)
-        if not bot_member.status in ["administrator", "creator"]:
+        # Bot adminligini tekshirish
+        bot_member = await bot.get_chat_member(channel_id, bot.id)
+        if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
                 "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # Добавление канала в базу
-        create_channel_sponsor(channel_id)
+        # Kanalga a'zo bo'lish linkini olish
+        try:
+            invite_link = chat.invite_link or await bot.create_chat_invite_link(channel_id)
+        except:
+            invite_link = "Не удалось получить ссылку"
 
-        # Очистка состояния FSM
+        # Bazaga saqlash
+        create_channel_sponsor(channel_id)
         await state.clear()
 
-        # Сообщение об успехе
         await message.answer(
             f"✅ Канал успешно добавлен!\n\n"
-            f"📣 Канал: {chat_info.title}\n"
-            f"🆔 ID канала: {channel_id}"
+            f"📣 Название: {chat.title}\n"
+            f"🆔 ID: {channel_id}\n"
+            f"🔗 Ссылка: {invite_link}",
+            disable_web_page_preview=True
         )
 
     except ValueError:
@@ -288,9 +287,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext, bot: Bot):
             reply_markup=cancel_kb
         )
     except Exception as e:
-        # Логирование ошибки
         logger.error(f"Channel add error: {channel_id=}, error={str(e)}")
-
         await message.answer(
             "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
