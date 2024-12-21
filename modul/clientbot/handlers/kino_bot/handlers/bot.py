@@ -195,13 +195,12 @@ async def admin_send_message_msg(message: Message, state: FSMContext):
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
 async def admin_get_stats(call: CallbackQuery):
     bot = call.bot
-
-    users = await get_all_users(bot)
-
+    users_count = await get_all_users(bot)
     await call.message.edit_text(
-        f'<b>Количество пользователей в боте:</b> {len(users)}',
+        f'<b>Количество пользователей в боте:</b> {users_count}',
         reply_markup=admin_kb
     )
+
 
 
 @client_bot_router.callback_query(F.data == 'cancel', StateFilter('*'))
