@@ -208,7 +208,8 @@ async def users_count(bot: Bot):
 
 async def get_all_users(bot: Bot):
     bot = await get_bot(bot)
-    return await models.ClientBotUser.objects.filter(bot=bot)
+    return await models.ClientBotUser.objects.filter(bot=bot).acount()
+
 
 
 async def get_main_bot_user(uid: int):
