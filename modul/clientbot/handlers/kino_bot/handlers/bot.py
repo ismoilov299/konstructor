@@ -286,13 +286,9 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
     """
     try:
         channel_id = int(message.text)
-        # Mana shu yerda Aiogram Bot obyektini to'g'ridan to'g'ri message.bot dan olyapmiz:
         bot = message.bot
 
-        raw_response = await bot.session.make_request(
-            "getChat",
-            {"chat_id": channel_id}
-        )
+        raw_response = await bot.session.make_request("getChat", {"chat_id": channel_id})
         chat_info = raw_response["result"]
 
         if chat_info['type'] != "channel":
