@@ -193,16 +193,14 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 @client_bot_router.message(SendMessagesForm.message)
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
-
     users = await get_all_users()
-    print("uuu ",users)
     if not users:
-        await message.answer("Список пользователей пуст.")
+        await message.answer("Нет пользователей для рассылки.")
         return
 
-    logger.info(f"Начинаем рассылку сообщения {len(users)} пользователям: {users}")
-    await send_message_to_users(users, message.text, message.bot)
-    await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
+    await send_message_to_users(message.bot, users, message.text)
+    await message.answer('Рассылка завершена!')
+
 
 
 
