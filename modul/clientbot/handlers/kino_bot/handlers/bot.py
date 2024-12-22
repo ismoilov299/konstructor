@@ -187,7 +187,8 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 async def admin_send_message_msg(message: Message, state: FSMContext):
     # await state.clear()
 
-    users = await get_all_users()
+    users = await get_all_users(message.bot)
+
 
     await asyncio.create_task(send_message(message, users))
 
