@@ -343,11 +343,12 @@ class ChannelSponsor(models.Model):
 
 
 class Messages(models.Model):
+
     sender_id = models.BigIntegerField()  # g
     receiver_id = models.BigIntegerField()
     sender_message_id = models.BigIntegerField()
     receiver_message_id = models.BigIntegerField()
-    eg_date = models.DateTimeField(default=now)
+    reg_date = models.DateTimeField(auto_now_add=True)
 
 
 class Link_statistic(models.Model):
