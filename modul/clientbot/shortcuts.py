@@ -219,14 +219,8 @@ def fetch_user_ids_sync(bot_instance):
     """
     return list(ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True))
 
-async def get_all_users(bot: Bot) -> List[int]:
-    """
-    Bazadan barcha user_id ro'yxatini asinxron kontekstda oladi.
-    """
-    bot_instance = await get_bot(bot)  # Bu sizning bot instance qaytaradigan funksiyangiz
-    loop = asyncio.get_event_loop()
-    user_ids = await loop.run_in_executor(executor, fetch_user_ids_sync, bot_instance)
-    return user_ids
+def get_all_users():
+    return list(ClientBotUser.objects.values_list('user_id', flat=True))
 
 
 
