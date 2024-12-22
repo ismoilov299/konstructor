@@ -284,12 +284,12 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
     try:
         channel_id = int(message.text)
 
-        # Получаем объект Bot напрямую из message:
-        bot = message.bot  # <-- здесь bot точно aiogram.Bot, а не строка
+        # Берём объект Bot напрямую из message:
+        bot = message.bot
 
         raw_response = await bot.session.make_request(
-            "getChat",
-            {"chat_id": channel_id}
+            method="getChat",
+            data={"chat_id": channel_id}
         )
         chat_info = raw_response["result"]
 
