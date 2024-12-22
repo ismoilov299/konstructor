@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone
 import json
@@ -208,15 +209,23 @@ logger = logging.getLogger(__name__)
 #     orders = await models.Order.objects.filter(user__bot=bot, status=strings.COMPLETED)
 #     total_earned = sum(order.bot_admin_profit for order in orders)
 #     return f"{total_earned:.2f}"
+from concurrent.futures import ThreadPoolExecutor
 
+executor = ThreadPoolExecutor(max_workers=5)
+
+def fetch_user_ids_sync(bot_instance):
+    """
+    Django ORM yordamida user_id ro'yxatini olish (sinxron kontekstda).
+    """
+    return list(ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True))
 
 async def get_all_users(bot: Bot) -> List[int]:
     """
-    Bazadan user_id ro'yxatini oladi.
+    Bazadan barcha user_id ro'yxatini asinxron kontekstda oladi.
     """
-    bot_instance = await get_bot(bot)  # Bu botni olish funktsiyasi
-    users = ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True)
-    user_ids = list(users)  # Sinxron holda olish
+    bot_instance = await get_bot(bot)  # Bu sizning bot instance qaytaradigan funksiyangiz
+    loop = asyncio.get_event_loop()
+    user_ids = await loop.run_in_executor(executor, fetch_user_ids_sync, bot_instance)
     return user_ids
 
 
