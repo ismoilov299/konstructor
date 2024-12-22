@@ -33,7 +33,7 @@ from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
 from modul.models import UserTG, AdminInfo
-
+from typing import Union, List
 import yt_dlp
 import logging
 from aiogram.types import Message, FSInputFile
