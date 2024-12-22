@@ -144,24 +144,35 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
 
     return kb.as_markup()
 
-async def send_message(message: types.Message, users: list):
+async def send_message(message: types.Message, users: list[int]):
+    """
+    Функция для рассылки исходного сообщения (message) списку пользователей (users).
+    Для каждого получателя делает copy_to, чтобы сохранить контент и разметку.
+    """
+
     good = []
     bad = []
 
-    for user in users:
-
+    for user_id in users:
         try:
+            # Копируем исходное сообщение пользователю user_id
+            await message.copy_to(user_id, reply_markup=message.reply_markup)
+            good.append(user_id)
 
-            await message.copy_to(user, reply_markup=message.reply_markup)
-            good.append(user)
-
+            # Небольшая задержка, чтобы не отправлять мгновенно всем
             await asyncio.sleep(0.1)
 
-        except:
+        except Exception as e:
+            # Любая ошибка (например, пользователь заблокировал бота, неверный user_id и т.д.)
+            bad.append(user_id)
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
 
-            bad.append(user)
-
-    await message.answer(f'Рассылка завершена!\n\nУспешно: {len(good)}\nНеуспешно: {len(bad)}')
+    # По завершении цикла отправляем отчёт в чат, откуда пришло сообщение
+    await message.answer(
+        f"Рассылка завершена!\n\n"
+        f"Успешно отправлено: {len(good)}\n"
+        f"Неуспешно: {len(bad)}"
+    )
 
 
 class AdminFilter(BaseFilter):
