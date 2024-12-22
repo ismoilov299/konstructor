@@ -144,34 +144,29 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
 
     return kb.as_markup()
 
-async def send_message(message: types.Message, users: List[int]):
-    """
-    Функция для рассылки исходного сообщения (message) списку пользователей (users).
-    Для каждого получателя делает copy_to, чтобы сохранить контент и разметку.
-    """
-    good = []
-    bad = []
 
+from aiogram import exceptions
+
+async def send_message_to_users(users, message_text, bot):
     for user_id in users:
         try:
-            # Копируем исходное сообщение пользователю user_id
-            await message.copy_to(user_id, reply_markup=message.reply_markup)
-            good.append(user_id)
-
-            # Небольшая задержка, чтобы не отправлять мгновенно всем
-            await asyncio.sleep(0.1)
-
+            await bot.send_message(chat_id=user_id, text=message_text)
+        except exceptions.TelegramBadRequest as e:
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
+        except exceptions.TelegramForbiddenError:
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: доступ запрещен")
+        except exceptions.TelegramRetryAfter as e:
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
         except Exception as e:
-            # Любая ошибка (например, пользователь заблокировал бота, неверный user_id и т.д.)
-            bad.append(user_id)
-            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
 
-    # По завершении цикла отправляем отчёт в чат, откуда пришло сообщение
-    await message.answer(
-        f"Рассылка завершена!\n\n"
-        f"Успешно отправлено: {len(good)}\n"
-        f"Неуспешно: {len(bad)}"
-    )
+
+    # # По завершении цикла отправляем отчёт в чат, откуда пришло сообщение
+    # await message.answer(
+    #     f"Рассылка завершена!\n\n"
+    #     f"Успешно отправлено: {len(good)}\n"
+    #     f"Неуспешно: {len(bad)}"
+    # )
 
 
 class AdminFilter(BaseFilter):
@@ -210,7 +205,7 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 
     logger.info(f"Начинаем рассылку сообщения {message.message_id} пользователям: {users}")
 
-    await send_message(message, users)
+    await send_message_to_users(message, users)
 
     await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
 
