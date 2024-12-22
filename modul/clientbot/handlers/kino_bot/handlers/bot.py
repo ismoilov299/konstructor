@@ -144,7 +144,7 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
 
     return kb.as_markup()
 
-async def send_message(message: types.Message, users: list[int]):
+async def send_message(message: types.Message, users: List[int]):
     """
     Функция для рассылки исходного сообщения (message) списку пользователей (users).
     Для каждого получателя делает copy_to, чтобы сохранить контент и разметку.
@@ -192,7 +192,6 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text('Отправьте сообщение для рассылки', reply_markup=cancel_kb)
 
 
-
 @client_bot_router.message(SendMessagesForm.message)
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
@@ -205,7 +204,9 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
         await message.answer("Произошла ошибка при получении списка пользователей.")
         return
 
-    await asyncio.create_task(send_message(message, users))
+    logger.info(f"Начинаем рассылку сообщения {message.message_id} пользователям: {users}")
+
+    await send_message(message, users)
 
     await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
 

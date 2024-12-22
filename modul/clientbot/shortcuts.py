@@ -1,9 +1,10 @@
+import logging
 from datetime import datetime, timezone
 import json
 from email._header_value_parser import get_domain
 from math import ceil
 import re
-from typing import Union
+from typing import Union, List
 from aiogram import Bot, types
 import aiohttp
 from aiogram.fsm.storage.base import StorageKey
@@ -20,6 +21,9 @@ import os
 from modul.loader import bot_session, main_bot, dp
 from aiogram import Bot
 from django.utils import timezone
+
+from modul.models import ClientBotUser
+
 
 def get_fsm_context(bot: Bot, chat_id: int, user_id: int = None):
     if not user_id:
@@ -198,7 +202,7 @@ async def users_count(bot: Bot):
     # bot = await get_bot(bot)
     return await models.ClientBotUser.objects.filter(bot=bot).count()
 
-
+logger = logging.getLogger(__name__)
 # async def earned():
 #     bot = await get_bot(Bot.get_current())
 #     orders = await models.Order.objects.filter(user__bot=bot, status=strings.COMPLETED)
@@ -206,9 +210,16 @@ async def users_count(bot: Bot):
 #     return f"{total_earned:.2f}"
 
 
-async def get_all_users(bot: Bot):
-    bot = await get_bot(bot)
-    return await models.ClientBotUser.objects.filter(bot=bot).acount()
+async def get_all_users(bot: Bot) -> List[int]:
+    """
+    Получает список всех user_id из базы данных.
+    """
+    bot_instance = await get_bot(bot)
+    # Замените на вашу ORM метод для получения списка user_id
+    users = await ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True)
+    user_ids = list(users)
+    logger.info(f"Получено {len(user_ids)} пользователей: {user_ids}")
+    return user_ids
 
 
 
