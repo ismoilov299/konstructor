@@ -289,6 +289,8 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
         bot = message.bot
 
         # 2) Узнаём информацию о чате (метод GetChat)
+        chat_data = await bot(GetChat(chat_id=channel_id, flags={"raw": True}))
+        print(chat_data)
         chat_info = await bot(GetChat(chat_id=channel_id))
 
         # 3) Проверяем, что это именно канал
