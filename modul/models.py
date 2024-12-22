@@ -1,6 +1,6 @@
 import random
 from datetime import datetime
-
+from django.utils.timezone import now
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
@@ -347,7 +347,7 @@ class Messages(models.Model):
     receiver_id = models.BigIntegerField()
     sender_message_id = models.BigIntegerField()
     receiver_message_id = models.BigIntegerField()
-    reg_date = models.DateTimeField(auto_now_add=True)
+    eg_date = models.DateTimeField(default=now)
 
 
 class Link_statistic(models.Model):
