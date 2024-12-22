@@ -145,6 +145,8 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
     return kb.as_markup()
 
 
+
+
 from aiogram import exceptions
 
 async def send_message_to_users(users, message_text, bot):
@@ -153,12 +155,17 @@ async def send_message_to_users(users, message_text, bot):
             await bot.send_message(chat_id=user_id, text=message_text)
         except exceptions.TelegramBadRequest as e:
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
+            continue
         except exceptions.TelegramForbiddenError:
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: доступ запрещен")
+            continue
         except exceptions.TelegramRetryAfter as e:
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
+            await asyncio.sleep(e.retry_after)  # Retry after the suggested delay
         except Exception as e:
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
+            continue
+
 
 
     # # По завершении цикла отправляем отчёт в чат, откуда пришло сообщение
