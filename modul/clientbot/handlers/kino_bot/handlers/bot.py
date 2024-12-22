@@ -200,6 +200,7 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
 
     users = await get_all_users()
+    print("uuu ",users)
     if not users:
         await message.answer("Список пользователей пуст.")
         return
