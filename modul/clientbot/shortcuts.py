@@ -212,13 +212,11 @@ logger = logging.getLogger(__name__)
 
 async def get_all_users(bot: Bot) -> List[int]:
     """
-    Получает список всех user_id из базы данных.
+    Bazadan user_id ro'yxatini oladi.
     """
-    bot_instance = await get_bot(bot)
-    # Замените на вашу ORM метод для получения списка user_id
-    users = await ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True)
-    user_ids = list(users)
-    logger.info(f"Получено {len(user_ids)} пользователей: {user_ids}")
+    bot_instance = await get_bot(bot)  # Bu botni olish funktsiyasi
+    users = ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True)
+    user_ids = list(users)  # Sinxron holda olish
     return user_ids
 
 
