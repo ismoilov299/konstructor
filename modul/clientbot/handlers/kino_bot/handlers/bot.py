@@ -196,6 +196,8 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
         logger.info(f"Начинаем рассылку сообщения {len(users)} пользователям: {users}")
     else:
         logger.info("Нет пользователей для рассылки.")
+        await message.answer("Список пользователей пуст.")
+        return
 
     # Проверяем, что users является списком
     if not isinstance(users, list):
@@ -205,9 +207,10 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 
     logger.info(f"Начинаем рассылку сообщения {message.message_id} пользователям: {users}")
 
-    await send_message_to_users(message, users)
+    await send_message_to_users(users, message.text, message.bot)
 
     await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
+
 
 
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
