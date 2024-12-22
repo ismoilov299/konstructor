@@ -220,7 +220,9 @@ def fetch_user_ids_sync(bot_instance):
 
 @sync_to_async
 def get_all_users():
-    return list(ClientBotUser.objects.values_list('user_id', flat=True))
+    users = list(ClientBotUser.objects.values_list('user_id', flat=True))
+    # Faqat raqamli ID larni qaytarish
+    return [user_id for user_id in users if isinstance(user_id, int) and user_id > 0]
 
 
 

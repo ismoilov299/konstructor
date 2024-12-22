@@ -192,24 +192,14 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
 
     users = await get_all_users()
-    if users:
-        logger.info(f"Начинаем рассылку сообщения {len(users)} пользователям: {users}")
-    else:
-        logger.info("Нет пользователей для рассылки.")
+    if not users:
         await message.answer("Список пользователей пуст.")
         return
 
-    # Проверяем, что users является списком
-    if not isinstance(users, list):
-        logger.error(f"get_all_users вернул неверный тип: {type(users)}")
-        await message.answer("Произошла ошибка при получении списка пользователей.")
-        return
-
-    logger.info(f"Начинаем рассылку сообщения {message.message_id} пользователям: {users}")
-
+    logger.info(f"Начинаем рассылку сообщения {len(users)} пользователям: {users}")
     await send_message_to_users(users, message.text, message.bot)
-
     await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
+
 
 
 
