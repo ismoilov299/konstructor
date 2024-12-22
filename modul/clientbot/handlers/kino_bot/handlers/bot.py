@@ -182,7 +182,8 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text('Отправьте сообщение для рассылки', reply_markup=cancel_kb)
 
 
-@client_bot_router.message(SendMessagesForm.message, F.content_type.in_({'any'}))
+
+@client_bot_router.message(SendMessagesForm.message)
 async def admin_send_message_msg(message: Message, state: FSMContext):
     # await state.clear()
 
