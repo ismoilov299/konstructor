@@ -221,6 +221,7 @@ def fetch_user_ids_sync(bot_instance):
 @sync_to_async
 def get_all_users():
     users = ClientBotUser.objects.filter(uid__gt=0, user__banned=False).values_list('uid', flat=True)
+    logger.info(f"Получены пользователи: {list(users)}")
     return list(users)
 
 
