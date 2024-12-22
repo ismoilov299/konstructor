@@ -184,13 +184,14 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 
 @client_bot_router.message(SendMessagesForm.message, F.content_type.in_({'any'}))
 async def admin_send_message_msg(message: Message, state: FSMContext):
-    await state.clear()
+    # await state.clear()
 
     users = await get_all_users()
 
     await asyncio.create_task(send_message(message, users))
 
     await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
+    await state.clear()
 
 
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
