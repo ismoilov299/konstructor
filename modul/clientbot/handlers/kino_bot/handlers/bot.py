@@ -149,7 +149,6 @@ async def send_message(message: types.Message, users: list[int]):
     Функция для рассылки исходного сообщения (message) списку пользователей (users).
     Для каждого получателя делает copy_to, чтобы сохранить контент и разметку.
     """
-
     good = []
     bad = []
 
@@ -195,16 +194,20 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 
 
 @client_bot_router.message(SendMessagesForm.message)
-async def admin_send_message_msg(message: Message, state: FSMContext):
-    # await state.clear()
+async def admin_send_message_msg(message: types.Message, state: FSMContext):
+    await state.clear()
 
     users = await get_all_users(message.bot)
 
+    # Проверяем, что users является списком
+    if not isinstance(users, list):
+        logger.error(f"get_all_users вернул неверный тип: {type(users)}")
+        await message.answer("Произошла ошибка при получении списка пользователей.")
+        return
 
     await asyncio.create_task(send_message(message, users))
 
     await message.answer('Рассылка началась!\n\nПо ее окончанию вы получите отчет')
-    await state.clear()
 
 
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
