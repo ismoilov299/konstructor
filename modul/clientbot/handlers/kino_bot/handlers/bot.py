@@ -289,7 +289,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
 
         raw_response = await bot.session.make_request(
             method="getChat",
-            data={"chat_id": channel_id}
+            # data={"chat_id": channel_id}
         )
         chat_info = raw_response["result"]
 
