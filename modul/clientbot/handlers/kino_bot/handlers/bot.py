@@ -160,8 +160,9 @@ async def send_message_to_users(users, message_text, bot):
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: доступ запрещен")
             continue
         except exceptions.TelegramRetryAfter as e:
-            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
-            await asyncio.sleep(e.retry_after)  # Retry after the suggested delay
+            logger.warning(f"Telegram сервер просит подождать: {e.retry_after} секунд.")
+            await asyncio.sleep(e.retry_after)
+            continue
         except Exception as e:
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
             continue
