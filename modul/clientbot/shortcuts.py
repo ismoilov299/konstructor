@@ -16,7 +16,6 @@ from urllib.parse import urlparse
 from modul.clientbot import strings
 from modul.config import settings_conf
 from modul import models
-
 from aiogram.types import FSInputFile
 import os
 from modul.loader import bot_session, main_bot, dp
@@ -219,6 +218,7 @@ def fetch_user_ids_sync(bot_instance):
     """
     return list(ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True))
 
+@sync_to_async
 def get_all_users():
     return list(ClientBotUser.objects.values_list('user_id', flat=True))
 
