@@ -7,6 +7,7 @@ from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart, CommandObject, Filter, BaseFilter, command
 from aiogram.fsm.context import FSMContext
 from aiogram.filters.state import State, StatesGroup, StateFilter
+from aiogram.methods import GetChat, CreateChatInviteLink, GetChatMember
 
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, \
     InputTextMessageContent, InlineQuery, BotCommand, ReplyKeyboardRemove, URLInputFile
@@ -284,70 +285,71 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
     try:
         channel_id = int(message.text)
 
-        # Берём объект Bot напрямую из message:
+        # 1) Получаем объект Bot напрямую из message:
         bot = message.bot
 
-        raw_response = await bot.session.make_request(
-            method="getChat",
-            # data={"chat_id": channel_id}
-        )
-        chat_info = raw_response["result"]
+        # 2) Узнаём информацию о чате (метод GetChat)
+        chat_info = await bot(GetChat(chat_id=channel_id))
 
-        if chat_info["type"] != "channel":
+        # 3) Проверяем, что это именно канал
+        if chat_info.type != "channel":
             await message.answer(
                 "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        bot_member_response = await bot.session.make_request(
-            "getChatMember",
-            {"chat_id": channel_id, "user_id": bot.id}
-        )
-        bot_member = bot_member_response["result"]
-
-        if bot_member["status"] not in ["administrator", "creator"]:
+        # 4) Проверяем, что бот — администратор в этом канале (GetChatMember)
+        bot_member = await bot(GetChatMember(chat_id=channel_id, user_id=bot.id))
+        if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
                 "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        invite_link = chat_info.get("invite_link")
+        # 5) Проверяем / создаём invite link (CreateChatInviteLink)
+        invite_link = chat_info.invite_link
         if not invite_link:
-            create_link_response = await bot.session.make_request(
-                "createChatInviteLink",
-                {"chat_id": channel_id}
-            )
-            invite_link = create_link_response["result"]["invite_link"]
+            link_data = await bot(CreateChatInviteLink(chat_id=channel_id))
+            invite_link = link_data.invite_link
 
+        # 6) Добавляем в базу (ваша функция)
         create_channel_sponsor(channel_id)
         await state.clear()
 
+        # 7) Формируем итоговый список строк для ответа
         channel_info = [
             "✅ Канал успешно добавлен!",
-            f"📣 Название: {chat_info['title']}",
+            f"📣 Название: {chat_info.title}",
             f"🆔 ID: {channel_id}",
             f"🔗 Ссылка: {invite_link}"
         ]
 
-        if "available_reactions" in chat_info:
+        # 8) Если доступны реакции, добавляем информацию
+        if chat_info.available_reactions:
             try:
-                reactions = chat_info["available_reactions"]
+                # chat_info.available_reactions может быть списком объектов-реакций
+                # Тут зависит от вашей сериализации. Предположим, это список dict
+                reactions = chat_info.available_reactions
                 if reactions:
-                    reaction_types = [r.get("type", "unknown") for r in reactions]
+                    reaction_types = [
+                        r.get("type", "unknown") for r in reactions
+                    ]
                     channel_info.append(
                         f"💫 Доступные реакции: {', '.join(reaction_types)}"
                     )
             except Exception as e:
                 logger.warning(f"Failed to process reactions: {e}")
 
+        # 9) Отправляем готовый текст
         await message.answer(
             "\n\n".join(channel_info),
             disable_web_page_preview=True
         )
 
     except ValueError:
+        # int(...) не смог преобразовать текст → сообщаем об ошибке формата
         await message.answer(
             "Неверный формат. Пожалуйста, введите числовой ID канала.",
             reply_markup=cancel_kb
