@@ -196,7 +196,7 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
 
-    users = get_all_users()
+    users = await get_all_users()
     if users:
         logger.info(f"Начинаем рассылку сообщения {len(users)} пользователям: {users}")
     else:
