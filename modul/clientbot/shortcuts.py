@@ -218,11 +218,14 @@ def fetch_user_ids_sync(bot_instance):
     """
     return list(ClientBotUser.objects.filter(bot=bot_instance).values_list('user_id', flat=True))
 
+from asgiref.sync import sync_to_async
+
 @sync_to_async
 def get_all_users():
+    # `uid` > 0 va `banned=False` bo'lgan foydalanuvchilarni olish
     users = ClientBotUser.objects.filter(uid__gt=0, user__banned=False).values_list('uid', flat=True)
-    logger.info(f"Получены пользователи: {list(users)}")
     return list(users)
+
 
 
 

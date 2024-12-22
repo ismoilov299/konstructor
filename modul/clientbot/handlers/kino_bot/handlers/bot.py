@@ -149,23 +149,18 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
 
 from aiogram import exceptions
 
-async def send_message_to_users(users, message_text, bot):
+from aiogram.types import Message
+from aiogram.exceptions import TelegramAPIError
+
+async def send_message_to_users(bot, users, text):
     for user_id in users:
         try:
-            await bot.send_message(chat_id=user_id, text=message_text)
-        except exceptions.TelegramBadRequest as e:
-            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
-            continue
-        except exceptions.TelegramForbiddenError:
-            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: доступ запрещен")
-            continue
-        except exceptions.TelegramRetryAfter as e:
-            logger.warning(f"Telegram сервер просит подождать: {e.retry_after} секунд.")
-            await asyncio.sleep(e.retry_after)
-            continue
-        except Exception as e:
-            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {str(e)}")
-            continue
+            # Xabar yuborish
+            await bot.send_message(chat_id=user_id, text=text)
+        except TelegramAPIError as e:
+            # Xatoni logga yozish va davom ettirish
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
+
 
 
 
