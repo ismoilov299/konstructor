@@ -113,51 +113,51 @@ async def get_admin_id(bot: Bot):
 #         await state.clear()
 
 
-@client_bot_router.message(ChangeAdminInfo.delete_channel)
-async def delete_channel(message: Message, state: FSMContext):
-    if message.text == "❌Отменить":
-        await message.bot.send_message(message.from_user.id, "🚫Действие отменено", reply_markup=await main_menu_bt())
-        await state.clear()
-    elif message.text == "1":
-        await message.bot.send_message(message.from_user.id, "🚫Нельзя удалить эту подписку",
-                                       reply_markup=await main_menu_bt())
-        await state.clear()
-    elif message.text != "1" and message.text.isdigit():
-        try_del = delete_channel_db(int(message.text))
-        if try_del:
-            await message.bot.send_message(message.from_user.id, f"Подписка успешно удалена ✅",
-                                           reply_markup=await main_menu_bt())
-            await state.clear()
-        else:
-            await message.bot.send_message(message.from_user.id, "🚫Не удалось удалить",
-                                           reply_markup=await main_menu_bt())
-            await state.clear()
-    else:
-        await message.bot.send_message(message.from_user.id, "️️❗Ошибка", reply_markup=await main_menu_bt())
-        await state.clear()
+# @client_bot_router.message(ChangeAdminInfo.delete_channel)
+# async def delete_channel(message: Message, state: FSMContext):
+#     if message.text == "❌Отменить":
+#         await message.bot.send_message(message.from_user.id, "🚫Действие отменено", reply_markup=await main_menu_bt())
+#         await state.clear()
+#     elif message.text == "1":
+#         await message.bot.send_message(message.from_user.id, "🚫Нельзя удалить эту подписку",
+#                                        reply_markup=await main_menu_bt())
+#         await state.clear()
+#     elif message.text != "1" and message.text.isdigit():
+#         try_del = delete_channel_db(int(message.text))
+#         if try_del:
+#             await message.bot.send_message(message.from_user.id, f"Подписка успешно удалена ✅",
+#                                            reply_markup=await main_menu_bt())
+#             await state.clear()
+#         else:
+#             await message.bot.send_message(message.from_user.id, "🚫Не удалось удалить",
+#                                            reply_markup=await main_menu_bt())
+#             await state.clear()
+#     else:
+#         await message.bot.send_message(message.from_user.id, "️️❗Ошибка", reply_markup=await main_menu_bt())
+#         await state.clear()
 
 
-@client_bot_router.message(ChangeAdminInfo.mailing)
-async def mailing_admin(message: Message, state: FSMContext):
-    if message.text == "❌Отменить":
-        await message.bot.send_message(message.from_user.id, "🚫Действие отменено", reply_markup=await main_menu_bt())
-        await state.clear()
-    else:
-        all_users = await get_all_users_tg_id()
-        success = 0
-        unsuccess = 0
-        for i in all_users:
-            try:
-                await message.bot.copy_message(chat_id=i, from_chat_id=message.from_user.id,
-                                               message_id=message.message_id, reply_markup=message.reply_markup)
-                success += 1
-            except:
-                unsuccess += 1
-        await message.bot.send_message(message.from_user.id, f"Рассылка завершена!\n"
-                                                             f"Успешно отправлено: {success}\n"
-                                                             f"Неуспешно: {unsuccess}",
-                                       reply_markup=await main_menu_bt())
-        await state.clear()
+# @client_bot_router.message(ChangeAdminInfo.mailing)
+# async def mailing_admin(message: Message, state: FSMContext):
+#     if message.text == "❌Отменить":
+#         await message.bot.send_message(message.from_user.id, "🚫Действие отменено", reply_markup=await main_menu_bt())
+#         await state.clear()
+#     else:
+#         all_users = await get_all_users_tg_id()
+#         success = 0
+#         unsuccess = 0
+#         for i in all_users:
+#             try:
+#                 await message.bot.copy_message(chat_id=i, from_chat_id=message.from_user.id,
+#                                                message_id=message.message_id, reply_markup=message.reply_markup)
+#                 success += 1
+#             except:
+#                 unsuccess += 1
+#         await message.bot.send_message(message.from_user.id, f"Рассылка завершена!\n"
+#                                                              f"Успешно отправлено: {success}\n"
+#                                                              f"Неуспешно: {unsuccess}",
+#                                        reply_markup=await main_menu_bt())
+#         await state.clear()
 
 
 @client_bot_router.message(F.text == "❌Отменить")
