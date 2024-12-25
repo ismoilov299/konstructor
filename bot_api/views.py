@@ -47,7 +47,7 @@ async def setup_routers():
 
             # Handler'larni sozlash
             chat_gpt_bot_handlers()
-            admin_panel()
+            # admin_panel()
             init_bot_handlers()
             anon_bot_handlers()
             setup_main_bot_filter(main_bot_router, client_bot_router)
