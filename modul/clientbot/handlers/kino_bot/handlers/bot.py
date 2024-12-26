@@ -448,6 +448,7 @@ async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
             return
 
         await state.set_state(SearchFilmForm.query)
+
         earn_kb = ReplyKeyboardBuilder()
         earn_kb.button(text='💸Заработать')
         earn_kb = earn_kb.as_markup(resize_keyboard=True)
@@ -465,8 +466,6 @@ async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
         await message.answer(
             "Произошла ошибка при запуске бота. Пожалуйста, попробуйте позже или обратитесь к администратору."
         )
-
-
 
 
 @sync_to_async
@@ -699,10 +698,9 @@ class KinoBotFilter(Filter):
         return shortcuts.have_one_module(bot_db, "kino")
 
 
-@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter())
+@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter(), StateFilter(SearchFilmForm.query))
 async def kinogain(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
-    await state.clear()
 
     sub_status = await check_subs(message.from_user.id, bot)
     if not sub_status:
