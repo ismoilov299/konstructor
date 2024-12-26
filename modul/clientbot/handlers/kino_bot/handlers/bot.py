@@ -699,6 +699,31 @@ class KinoBotFilter(Filter):
         return shortcuts.have_one_module(bot_db, "kino")
 
 
+@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter())
+async def kinogain(message: Message, bot: Bot, state: FSMContext):
+    bot_db = await shortcuts.get_bot(bot)
+    await state.clear()
+
+    sub_status = await check_subs(message.from_user.id, bot)
+    if not sub_status:
+        kb = await get_subs_kb(bot)
+        await message.answer(
+            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+        return
+
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    price = await get_actual_price()
+
+    await message.bot.send_message(
+        message.from_user.id,
+        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
+        f"🔗 Ваша ссылка для приглашений:\n {link}"
+    )
+
 @client_bot_router.message(KinoBotFilter())
 async def simple_text_film_handler(message: Message, bot: Bot):
     sub_status = await check_subs(message.from_user.id, bot)
@@ -724,30 +749,6 @@ async def simple_text_film_handler(message: Message, bot: Bot):
     return
 
 
-@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter())
-async def kinogain(message: Message, bot: Bot, state: FSMContext):
-    bot_db = await shortcuts.get_bot(bot)
-    await state.clear()
-
-    sub_status = await check_subs(message.from_user.id, bot)
-    if not sub_status:
-        kb = await get_subs_kb(bot)
-        await message.answer(
-            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-        return
-
-    me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start={message.from_user.id}"
-    price = await get_actual_price()
-
-    await message.bot.send_message(
-        message.from_user.id,
-        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-        f"🔗 Ваша ссылка для приглашений:\n {link}"
-    )
 
 
 @client_bot_router.inline_query(F.query)
