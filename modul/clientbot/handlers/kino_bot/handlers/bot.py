@@ -256,6 +256,7 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 
 
 
+
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
 async def admin_get_stats(call: CallbackQuery):
     bot = call.bot
@@ -751,6 +752,8 @@ async def simple_text_film_handler(message: Message, bot: Bot):
                          parse_mode="HTML")
 
 
+client_bot_router.message.register(kinogain, F.text == "💸Заработать", KinoBotFilter())
+client_bot_router.message.register(simple_text_film_handler, StateFilter(SearchFilmForm.query), KinoBotFilter())
 
 
 
@@ -1284,11 +1287,3 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot):
     except Exception as e:
         logger.error(f"TikTok handler error: {e}")
         await message.answer("❌ Ошибка при обработке TikTok видео")
-
-# @client_bot_router.message()
-# async def tiktok_handler(message: Message, bot):
-#     """TikTok linklar uchun handler"""
-#     url = message.text
-#     if 'tiktok.com' in url:
-#         me = await bot.get_me()
-#         await handle_tiktok(message, url, me, bot)
