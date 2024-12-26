@@ -99,31 +99,28 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
     return all(check_results)
 
 
-async def get_subs_kb(bot: Bot, user_id: int) -> types.InlineKeyboardMarkup:
+async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     channels = await get_all_channels_sponsors()
     kb = InlineKeyboardBuilder()
 
-    for channel in channels:
+    for channel_id in channels:
         try:
-            # Kanal haqida ma'lumot olish
-            chat_info = await bot.get_chat(channel.chanel_id)
-            # Invite link olish
+            chat_info = await bot.get_chat(channel_id)
             invite_link = chat_info.invite_link
             if not invite_link:
-                invite_link = (await bot.create_chat_invite_link(channel.chanel_id)).invite_link
+                invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
 
             kb.button(text=f'{chat_info.title}', url=invite_link)
         except Exception as e:
-            print(f"Error with channel {channel.chanel_id}: {e}")
+            print(f"Error with channel {channel_id}: {e}")
             continue
 
-    # Tekshirish tugmasi
     kb.button(
         text='✅ Проверить подписку',
-        callback_data=f'check_subs_{user_id}'
+        callback_data='check_subs'
     )
 
-    kb.adjust(1)  # Har bir qatorda 1 ta tugma
+    kb.adjust(1)
     return kb.as_markup()
 
 
@@ -144,17 +141,33 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
 
 
 # Callback handler
-@client_bot_router.callback_query(lambda c: c.data.startswith('check_subs_'))
-async def check_subs_callback(callback: types.CallbackQuery):
-    user_id = int(callback.data.split('_')[2])
+@client_bot_router.callback_query(lambda c: c.data == 'check_subs')
+async def check_subs_callback(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        is_subscribed = await check_subs(callback.from_user.id, callback.bot)
 
-    is_subscribed = await check_user_subscriptions(callback.bot, user_id)
-
-    if is_subscribed:
-        await callback.answer("✅ Вы подписаны на все каналы!", show_alert=True)
-        # Bu yerda foydalanuvchiga ruxsat berish logikasini yozing
-    else:
-        await callback.answer("❌ Вы не подписаны на все каналы. Пожалуйста, подпишитесь!", show_alert=True)
+        if is_subscribed:
+            await callback.message.delete()  # Eski xabarni o'chirish
+            await state.set_state(SearchFilmForm.query)
+            await callback.message.answer(
+                '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
+                'Не указывайте года, озвучки и т.д.\n\n'
+                'Правильный пример: Ведьмак\n'
+                'Неправильный пример: Ведьмак 2022',
+                parse_mode="HTML",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        else:
+            await callback.answer(
+                "❌ Вы не подписаны на все каналы. Пожалуйста, подпишитесь!",
+                show_alert=True
+            )
+    except Exception as e:
+        logger.error(f"Error in check_subs_callback: {e}")
+        await callback.answer(
+            "Произошла ошибка при проверке подписки. Попробуйте позже.",
+            show_alert=True
+        )
 
 
 async def get_films_kb(data: dict) -> types.InlineKeyboardMarkup:
@@ -421,17 +434,17 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
         )
 
 
-
-
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     try:
         sub_status = await check_subs(message.from_user.id, bot)
-        print("sub status",sub_status)
+        print("sub status", sub_status)
+
         if not sub_status:
             kb = await get_subs_kb(bot)
             await message.answer(
-                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
-                reply_markup=kb
+                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
+                reply_markup=kb,
+                parse_mode="HTML"
             )
             return
 
