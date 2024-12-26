@@ -275,9 +275,9 @@ async def cancel(call: CallbackQuery, state: FSMContext):
 
 
 @client_bot_router.callback_query(F.data == 'admin_delete_channel', AdminFilter(), StateFilter('*'))
-async def admin_delete_channel(call: CallbackQuery):
+async def admin_delete_channel(call: CallbackQuery, bot: Bot):
     channels = get_all_channels_sponsors()
-    kb = await get_remove_channel_sponsor_kb(channels)
+    kb = await get_remove_channel_sponsor_kb(channels, bot)
     await call.message.edit_text('Выберите канал для удаления', reply_markup=kb)
 
 
