@@ -698,7 +698,7 @@ class KinoBotFilter(Filter):
         return shortcuts.have_one_module(bot_db, "kino")
 
 
-@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter(), StateFilter(SearchFilmForm.query))
+@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter())
 async def kinogain(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
 
@@ -721,6 +721,7 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
         f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
         f"🔗 Ваша ссылка для приглашений:\n {link}"
     )
+
 
 
 @client_bot_router.message(~F.text.in_({"💸Заработать"}), KinoBotFilter())
