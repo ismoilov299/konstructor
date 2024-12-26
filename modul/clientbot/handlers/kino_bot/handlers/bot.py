@@ -724,14 +724,17 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
 
 
 
-@client_bot_router.message(~F.text.in_({"💸Заработать"}), KinoBotFilter())
+@client_bot_router.message(StateFilter(SearchFilmForm.query), KinoBotFilter())
 async def simple_text_film_handler(message: Message, bot: Bot):
     sub_status = await check_subs(message.from_user.id, bot)
 
     if not sub_status:
         kb = await get_subs_kb(bot)
-        await message.answer('<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
-                             reply_markup=kb)
+        await message.answer(
+            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
         return
 
     results = await film_search(message.text)
@@ -746,6 +749,7 @@ async def simple_text_film_handler(message: Message, bot: Bot):
 
     await message.answer(f'<b>Результаты поиска по ключевому слову</b>: {message.text}', reply_markup=kb,
                          parse_mode="HTML")
+
 
 
 
