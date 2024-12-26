@@ -285,7 +285,7 @@ async def admin_delete_channel(call: CallbackQuery, bot: Bot):
 async def remove_channel(call: CallbackQuery, bot: Bot):
     channel_id = int(call.data.split('|')[-1])
     try:
-        remove_channel_sponsor(channel_id)
+        await remove_channel_sponsor(channel_id)
         await call.message.edit_text('Канал был удален!', reply_markup=admin_kb)
 
         logger.info(f"Kanal muvaffaqiyatli o‘chirildi: {channel_id}")
