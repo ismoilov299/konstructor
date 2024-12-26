@@ -77,14 +77,12 @@ def telegram_webhook(request, token):
             update_data = request.body.decode()
             logger.info(f"Update data: {update_data}")
 
-            # Main bot tekshirish
             if token == settings_conf.BOT_TOKEN:
                 logger.info("Processing main bot webhook")
                 update = Update.parse_raw(update_data)
                 async_to_sync(feed_update)(token, update.dict())
                 return HttpResponse(status=200)
 
-            # Client bot tekshirish
             bot = async_to_sync(get_bot_by_token)(token)
             logger.info(f"Bot lookup result: {bot}")
 

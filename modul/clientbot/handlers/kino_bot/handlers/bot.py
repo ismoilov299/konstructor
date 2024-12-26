@@ -387,13 +387,11 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
 
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
-    """
-    Kino bot boshlanish funksiyasi
-    """
     try:
         sub_status = await check_subs(message.from_user.id, bot)
+        print("sub status",sub_status)
         if not sub_status:
-            kb = await get_subs_kb(bot)  # bot ni parametr sifatida uzatamiz
+            kb = await get_subs_kb(bot)
             await message.answer(
                 '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
                 reply_markup=kb
@@ -401,6 +399,7 @@ async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
             return
 
         await state.set_state(SearchFilmForm.query)
+        print("start 1")
         await message.answer(
             '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
             'Не указывайте года, озвучки и т.д.\n\n'
@@ -487,6 +486,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             await start_ref(message, bot=bot)
 
     elif shortcuts.have_one_module(bot_db, "kino"):
+        print("kino")
         await start_kino_bot(message, state, bot)
         kwargs['parse_mode'] = "HTML"
 
