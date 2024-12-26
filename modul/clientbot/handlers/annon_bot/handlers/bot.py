@@ -105,7 +105,7 @@ async def start(message: Message, state: FSMContext, command: CommandObject = No
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",
-                                              "greeting_rem"]))
+                                              "greeting_rem"]),AnonBotFilter())
 async def call_backs(query: CallbackQuery, state: FSMContext):
     await state.clear()
     if query.data == "check_chan":
