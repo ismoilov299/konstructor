@@ -100,6 +100,7 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
 
 async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     channels = await get_all_channels_sponsors()
+    print("sponsor", channels)
 
     kb = InlineKeyboardBuilder()
 

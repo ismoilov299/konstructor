@@ -21,6 +21,7 @@ async def admin_id_func(user_id, bot):
 
 async def check_channels(message):
     all_channels = await get_channels_for_check()
+    print(all_channels)
     if all_channels != []:
         for i in all_channels:
             try:
@@ -207,7 +208,6 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
         channels_checker = await check_channels(message)
         checker_banned = await banned(message)
         if channels_checker and checker_banned:
-            # To'g'ridan-to'g'ri user ID ni ishlatamiz
             me = await bot.get_me()
             link = f"https://t.me/{me.username}?start={message.from_user.id}"
             price = await get_actual_price()
