@@ -281,11 +281,18 @@ async def admin_delete_channel(call: CallbackQuery, bot: Bot):
     await call.message.edit_text('Выберите канал для удаления', reply_markup=kb)
 
 
-@client_bot_router.callback_query(F.data.contains('remove_channel'),AdminFilter(), StateFilter('*'))
-async def remove_channel(call: CallbackQuery):
+@client_bot_router.callback_query(F.data.contains('remove_channel'), AdminFilter(), StateFilter('*'))
+async def remove_channel(call: CallbackQuery, bot: Bot):
     channel_id = int(call.data.split('|')[-1])
-    remove_channel_sponsor(channel_id)
-    await call.message.edit_text('Канал был удален!', reply_markup=admin_kb)
+    try:
+        remove_channel_sponsor(channel_id)
+        await call.message.edit_text('Канал был удален!', reply_markup=admin_kb)
+
+        logger.info(f"Kanal muvaffaqiyatli o‘chirildi: {channel_id}")
+    except Exception as e:
+        logger.error(f"Kanalni o‘chirishda xatolik: {e}")
+        await call.message.answer("Произошла ошибка при удалении канала.")
+
 
 
 @client_bot_router.callback_query(F.data == 'admin_add_channel', AdminFilter(), StateFilter('*'))

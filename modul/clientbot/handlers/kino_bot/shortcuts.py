@@ -9,9 +9,14 @@ def create_channel_sponsor(channel_id: int):
 
 
 @sync_to_async
-def remove_channel_sponsor(channel_id: int) -> None:
-    channel = ChannelSponsor.objects.filter(chanel_id=channel_id).first()
-    channel.delete()
+def remove_channel_sponsor(channel_id):
+    try:
+        # Kanalni bazadan o‘chirish
+        kanal = ChannelSponsor.objects.get(chanel_id=channel_id)
+        kanal.delete()
+        print(f"Kanal {channel_id} muvaffaqiyatli o‘chirildi.")
+    except ChannelSponsor.DoesNotExist:
+        print(f"Kanal {channel_id} topilmadi.")
 
 
 @sync_to_async
