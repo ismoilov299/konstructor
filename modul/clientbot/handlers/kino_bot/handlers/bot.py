@@ -71,6 +71,7 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
     channels = await get_all_channels_sponsors()
+    print(channels, " ch")
 
     if not channels:
         return True
