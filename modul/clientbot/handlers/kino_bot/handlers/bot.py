@@ -28,7 +28,7 @@ from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
-from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money
+from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -437,7 +437,6 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     try:
         sub_status = await check_subs(message.from_user.id, bot)
-        print("sub status", sub_status)
 
         if not sub_status:
             kb = await get_subs_kb(bot)
@@ -449,20 +448,26 @@ async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
             return
 
         await state.set_state(SearchFilmForm.query)
-        print("start 1")
+        earn_kb = ReplyKeyboardBuilder()
+        earn_kb.button(text='💸Заработать')
+        earn_kb = earn_kb.as_markup(resize_keyboard=True)
+
         await message.answer(
             '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
             'Не указывайте года, озвучки и т.д.\n\n'
             'Правильный пример: Ведьмак\n'
             'Неправильный пример: Ведьмак 2022',
             parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=earn_kb
         )
     except Exception as e:
         logger.error(f"Error in start_kino_bot: {e}")
         await message.answer(
             "Произошла ошибка при запуске бота. Пожалуйста, попробуйте позже или обратитесь к администратору."
         )
+
+
+
 
 @sync_to_async
 def get_user(uid: int, username: str, first_name: str = None, last_name: str = None):
@@ -718,6 +723,31 @@ async def simple_text_film_handler(message: Message, bot: Bot):
                          parse_mode="HTML")
     return
 
+
+@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter())
+async def gain(message: Message, bot: Bot, state: FSMContext):
+    bot_db = await shortcuts.get_bot(bot)
+    await state.clear()
+
+    sub_status = await check_subs(message.from_user.id, bot)
+
+    if not sub_status:
+        kb = await get_subs_kb()
+        await message.answer(
+            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
+            reply_markup=kb
+        )
+        return
+
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    price = await get_actual_price()
+
+    await message.bot.send_message(
+        message.from_user.id,
+        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
+        f"🔗 Ваша ссылка для приглашений:\n {link}"
+    )
 
 @client_bot_router.inline_query(F.query)
 async def inline_film_requests(query: InlineQuery):
