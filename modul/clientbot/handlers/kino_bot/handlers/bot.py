@@ -99,26 +99,62 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
     return all(check_results)
 
 
-async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
+async def get_subs_kb(bot: Bot, user_id: int) -> types.InlineKeyboardMarkup:
     channels = await get_all_channels_sponsors()
-    print("sponsor", channels)
-
     kb = InlineKeyboardBuilder()
 
-    for index, channel in enumerate(channels, 1):
+    for channel in channels:
         try:
-            link = await bot.create_chat_invite_link(channel)
-            kb.button(text=f'Ссылка {index}', url=link.invite_link)
-        except Exception as e:
-            print(e)
+            # Kanal haqida ma'lumot olish
+            chat_info = await bot.get_chat(channel.chanel_id)
+            # Invite link olish
+            invite_link = chat_info.invite_link
+            if not invite_link:
+                invite_link = (await bot.create_chat_invite_link(channel.chanel_id)).invite_link
 
-    me = await bot.get_me()
+            kb.button(text=f'{chat_info.title}', url=invite_link)
+        except Exception as e:
+            print(f"Error with channel {channel.chanel_id}: {e}")
+            continue
+
+    # Tekshirish tugmasi
     kb.button(
         text='✅ Проверить подписку',
-        url=f'https://t.me/{me.username}?start'
+        callback_data=f'check_subs_{user_id}'
     )
 
+    kb.adjust(1)  # Har bir qatorda 1 ta tugma
     return kb.as_markup()
+
+
+async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
+    """Foydalanuvchi barcha kanallarga obuna bo'lganini tekshirish"""
+    channels = await get_all_channels_sponsors()
+
+    for channel in channels:
+        try:
+            member = await bot.get_chat_member(channel.chanel_id, user_id)
+            if member.status in ['left', 'kicked', 'banned']:
+                return False
+        except Exception as e:
+            print(f"Error checking subscription for channel {channel.chanel_id}: {e}")
+            return False
+
+    return True
+
+
+# Callback handler
+@client_bot_router.callback_query(lambda c: c.data.startswith('check_subs_'))
+async def check_subs_callback(callback: types.CallbackQuery):
+    user_id = int(callback.data.split('_')[2])
+
+    is_subscribed = await check_user_subscriptions(callback.bot, user_id)
+
+    if is_subscribed:
+        await callback.answer("✅ Вы подписаны на все каналы!", show_alert=True)
+        # Bu yerda foydalanuvchiga ruxsat berish logikasini yozing
+    else:
+        await callback.answer("❌ Вы не подписаны на все каналы. Пожалуйста, подпишитесь!", show_alert=True)
 
 
 async def get_films_kb(data: dict) -> types.InlineKeyboardMarkup:
