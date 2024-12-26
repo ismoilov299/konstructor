@@ -1,5 +1,7 @@
 import logging
 
+from aiogram.filters import BaseFilter
+
 from modul.clientbot import shortcuts
 from modul.loader import client_bot_router
 from aiogram.utils.deep_linking import create_start_link, decode_payload
@@ -198,9 +200,14 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
             "Произошла ошибка. Попробуйте позже.",
             reply_markup=await main_menu_bt()
         )
+class RefsBotFilter(BaseFilter):
+    async def __call__(self, message: Message, bot: Bot) -> bool:
+        bot_db = await shortcuts.get_bot(bot)
+        # `refs` moduli mavjudligini tekshiradi
+        return shortcuts.have_one_module(bot_db, "refs")
 
 
-@client_bot_router.message(F.text == "💸Заработать")
+@client_bot_router.message(F.text == "💸Заработать",RefsBotFilter())
 async def gain(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
     await state.clear()

@@ -725,7 +725,7 @@ async def simple_text_film_handler(message: Message, bot: Bot):
 
 
 @client_bot_router.message(F.text == "💸Заработать", KinoBotFilter())
-async def gain(message: Message, bot: Bot, state: FSMContext):
+async def kinogain(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
     await state.clear()
 
