@@ -331,7 +331,7 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             invite_link = link_data.invite_link
 
         # 6) Добавляем в базу (ваша функция)
-        create_channel_sponsor(channel_id)
+        await create_channel_sponsor(channel_id)
         await state.clear()
 
         # 7) Формируем итоговый список строк для ответа
