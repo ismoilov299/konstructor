@@ -203,7 +203,6 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
 class RefsBotFilter(BaseFilter):
     async def __call__(self, message: Message, bot: Bot) -> bool:
         bot_db = await shortcuts.get_bot(bot)
-        # `refs` moduli mavjudligini tekshiradi
         return shortcuts.have_one_module(bot_db, "refs")
 
 

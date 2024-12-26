@@ -730,12 +730,12 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
     await state.clear()
 
     sub_status = await check_subs(message.from_user.id, bot)
-
     if not sub_status:
-        kb = await get_subs_kb()
+        kb = await get_subs_kb(bot)
         await message.answer(
             '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
-            reply_markup=kb
+            reply_markup=kb,
+            parse_mode="HTML"
         )
         return
 
@@ -748,6 +748,7 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
         f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
         f"🔗 Ваша ссылка для приглашений:\n {link}"
     )
+
 
 @client_bot_router.inline_query(F.query)
 async def inline_film_requests(query: InlineQuery):
