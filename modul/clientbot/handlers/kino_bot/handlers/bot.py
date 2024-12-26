@@ -434,6 +434,36 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             reply_markup=cancel_kb
         )
 
+class KinoBotFilter(Filter):
+    async def __call__(self, message: types.Message, bot: Bot) -> bool:
+        bot_db = await shortcuts.get_bot(bot)
+        return shortcuts.have_one_module(bot_db, "kino")
+
+
+@client_bot_router.message(F.text == "💸Заработать")
+async def kinogain(message: Message, bot: Bot, state: FSMContext):
+    bot_db = await shortcuts.get_bot(bot)
+
+    sub_status = await check_subs(message.from_user.id, bot)
+    if not sub_status:
+        kb = await get_subs_kb(bot)
+        await message.answer(
+            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+        return
+
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    price = await get_actual_price()
+
+    await message.bot.send_message(
+        message.from_user.id,
+        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
+        f"🔗 Ваша ссылка для приглашений:\n {link}"
+    )
+
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     try:
@@ -693,38 +723,6 @@ async def get_results(message: types.Message, state: FSMContext, bot: Bot):
     await message.answer(f'<b>Результаты поиска по ключевому слову</b>: {message.text}', reply_markup=kb)
 
 
-class KinoBotFilter(Filter):
-    async def __call__(self, message: types.Message, bot: Bot) -> bool:
-        bot_db = await shortcuts.get_bot(bot)
-        return shortcuts.have_one_module(bot_db, "kino")
-
-
-@client_bot_router.message(F.text == "💸Заработать")
-async def kinogain(message: Message, bot: Bot, state: FSMContext):
-    bot_db = await shortcuts.get_bot(bot)
-
-    sub_status = await check_subs(message.from_user.id, bot)
-    if not sub_status:
-        kb = await get_subs_kb(bot)
-        await message.answer(
-            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-        return
-
-    me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start={message.from_user.id}"
-    price = await get_actual_price()
-
-    await message.bot.send_message(
-        message.from_user.id,
-        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-        f"🔗 Ваша ссылка для приглашений:\n {link}"
-    )
-
-
-
 @client_bot_router.message(StateFilter(SearchFilmForm.query), KinoBotFilter())
 async def simple_text_film_handler(message: Message, bot: Bot):
     sub_status = await check_subs(message.from_user.id, bot)
@@ -752,8 +750,7 @@ async def simple_text_film_handler(message: Message, bot: Bot):
                          parse_mode="HTML")
 
 
-client_bot_router.message.register(kinogain, F.text == "💸Заработать", KinoBotFilter())
-client_bot_router.message.register(simple_text_film_handler, StateFilter(SearchFilmForm.query), KinoBotFilter())
+
 
 
 
