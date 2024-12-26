@@ -698,7 +698,7 @@ class KinoBotFilter(Filter):
         return shortcuts.have_one_module(bot_db, "kino")
 
 
-@client_bot_router.message(F.text == "💸Заработать", KinoBotFilter())
+@client_bot_router.message(F.text == "💸Заработать")
 async def kinogain(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
 
