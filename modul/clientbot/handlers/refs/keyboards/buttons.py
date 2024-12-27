@@ -63,6 +63,7 @@ async def channels_in(all_channels):
 
 async def admin_in(admin_user):
     admin_url = f"https://t.me/{admin_user}" if not admin_user.startswith("@") else f"https://t.me/{admin_user[1:]}"
+    print("admin url",admin_url)
 
     buttons = [
         [InlineKeyboardButton(text="🧑‍💻Админ", url=admin_url)]
