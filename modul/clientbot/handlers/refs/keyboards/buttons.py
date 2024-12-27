@@ -62,8 +62,10 @@ async def channels_in(all_channels):
 #     return kb
 
 async def admin_in(admin_user):
+    admin_url = f"https://t.me/{admin_user}" if not admin_user.startswith("@") else f"https://t.me/{admin_user[1:]}"
+
     buttons = [
-        [InlineKeyboardButton(text="🧑‍💻Админ", url=admin_user)]
+        [InlineKeyboardButton(text="🧑‍💻Админ", url=admin_url)]
     ]
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     return kb

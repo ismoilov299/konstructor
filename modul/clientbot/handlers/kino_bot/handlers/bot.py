@@ -70,33 +70,38 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
+    # Bot egasi (owner) ID sini olish
+    bot_db = await shortcuts.get_bot(bot)
+    admin_id = bot_db.owner.uid
+
+    # Agar foydalanuvchi owner bo'lsa, obuna talab qilinmaydi
+    if user_id == admin_id:
+        return True
+
+    # Kanallar ro'yxatini olish
     channels = await get_all_channels_sponsors()
     print(channels, " ch")
 
+    # Agar kanallar bo'sh bo'lsa, obuna talab qilinmaydi
     if not channels:
         return True
 
+    # Obuna tekshiruv
     check_results = []
-
     for channel in channels:
-
         try:
-
-            m = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-
-            if m.status != 'left':
+            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+            if member.status != 'left':
                 check_results.append(True)
             else:
                 check_results.append(False)
-
         except Exception as e:
-
-            print(e)
+            print(f"Error checking subscription for channel {channel}: {e}")
             check_results.append(False)
 
     print(check_results)
-
     return all(check_results)
+
 
 
 async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
@@ -123,11 +128,8 @@ async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     kb.adjust(1)
     return kb.as_markup()
 
-
 async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
-    """Foydalanuvchi barcha kanallarga obuna bo'lganini tekshirish"""
     channels = await get_all_channels_sponsors()
-
     for channel in channels:
         try:
             member = await bot.get_chat_member(channel.chanel_id, user_id)
@@ -139,7 +141,6 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
 
     return True
 
-
 # Callback handler
 @client_bot_router.callback_query(lambda c: c.data == 'check_subs')
 async def check_subs_callback(callback: types.CallbackQuery, state: FSMContext):
@@ -147,7 +148,7 @@ async def check_subs_callback(callback: types.CallbackQuery, state: FSMContext):
         is_subscribed = await check_subs(callback.from_user.id, callback.bot)
 
         if is_subscribed:
-            await callback.message.delete()  # Eski xabarni o'chirish
+            await callback.message.delete()
             await state.set_state(SearchFilmForm.query)
             await callback.message.answer(
                 '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
@@ -195,32 +196,16 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
 
     return kb.as_markup()
 
-
-
-
-from aiogram import exceptions
-
 from aiogram.types import Message
 from aiogram.exceptions import TelegramAPIError
 
 async def send_message_to_users(bot, users, text):
     for user_id in users:
         try:
-            # Xabar yuborish
             await bot.send_message(chat_id=user_id, text=text)
         except TelegramAPIError as e:
-            # Xatoni logga yozish va davom ettirish
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
 
-
-
-
-    # # По завершении цикла отправляем отчёт в чат, откуда пришло сообщение
-    # await message.answer(
-    #     f"Рассылка завершена!\n\n"
-    #     f"Успешно отправлено: {len(good)}\n"
-    #     f"Неуспешно: {len(bad)}"
-    # )
 
 
 class AdminFilter(BaseFilter):
@@ -474,8 +459,10 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     try:
+        # Obunani tekshirish
         sub_status = await check_subs(message.from_user.id, bot)
 
+        # Agar obuna talab qilinsa va foydalanuvchi obuna bo'lmasa
         if not sub_status:
             kb = await get_subs_kb(bot)
             await message.answer(
@@ -485,8 +472,10 @@ async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
+        # Foydalanuvchini film qidiruv state'ga o'tkazish
         await state.set_state(SearchFilmForm.query)
 
+        # Tugmalar bilan xabar yuborish
         earn_kb = ReplyKeyboardBuilder()
         earn_kb.button(text='💸Заработать')
         earn_kb = earn_kb.as_markup(resize_keyboard=True)

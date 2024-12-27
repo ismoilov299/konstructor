@@ -49,7 +49,6 @@ async def payment(message, amount):
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start(message: Message, state: FSMContext, command: CommandObject = None):
     try:
-        # Start commanddan ID ni olish
         args = message.text.split(' ')
         user_id = args[1] if len(args) > 1 else None
 
