@@ -62,16 +62,16 @@ async def channels_in(all_channels):
 #     return kb
 
 async def admin_in(admin_user):
-    print(f"Received admin_user: '{admin_user}'")  # Kelayotgan qiymatni tekshirish
+    print(f"Received admin_user: '{admin_user}'")
 
-    if not admin_user or admin_user == "":
-        admin_url = "https://t.me/"  # Default URL yoki boshqa havolani ko'rsatish mumkin
-    else:
-        admin_user = admin_user.strip()  # Bo'sh joylarni tozalash
+    if admin_user and admin_user.strip():
+        admin_user = admin_user.strip()
         admin_user = admin_user[1:] if admin_user.startswith("@") else admin_user
         admin_url = f"https://t.me/{admin_user}"
+    else:
+        admin_url = "https://t.me/"
 
-    print(f"Generated URL: '{admin_url}'")  # Yaratilgan URL ni tekshirish
+    print(f"Generated URL: '{admin_url}'")
 
     buttons = [
         [InlineKeyboardButton(text="🧑‍💻Админ", url=admin_url)]

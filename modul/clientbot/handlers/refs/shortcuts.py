@@ -114,12 +114,10 @@ def get_admin_user(bot_token):
     try:
         bot = Bot.objects.select_related("owner").filter(token=bot_token).first()
         if bot and bot.owner:
-            print(f"Bot owner: {bot.owner}")
-            return bot.owner
-        print("No bot or owner found for the given token.")
+            return bot.owner.username
         return None
     except Exception as e:
-        print(f"Error fetching bot owner: {e}")
+        print(f"Error fetching admin user: {e}")
         return None
 
 

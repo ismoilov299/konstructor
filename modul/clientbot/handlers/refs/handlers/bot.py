@@ -295,6 +295,7 @@ async def info(message: Message):
 
 
 
+
 @client_bot_router.callback_query(F.data.in_(["payment", "check_chan"]))
 async def call_backs(query: CallbackQuery, state: FSMContext):
     await state.clear()
