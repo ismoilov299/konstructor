@@ -112,7 +112,10 @@ def check_for_wa(tg_id):
 @sync_to_async
 def get_admin_user():
     admin_info = AdminInfo.objects.first()
-    return admin_info.admin_channel if admin_info else ""
+    print(f"Admin info: {admin_info}")
+    admin_channel = admin_info.admin_channel if admin_info else ""
+    print(f"Admin channel from DB: '{admin_channel}'")  # Bazadan kelayotgan qiymatni ko'rish
+    return admin_channel
 
 
 @sync_to_async
