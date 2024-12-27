@@ -11,6 +11,16 @@ async def main_menu_bt():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=buttons)
     return kb
 
+async def main_menu_bt2():
+    buttons = [
+        [KeyboardButton(text="💸Заработать"), KeyboardButton(text="📱Профиль")],
+        [KeyboardButton(text="ℹ️Инфо")],
+        [KeyboardButton(text="🔙Назад в меню")]
+    ]
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=buttons)
+    return kb
+
+
 
 async def payment_in():
     buttons = [

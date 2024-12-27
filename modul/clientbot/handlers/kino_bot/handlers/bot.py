@@ -28,7 +28,7 @@ from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
-from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt
+from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2
 from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
@@ -336,6 +336,12 @@ class ChatInfo(BaseModel):
     max_reaction_count: Optional[int] = None
     accent_color_id: Optional[int] = None
 
+from aiogram import F
+
+@client_bot_router.message(F.text == "🔙Назад в меню")
+async def back_to_main_menu(message: Message, state: FSMContext, bot: Bot):
+    await start(message, state, bot)
+
 
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext):
@@ -454,16 +460,14 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
     await message.bot.send_message(
         message.from_user.id,
         f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-        f"🔗 Ваша ссылка для приглашений:\n {link}",reply_markup=await main_menu_bt()
+        f"🔗 Ваша ссылка для приглашений:\n {link}",reply_markup=await main_menu_bt2()
     )
 
 
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     try:
-        # Obunani tekshirish
         sub_status = await check_subs(message.from_user.id, bot)
 
-        # Agar obuna talab qilinsa va foydalanuvchi obuna bo'lmasa
         if not sub_status:
             kb = await get_subs_kb(bot)
             await message.answer(
@@ -473,10 +477,8 @@ async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
             )
             return
 
-        # Foydalanuvchini film qidiruv state'ga o'tkazish
         await state.set_state(SearchFilmForm.query)
 
-        # Tugmalar bilan xabar yuborish
         earn_kb = ReplyKeyboardBuilder()
         earn_kb.button(text='💸Заработать')
         earn_kb = earn_kb.as_markup(resize_keyboard=True)
@@ -539,7 +541,7 @@ class NonChatGptFilter(Filter):
         return not shortcuts.have_one_module(bot_db, "chatgpt")
 
 
-# /var/www/Konstructor/modul/clientbot/handlers/kino_bot/handlers/bot.py
+
 async def start(message: Message, state: FSMContext, bot: Bot):
     bot_db = await shortcuts.get_bot(bot)
     uid = message.from_user.id
