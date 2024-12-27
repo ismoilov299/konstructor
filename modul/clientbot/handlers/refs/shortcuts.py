@@ -3,7 +3,7 @@ import logging
 from asgiref.sync import sync_to_async
 from django.db.models import F, Sum
 from django.utils import timezone
-from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels
+from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot
 
 logger = logging.getLogger(__name__)
 @sync_to_async
@@ -110,12 +110,17 @@ def check_for_wa(tg_id):
 
 
 @sync_to_async
-def get_admin_user():
-    admin_info = AdminInfo.objects.first()
-    print(f"Admin info: {admin_info}")
-    admin_channel = admin_info.admin_channel if admin_info else ""
-    print(f"Admin channel from DB: '{admin_channel}'")  # Bazadan kelayotgan qiymatni ko'rish
-    return admin_channel
+def get_admin_user(bot_token):
+    try:
+        bot = Bot.objects.select_related("owner").filter(token=bot_token).first()
+        if bot and bot.owner:
+            print(f"Bot owner: {bot.owner}")
+            return bot.owner
+        print("No bot or owner found for the given token.")
+        return None
+    except Exception as e:
+        print(f"Error fetching bot owner: {e}")
+        return None
 
 
 @sync_to_async

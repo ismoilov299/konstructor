@@ -282,13 +282,17 @@ async def info(message: Message):
     checker_banned = await banned(message)
     if channels_checker and checker_banned:
         all_info = await count_info()
-        # TODO изменить на юзернейм админа
-        admin_user = await get_admin_user()
-        print(admin_user)
-        await message.bot.send_message(message.from_user.id,
-                                       f"👥 Всего пользователей: {all_info[0]}\n"
-                                       f"📤 Выплачено всего: {all_info[1]}",
-                                       reply_markup=await admin_in(admin_user))
+
+        bot_token = message.bot.token
+        admin_user = await get_admin_user(bot_token)
+
+        await message.bot.send_message(
+            message.from_user.id,
+            f"👥 Всего пользователей: {all_info[0]}\n"
+            f"📤 Выплачено всего: {all_info[1]}",
+            reply_markup=await admin_in(admin_user)
+        )
+
 
 
 @client_bot_router.callback_query(F.data.in_(["payment", "check_chan"]))
