@@ -28,6 +28,7 @@ from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
+from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt
 from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
@@ -453,7 +454,7 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
     await message.bot.send_message(
         message.from_user.id,
         f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-        f"🔗 Ваша ссылка для приглашений:\n {link}"
+        f"🔗 Ваша ссылка для приглашений:\n {link}",reply_markup=await main_menu_bt()
     )
 
 
