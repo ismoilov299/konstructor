@@ -164,7 +164,8 @@ def admin_menu_info():
 @sync_to_async
 def get_all_wait_payment():
     wda = Withdrawals.objects.filter(status="ожидание")
-    return [[w.id, w.tg_id, w.amount, w.card, w.bank] for w in wda]
+    return [[w.id, w.tg_id.uid, w.amount, w.card, w.bank] for w in wda]
+
 
 
 @sync_to_async
