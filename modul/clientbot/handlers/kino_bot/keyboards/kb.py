@@ -35,10 +35,15 @@ btn = [
         callback_data='change_min'
     )],
     [types.InlineKeyboardButton(
+        text='🔎Управление',
+        callback_data='imp'
+    )],
+    [types.InlineKeyboardButton(
         text='Рассылка',
         callback_data='admin_send_message'
     )]
 ]
+
 
 admin_kb = types.InlineKeyboardMarkup(inline_keyboard=btn)
 

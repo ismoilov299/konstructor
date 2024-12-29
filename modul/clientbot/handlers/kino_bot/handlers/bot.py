@@ -27,12 +27,14 @@ from modul.clientbot.handlers.kino_bot.api import *
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
+from modul.clientbot.handlers.refs.data.excel_converter import convert_to_excel
 from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in, \
-    declined_in, accepted_in
+    declined_in, accepted_in, imp_menu_in
 from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment, \
-    change_price, change_min_amount, get_actual_min_amount, status_declined, status_accepted
+    change_price, change_min_amount, get_actual_min_amount, status_declined, status_accepted, check_ban, \
+    get_user_info_db, changebalance_db, addbalance_db, ban_unban_db
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -241,6 +243,14 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await send_message_to_users(message.bot, users, message.text)
     await message.answer('Рассылка завершена!')
 
+@client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
+async def manage_user_handler(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text(
+        "Введите ID пользователя",
+        reply_markup=await cancel_kb()
+    )
+    await state.set_state(ChangeAdminInfo.imp)
+
 
 @client_bot_router.callback_query(lambda call: "accept_" in call.data, AdminFilter(), StateFilter('*'))
 async def acception(query: CallbackQuery):
@@ -271,6 +281,45 @@ async def declined(query: CallbackQuery):
     else:
         await query.answer("Ошибка: Не удалось отклонить заявку", show_alert=True)
 
+
+@client_bot_router.message(ChangeAdminInfo.imp)
+async def get_user_info_handler(message: Message, state: FSMContext):
+    if message.text == "❌Отменить":
+        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    if message.text.isdigit():
+        user_id = int(message.text)
+        try:
+            status = check_ban(user_id)
+            user_info = get_user_info_db(user_id)
+            if user_info:
+                user_name = "@"
+                try:
+                    chat = await message.bot.get_chat(user_info[1])
+                    user_name += f"{chat.username}"
+                except:
+                    pass
+                await message.answer(
+                    f"📝Имя юзера: {user_info[0]} {user_name}\n"
+                    f"🆔ID юзера: <code>{user_info[1]}</code>\n"
+                    f"👥 Пригласил: {user_info[3]}\n"
+                    f"💳 Баланс юзера: {user_info[2]} руб.\n"
+                    f"📤 Вывел: {user_info[5]} руб.",
+                    parse_mode="html",
+                    reply_markup=await imp_menu_in(user_info[1], status)
+                )
+                await state.clear()
+            else:
+                await message.answer("Юзер не найден", reply_markup=await main_menu_bt())
+                await state.clear()
+        except Exception as e:
+            await message.answer(f"🚫 Не удалось найти юзера. Ошибка: {e}", reply_markup=await main_menu_bt())
+            await state.clear()
+    else:
+        await message.answer("️️❗Ошибка! Введите числовой ID пользователя.", reply_markup=await main_menu_bt())
+        await state.clear()
 
 @client_bot_router.callback_query(F.data == 'all_payments', AdminFilter(), StateFilter('*'))
 async def all_payments_handler(call: CallbackQuery):
@@ -314,6 +363,7 @@ async def get_new_amount_handler(message: Message, state: FSMContext):
         logger.error(f"Ошибка при обновлении награды за реферала: {e}")
         await message.answer("🚫 Не удалось изменить награду за реферала.", reply_markup=await main_menu_bt())
         await state.clear()
+
 
 
 
@@ -386,6 +436,92 @@ async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
 
 
 
+@client_bot_router.callback_query(F.data.startswith("ban_"), AdminFilter(), StateFilter('*'))
+async def ban_user_handler(call: CallbackQuery):
+    user_id = int(call.data.replace("ban_", ""))
+    ban_unban_db(id=user_id, bool=True)
+    await call.message.edit_reply_markup(reply_markup=await imp_menu_in(user_id, True))
+
+
+@client_bot_router.callback_query(F.data.startswith("razb_"), AdminFilter(), StateFilter('*'))
+async def unban_user_handler(call: CallbackQuery):
+    user_id = int(call.data.replace("razb_", ""))
+    ban_unban_db(id=user_id, bool=False)
+    await call.message.edit_reply_markup(reply_markup=await imp_menu_in(user_id, False))
+
+
+@client_bot_router.callback_query(F.data.startswith("addbalance_"), AdminFilter(), StateFilter('*'))
+async def add_balance_handler(call: CallbackQuery, state: FSMContext):
+    user_id = int(call.data.replace("addbalance_", ""))
+    await call.message.edit_text(
+        "Введите сумму для добавления к балансу. Для дробных чисел используйте точку.",
+        reply_markup=await cancel_kb()
+    )
+    await state.set_state(ChangeAdminInfo.add_balance)
+    await state.update_data(user_id=user_id)
+
+
+@client_bot_router.message(ChangeAdminInfo.add_balance)
+async def process_add_balance(message: Message, state: FSMContext):
+    if message.text == "❌Отменить":
+        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    try:
+        amount = float(message.text)
+        data = await state.get_data()
+        addbalance_db(data["user_id"], amount)
+        await message.answer(f"Баланс успешно пополнен на {amount} руб.", reply_markup=await main_menu_bt())
+        await state.clear()
+    except ValueError:
+        await message.answer("❗ Введите корректное числовое значение.")
+    except Exception as e:
+        await message.answer(f"🚫 Не удалось изменить баланс. Ошибка: {e}", reply_markup=await main_menu_bt())
+        await state.clear()
+
+
+@client_bot_router.callback_query(F.data.startswith("changebalance_"), AdminFilter(), StateFilter('*'))
+async def change_balance_handler(call: CallbackQuery, state: FSMContext):
+    user_id = int(call.data.replace("changebalance_", ""))
+    await call.message.edit_text(
+        "Введите новую сумму баланса. Для дробных чисел используйте точку.",
+        reply_markup=await cancel_kb()
+    )
+    await state.set_state(ChangeAdminInfo.change_balance)
+    await state.update_data(user_id=user_id)
+
+
+@client_bot_router.message(ChangeAdminInfo.change_balance)
+async def process_change_balance(message: Message, state: FSMContext):
+    if message.text == "❌Отменить":
+        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    try:
+        new_balance = float(message.text)
+        data = await state.get_data()
+        changebalance_db(data["user_id"], new_balance)
+        await message.answer(f"Баланс успешно изменен на {new_balance} руб.", reply_markup=await main_menu_bt())
+        await state.clear()
+    except ValueError:
+        await message.answer("❗ Введите корректное числовое значение.")
+    except Exception as e:
+        await message.answer(f"🚫 Не удалось изменить баланс. Ошибка: {e}", reply_markup=await main_menu_bt())
+        await state.clear()
+
+
+@client_bot_router.callback_query(F.data.startswith("showrefs_"), AdminFilter(), StateFilter('*'))
+async def show_refs_handler(call: CallbackQuery):
+    user_id = int(call.data.replace("showrefs_", ""))
+    try:
+        file = convert_to_excel(user_id)
+        document = FSInputFile(file)
+        await call.message.answer_document(document)
+        os.remove(file)
+    except Exception as e:
+        await call.message.answer(f"🚫 Произошла ошибка при создании файла: {e}")
 
 
 
