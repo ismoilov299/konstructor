@@ -94,14 +94,16 @@ def plus_money(tg_id):
 
 @sync_to_async
 def reg_withdrawals(tg_id, amount, card, bank):
+    user = UserTG.objects.get(uid=tg_id)
     withdrawal = Withdrawals.objects.create(
-        tg_id=tg_id,
+        tg_id=user,
         amount=amount,
         card=card,
         bank=bank,
         reg_date=timezone.now()
     )
-    return [withdrawal.id, withdrawal.tg_id, withdrawal.amount, withdrawal.card, withdrawal.bank]
+    return [withdrawal.id, user.uid, withdrawal.amount, withdrawal.card, withdrawal.bank]
+
 
 
 @sync_to_async
