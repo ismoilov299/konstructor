@@ -247,7 +247,7 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 async def manage_user_handler(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         "Введите ID пользователя",
-        reply_markup=await cancel_kb()
+        reply_markup=cancel_kb
     )
     await state.set_state(ChangeAdminInfo.imp)
 
@@ -372,7 +372,7 @@ async def change_balance_handler(call: CallbackQuery, state: FSMContext):
     id_of_user = int(call.data.replace("changebalance_", ""))
     await call.message.edit_text(
         "Введите новую сумму баланса. Для нецелых чисел используйте точку, а не запятую.",
-        reply_markup=await cancel_kb()
+        reply_markup=cancel_kb
     )
     await state.set_state(ChangeAdminInfo.change_balance)
     await state.update_data(user_id=id_of_user)
@@ -455,7 +455,7 @@ async def add_balance_handler(call: CallbackQuery, state: FSMContext):
     user_id = int(call.data.replace("addbalance_", ""))
     await call.message.edit_text(
         "Введите сумму для добавления к балансу. Для дробных чисел используйте точку.",
-        reply_markup=await cancel_kb()
+        reply_markup=cancel_kb
     )
     await state.set_state(ChangeAdminInfo.add_balance)
     await state.update_data(user_id=user_id)
@@ -486,7 +486,7 @@ async def change_balance_handler(call: CallbackQuery, state: FSMContext):
     user_id = int(call.data.replace("changebalance_", ""))
     await call.message.edit_text(
         "Введите новую сумму баланса. Для дробных чисел используйте точку.",
-        reply_markup=await cancel_kb()
+        reply_markup=cancel_kb
     )
     await state.set_state(ChangeAdminInfo.change_balance)
     await state.update_data(user_id=user_id)
