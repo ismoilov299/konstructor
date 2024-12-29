@@ -278,6 +278,7 @@ async def all_payments_handler(call: CallbackQuery):
 
     if active_payments:
         for payment in active_payments:
+            print(payment)
             await call.message.answer(
                 text=f"<b>Заявка на выплату № {payment[0]}</b>\n"  # payment[0] - id
                      f"ID пользователя: <code>{payment[1]}</code>\n"  # payment[1] - user_id
