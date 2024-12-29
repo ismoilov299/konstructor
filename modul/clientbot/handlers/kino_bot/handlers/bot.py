@@ -293,7 +293,7 @@ async def get_user_info_handler(message: Message, state: FSMContext):
         user_id = int(message.text)
         try:
             status = await check_ban(user_id)
-            user_info = get_user_info_db(user_id)
+            user_info = await get_user_info_db(user_id)
             if user_info:
                 user_name = "@"
                 try:
