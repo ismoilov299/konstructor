@@ -27,9 +27,10 @@ from modul.clientbot.handlers.kino_bot.api import *
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
+from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
-from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2
-from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price
+from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in
+from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -239,6 +240,40 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await message.answer('Рассылка завершена!')
 
 
+@client_bot_router.callback_query(F.data == 'all_payments', AdminFilter(), StateFilter('*'))
+async def all_payments_handler(call: CallbackQuery):
+    active_payments = await get_all_wait_payment()
+    if active_payments:
+        for payment in active_payments:
+            await call.message.answer(
+                text=f"<b>Заявка на выплату № {payment['id']}</b>\n"
+                     f"ID пользователя: <code>{payment['user_id']}</code>\n"
+                     f"Сумма: {payment['amount']} руб.\n"
+                     f"Карта: <code>{payment['card']}</code>\n"
+                     f"Банк: {payment['bank']}",
+                parse_mode="HTML",
+                reply_markup=await payments_action_in(payment['id'])
+            )
+    else:
+        await call.message.edit_text('Нет заявок на выплату.', reply_markup=admin_kb)
+
+
+@client_bot_router.callback_query(F.data == 'change_money', AdminFilter(), StateFilter('*'))
+async def change_money_handler(call: CallbackQuery, state: FSMContext):
+    await state.set_state(ChangeAdminInfo.get_amount)
+    await call.message.edit_text(
+        'Введите новую награду за рефералов:',
+        reply_markup=cancel_kb
+    )
+
+
+@client_bot_router.callback_query(F.data == 'change_min', AdminFilter(), StateFilter('*'))
+async def change_min_handler(call: CallbackQuery, state: FSMContext):
+    await state.set_state(ChangeAdminInfo.get_min)
+    await call.message.edit_text(
+        'Введите новую минимальную сумму для вывода:',
+        reply_markup=cancel_kb
+    )
 
 
 
