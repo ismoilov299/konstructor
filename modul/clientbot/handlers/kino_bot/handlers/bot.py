@@ -29,9 +29,10 @@ from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_le
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
 from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
-from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in
+from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in, \
+    declined_in, accepted_in
 from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment, \
-    change_price, change_min_amount, get_actual_min_amount
+    change_price, change_min_amount, get_actual_min_amount, status_declined, status_accepted
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -239,6 +240,36 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 
     await send_message_to_users(message.bot, users, message.text)
     await message.answer('Рассылка завершена!')
+
+
+@client_bot_router.callback_query(lambda call: "accept_" in call.data, AdminFilter(), StateFilter('*'))
+async def acception(query: CallbackQuery):
+    id_of_wa = int(query.data.replace("accept_", ""))
+    user_info = await status_accepted(id_of_wa)
+
+    if user_info:
+        await query.message.edit_reply_markup(reply_markup=await accepted_in())
+        await query.bot.send_message(
+            user_info[0],
+            f"Ваша завявка на выплату {user_info[1]} была подтверждена ✅"
+        )
+    else:
+        await query.answer("Ошибка: Не удалось подтвердить заявку", show_alert=True)
+
+
+@client_bot_router.callback_query(lambda call: "decline_" in call.data, AdminFilter(), StateFilter('*'))
+async def declined(query: CallbackQuery):
+    id_of_wa = int(query.data.replace("decline_", ""))
+    user_info = await status_declined(id_of_wa)
+
+    if user_info:
+        await query.message.edit_reply_markup(reply_markup=await declined_in())
+        await query.bot.send_message(
+            user_info[0],
+            f"Ваша завявка на выплату {user_info[1]} была отклонена❌"
+        )
+    else:
+        await query.answer("Ошибка: Не удалось отклонить заявку", show_alert=True)
 
 
 @client_bot_router.callback_query(F.data == 'all_payments', AdminFilter(), StateFilter('*'))
