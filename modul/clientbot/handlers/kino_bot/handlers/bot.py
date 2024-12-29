@@ -292,7 +292,7 @@ async def get_user_info_handler(message: Message, state: FSMContext):
     if message.text.isdigit():
         user_id = int(message.text)
         try:
-            status = check_ban(user_id)
+            status = await check_ban(user_id)
             user_info = get_user_info_db(user_id)
             if user_info:
                 user_name = "@"
