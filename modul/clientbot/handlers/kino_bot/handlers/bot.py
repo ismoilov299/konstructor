@@ -314,7 +314,7 @@ async def change_min_handler(call: CallbackQuery, state: FSMContext):
 
 
 @client_bot_router.message(ChangeAdminInfo.get_min)
-async def get_new_min_handler(message: Message, state: FSMContext):
+async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     edit_msg = data.get('edit_msg')
 
@@ -322,8 +322,8 @@ async def get_new_min_handler(message: Message, state: FSMContext):
         await message.delete()
         if edit_msg:
             await edit_msg.delete()
-        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
         await state.clear()
+        await start(message, state, bot)
         return
 
     try:
@@ -331,22 +331,23 @@ async def get_new_min_handler(message: Message, state: FSMContext):
 
         await change_min_amount(new_min_payout)
 
-        # await message.delete()
+        await message.delete()
         if edit_msg:
             await edit_msg.delete()
 
         await message.answer(
-            f"Минимальная выплата успешно изменена на {new_min_payout:.1f} руб.",
-            reply_markup=await main_menu_bt()
+            f"Минимальная выплата успешно изменена на {new_min_payout:.1f} руб."
         )
         await state.clear()
+        await start(message, state, bot)
 
     except ValueError:
         await message.answer("❗ Введите корректное числовое значение.")
     except Exception as e:
         logger.error(f"Ошибка при обновлении минимальной выплаты: {e}")
-        await message.answer("🚫 Не удалось изменить минимальную выплату.", reply_markup=await main_menu_bt())
+        await message.answer("🚫 Не удалось изменить минимальную выплату.")
         await state.clear()
+        await start(message, state, bot)
 
 
 
