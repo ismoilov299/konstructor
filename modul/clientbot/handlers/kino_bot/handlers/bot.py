@@ -244,19 +244,21 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 @client_bot_router.callback_query(F.data == 'all_payments', AdminFilter(), StateFilter('*'))
 async def all_payments_handler(call: CallbackQuery):
     active_payments = await get_all_wait_payment()
+
     if active_payments:
         for payment in active_payments:
             await call.message.answer(
-                text=f"<b>Заявка на выплату № {payment['id']}</b>\n"
-                     f"ID пользователя: <code>{payment['user_id']}</code>\n"
-                     f"Сумма: {payment['amount']} руб.\n"
-                     f"Карта: <code>{payment['card']}</code>\n"
-                     f"Банк: {payment['bank']}",
+                text=f"<b>Заявка на выплату № {payment[0]}</b>\n"  # payment[0] - id
+                     f"ID пользователя: <code>{payment[1]}</code>\n"  # payment[1] - user_id
+                     f"Сумма: {payment[2]} руб.\n"  # payment[2] - amount
+                     f"Карта: <code>{payment[3]}</code>\n"  # payment[3] - card
+                     f"Банк: {payment[4]}",  # payment[4] - bank
                 parse_mode="HTML",
-                reply_markup=await payments_action_in(payment['id'])
+                reply_markup=await payments_action_in(payment[0])  # payment[0] - id
             )
     else:
         await call.message.edit_text('Нет заявок на выплату.', reply_markup=admin_kb)
+
 
 @client_bot_router.message(ChangeAdminInfo.get_amount)
 async def get_new_amount_handler(message: Message, state: FSMContext):
