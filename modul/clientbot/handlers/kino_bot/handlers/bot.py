@@ -30,7 +30,8 @@ from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_star
 from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in
-from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment
+from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment, \
+    change_price
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -257,6 +258,40 @@ async def all_payments_handler(call: CallbackQuery):
     else:
         await call.message.edit_text('Нет заявок на выплату.', reply_markup=admin_kb)
 
+@client_bot_router.message(ChangeAdminInfo.get_amount)
+async def get_new_amount_handler(message: Message, state: FSMContext):
+    if message.text == "❌Отменить":
+        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    try:
+        new_reward = float(message.text)
+        await change_price(new_reward)
+        await message.answer(
+            f"Награда за реферала успешно изменена на {new_reward:.2f} руб.",
+            reply_markup=await main_menu_bt()
+        )
+        await state.clear()
+
+    except ValueError:
+        await message.answer("❗ Введите корректное числовое значение.")
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении награды за реферала: {e}")
+        await message.answer("🚫 Не удалось изменить награду за реферала.", reply_markup=await main_menu_bt())
+        await state.clear()
+
+
+
+@client_bot_router.callback_query(F.data.startswith("changebalance_"), AdminFilter(), StateFilter('*'))
+async def change_balance_handler(call: CallbackQuery, state: FSMContext):
+    id_of_user = int(call.data.replace("changebalance_", ""))
+    await call.message.edit_text(
+        "Введите новую сумму баланса. Для нецелых чисел используйте точку, а не запятую.",
+        reply_markup=await cancel_kb()
+    )
+    await state.set_state(ChangeAdminInfo.change_balance)
+    await state.update_data(user_id=id_of_user)
 
 @client_bot_router.callback_query(F.data == 'change_money', AdminFilter(), StateFilter('*'))
 async def change_money_handler(call: CallbackQuery, state: FSMContext):
@@ -265,6 +300,7 @@ async def change_money_handler(call: CallbackQuery, state: FSMContext):
         'Введите новую награду за рефералов:',
         reply_markup=cancel_kb
     )
+    await state.set_state(ChangeAdminInfo.get_amount)
 
 
 @client_bot_router.callback_query(F.data == 'change_min', AdminFilter(), StateFilter('*'))
