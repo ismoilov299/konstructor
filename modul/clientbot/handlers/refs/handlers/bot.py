@@ -341,23 +341,48 @@ async def get_card(message: Message, state: FSMContext):
 @client_bot_router.message(PaymentState.get_bank)
 async def get_bank(message: Message, state: FSMContext, bot: Bot):
     if message.text == "❌Отменить":
-        await message.bot.send_message(message.from_user.id, "🚫Действие отменено", reply_markup=await main_menu_bt())
+        await message.bot.send_message(message.from_user.id, "🚫 Действие отменено", reply_markup=await main_menu_bt())
         await state.clear()
+        return
+
     elif message.text:
         bank = message.text
         card = await state.get_data()
-        balance = get_user_info_db(message.from_user.id)[2]
-        await message.bot.send_message(message.from_user.id, "✅Заявка на выплату принята. Ожидайте ответ",
-                                       reply_markup=await main_menu_bt())
-        i = reg_withdrawals(tg_id=message.from_user.id, amount=balance, card=card.get('card'), bank=bank)
+
+        user_info = await get_user_info_db(message.from_user.id)
+        if not user_info:
+            await message.bot.send_message(message.from_user.id, "❗ Пользователь не найден.", reply_markup=await main_menu_bt())
+            await state.clear()
+            return
+
+        balance = user_info[2]
+
+        await message.bot.send_message(
+            message.from_user.id,
+            "✅ Заявка на выплату принята. Ожидайте ответ.",
+            reply_markup=await main_menu_bt()
+        )
+
+        withdrawal = await reg_withdrawals(
+            tg_id=message.from_user.id,
+            amount=balance,
+            card=card.get('card'),
+            bank=bank
+        )
+
         admin_id = await admin_id_func(message.from_user.id, bot)
-        await message.bot.send_message(admin_id, f"<b>Заявка на выплату № {i[0]}</b>\n"
-                                                 f"ID: <code>{i[1]}</code>\n"
-                                                 f"Сумма выплаты: {i[2]}\n"
-                                                 f"Карта: <code>{i[3]}</code>\n"
-                                                 f"Банк: {i[4]}", parse_mode="html",
-                                       reply_markup=await payments_action_in(i[0]))
+        await message.bot.send_message(
+            admin_id,
+            f"<b>Заявка на выплату № {withdrawal[0]}</b>\n"
+            f"ID: <code>{withdrawal[1]}</code>\n"
+            f"Сумма выплаты: {withdrawal[2]}\n"
+            f"Карта: <code>{withdrawal[3]}</code>\n"
+            f"Банк: {withdrawal[4]}",
+            parse_mode="html",
+            reply_markup=await payments_action_in(withdrawal[0])
+        )
         await state.clear()
     else:
-        await message.bot.send_message(message.from_user.id, "️️❗Ошибка", reply_markup=await main_menu_bt())
+        await message.bot.send_message(message.from_user.id, "️️❗ Ошибка", reply_markup=await main_menu_bt())
         await state.clear()
+
