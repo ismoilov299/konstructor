@@ -516,12 +516,12 @@ async def process_change_balance(message: Message, state: FSMContext):
 async def show_refs_handler(call: CallbackQuery):
     user_id = int(call.data.replace("showrefs_", ""))
     try:
-        file = convert_to_excel(user_id)
-        document = FSInputFile(file)
+        buffer, file_name = convert_to_excel(user_id)
+        document = FSInputFile(buffer, filename=file_name)
         await call.message.answer_document(document)
-        os.remove(file)
     except Exception as e:
         await call.message.answer(f"🚫 Произошла ошибка при создании файла: {e}")
+
 
 
 

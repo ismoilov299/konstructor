@@ -10,11 +10,9 @@ import pandas as pd
 from modul.models import User
 
 def convert_to_excel(user_id):
-    """
-    Konvertatsiya qilinadi va ma'lumotlar Excel fayliga saqlanadi.
-    """
+
     try:
-        users = User.objects.filter(invited_id=user_id).values()
+        users = User.objects.filter(uid=user_id).values()
 
         if not users.exists():
             raise ValueError("Foydalanuvchilar topilmadi!")
@@ -22,7 +20,6 @@ def convert_to_excel(user_id):
         df = pd.DataFrame(users)
 
         file_name = f"Referals_{user_id}_{date.today()}_{random.randint(1, 1000)}.xlsx"
-
         buffer = BytesIO()
         df.to_excel(buffer, index=False)
         buffer.seek(0)
