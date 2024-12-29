@@ -31,7 +31,7 @@ from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in
 from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment, \
-    change_price
+    change_price, change_min_amount
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -303,13 +303,38 @@ async def change_money_handler(call: CallbackQuery, state: FSMContext):
     await state.set_state(ChangeAdminInfo.get_amount)
 
 
-@client_bot_router.callback_query(F.data == 'change_min', AdminFilter(), StateFilter('*'))
+@client_bot_router.callback_query(F.data == "change_min", AdminFilter(), StateFilter('*'))
 async def change_min_handler(call: CallbackQuery, state: FSMContext):
-    await state.set_state(ChangeAdminInfo.get_min)
     await call.message.edit_text(
-        'Введите новую минимальную сумму для вывода:',
-        reply_markup=cancel_kb
+        "Введите новую минимальную выплату:",
+        reply_markup=await cancel_kb()
     )
+    await state.set_state(ChangeAdminInfo.get_min)
+
+
+@client_bot_router.message(ChangeAdminInfo.get_min)
+async def get_new_min_handler(message: Message, state: FSMContext):
+    if message.text == "❌Отменить":
+        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    try:
+        new_min_payout = float(message.text)
+        await change_min_amount(new_min_payout)
+        await message.answer(
+            f"Минимальная выплата успешно изменена на {new_min_payout:.2f} руб.",
+            reply_markup=await main_menu_bt()
+        )
+        await state.clear()
+
+    except ValueError:
+        await message.answer("❗ Введите корректное числовое значение.")
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении минимальной выплаты: {e}")
+        await message.answer("🚫 Не удалось изменить минимальную выплату.", reply_markup=await main_menu_bt())
+        await state.clear()
+
 
 
 
