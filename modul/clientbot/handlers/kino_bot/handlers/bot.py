@@ -305,18 +305,23 @@ async def change_money_handler(call: CallbackQuery, state: FSMContext):
 
 @client_bot_router.callback_query(F.data == "change_min", AdminFilter(), StateFilter('*'))
 async def change_min_handler(call: CallbackQuery, state: FSMContext):
-    await call.message.edit_text(
+    edited_message = await call.message.edit_text(
         "Введите новую минимальную выплату:",
         reply_markup=cancel_kb
     )
     await state.set_state(ChangeAdminInfo.get_min)
+    await state.update_data(edit_msg=edited_message)
 
 
 @client_bot_router.message(ChangeAdminInfo.get_min)
 async def get_new_min_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    edit_msg = data.get('edit_msg')
+
     if message.text == "❌Отменить":
-        if message.reply_to_message:
-            await message.bot.delete_message(chat_id=message.chat.id, message_id=message.reply_to_message.message_id)
+        await message.delete()
+        if edit_msg:
+            await edit_msg.delete()
         await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
         await state.clear()
         return
@@ -326,8 +331,9 @@ async def get_new_min_handler(message: Message, state: FSMContext):
 
         await change_min_amount(new_min_payout)
 
-        await message.bot.delete_message(chat_id=message.chat.id, message_id=message.reply_to_message.message_id)
-
+        # await message.delete()
+        if edit_msg:
+            await edit_msg.delete()
 
         await message.answer(
             f"Минимальная выплата успешно изменена на {new_min_payout:.1f} руб.",
