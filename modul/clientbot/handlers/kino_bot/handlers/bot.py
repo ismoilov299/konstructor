@@ -20,6 +20,7 @@ import re
 from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
+from modul.clientbot.handlers.annon_bot.keyboards.buttons import admin_menu_in
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.shortcuts import *
 from modul.clientbot.handlers.kino_bot.keyboards.kb import *
@@ -218,7 +219,7 @@ class AdminFilter(BaseFilter):
 
 @client_bot_router.message(Command('admin'), AdminFilter())
 async def admin(message: types.Message):
-    await message.answer('Админ панель', reply_markup=admin_kb)
+    await message.answer('Админ панель', reply_markup=admin_menu_in)
 
 
 @client_bot_router.callback_query(F.data == 'admin_send_message', AdminFilter(), StateFilter('*'))
@@ -347,7 +348,6 @@ async def back_to_main_menu(message: Message, state: FSMContext, bot: Bot):
 async def admin_add_channel_msg(message: Message, state: FSMContext):
     try:
         channel_id = int(message.text)
-
         # 1) Получаем объект Bot напрямую из message:
         bot = message.bot
 
