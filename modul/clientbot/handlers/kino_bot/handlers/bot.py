@@ -219,7 +219,8 @@ class AdminFilter(BaseFilter):
 
 @client_bot_router.message(Command('admin'), AdminFilter())
 async def admin(message: types.Message):
-    await message.answer('Админ панель', reply_markup=admin_menu_in)
+    reply_markup = await admin_menu_in()
+    await message.answer('Админ панель', reply_markup=reply_markup)
 
 
 @client_bot_router.callback_query(F.data == 'admin_send_message', AdminFilter(), StateFilter('*'))
