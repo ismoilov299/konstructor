@@ -471,7 +471,7 @@ async def process_add_balance(message: Message, state: FSMContext):
     try:
         amount = float(message.text)
         data = await state.get_data()
-        addbalance_db(data["user_id"], amount)
+        await addbalance_db(data["user_id"], amount)
         await message.answer(f"Баланс успешно пополнен на {amount} руб.", reply_markup=await main_menu_bt())
         await state.clear()
     except ValueError:
@@ -502,7 +502,7 @@ async def process_change_balance(message: Message, state: FSMContext):
     try:
         new_balance = float(message.text)
         data = await state.get_data()
-        changebalance_db(data["user_id"], new_balance)
+        await changebalance_db(data["user_id"], new_balance)
         await message.answer(f"Баланс успешно изменен на {new_balance} руб.", reply_markup=await main_menu_bt())
         await state.clear()
     except ValueError:
