@@ -315,15 +315,20 @@ async def change_min_handler(call: CallbackQuery, state: FSMContext):
 @client_bot_router.message(ChangeAdminInfo.get_min)
 async def get_new_min_handler(message: Message, state: FSMContext):
     if message.text == "❌Отменить":
-        await message.edit_reply_markup()
+        if message.reply_to_message:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=message.reply_to_message.message_id)
         await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
         await state.clear()
         return
 
     try:
         new_min_payout = float(message.text)
+
         await change_min_amount(new_min_payout)
-        await message.edit_reply_markup()
+
+        if message.reply_to_message:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=message.reply_to_message.message_id)
+
         await message.answer(
             f"Минимальная выплата успешно изменена на {new_min_payout:.1f} руб.",
             reply_markup=await main_menu_bt()
