@@ -31,7 +31,7 @@ from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in
 from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment, \
-    change_price, change_min_amount
+    change_price, change_min_amount, get_actual_min_amount
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users
 from modul.loader import client_bot_router
@@ -566,12 +566,16 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
 
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={message.from_user.id}"
+
     price = await get_actual_price()
+    min_withdraw = await get_actual_min_amount()
 
     await message.bot.send_message(
         message.from_user.id,
-        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-        f"🔗 Ваша ссылка для приглашений:\n {link}",reply_markup=await main_menu_bt2()
+        f"👥 Приглашай друзей и зарабатывай! За \nкаждого друга ты получишь {price}₽.\n\n"
+        f"🔗 Ваша ссылка для приглашений:\n{link}\n\n"
+        f"💰 Минимальная сумма для вывода: {min_withdraw}₽",
+        reply_markup=await main_menu_bt2()
     )
 
 
