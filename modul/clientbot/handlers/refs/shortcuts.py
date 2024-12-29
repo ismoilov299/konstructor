@@ -169,18 +169,19 @@ def get_all_wait_payment():
 
 
 @sync_to_async
-def status_accepted(id):
-    wda = Withdrawals.objects.filter(id=id).first()
+def status_accepted(id_of_wa):
+    wda = Withdrawals.objects.filter(id=id_of_wa).first()
     if wda:
-        user = UserTG.objects.filter(uid=wda.tg_id).first()
+        user = wda.tg_id
         if user:
             user.balance -= wda.amount
             user.paid += wda.amount
             user.save()
         wda.status = "принята"
         wda.save()
-        return [wda.tg_id, wda.amount]
+        return [user.uid, wda.amount]
     return None
+
 
 
 @sync_to_async
