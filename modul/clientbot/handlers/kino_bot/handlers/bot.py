@@ -307,7 +307,7 @@ async def change_money_handler(call: CallbackQuery, state: FSMContext):
 async def change_min_handler(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         "Введите новую минимальную выплату:",
-        reply_markup=await cancel_kb()
+        reply_markup=cancel_kb()
     )
     await state.set_state(ChangeAdminInfo.get_min)
 
