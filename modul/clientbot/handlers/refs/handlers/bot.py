@@ -18,9 +18,17 @@ logger = logging.getLogger(__name__)
 # TODO изменить метод получения айди админа
 async def admin_id_func(user_id, bot):
     bot_db = await shortcuts.get_bot(bot)
-    if user_id == bot_db.owner.uid:
-        return True
-    return False
+
+    if not bot_db:
+        logger.error("Bot ma'lumotlari topilmadi.")
+        return False
+
+    if not bot_db.owner:
+        logger.error(f"Botda egasi mavjud emas: Bot ID = {bot_db.id}")
+        return False
+
+    logger.info(f"Tekshirilayotgan foydalanuvchi: {user_id}, Bot egasi: {bot_db.owner.uid}")
+    return user_id == bot_db.owner.uid
 
 
 async def check_channels(message):
