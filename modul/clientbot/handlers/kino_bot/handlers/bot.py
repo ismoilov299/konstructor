@@ -235,13 +235,16 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 @client_bot_router.message(SendMessagesForm.message)
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
-    users = await get_all_users()
+    bot_db = await shortcuts.get_bot(message.bot)
+    users = await get_all_users(bot_db)
+
     if not users:
         await message.answer("Нет пользователей для рассылки.")
         return
 
     await send_message_to_users(message.bot, users, message.text)
     await message.answer('Рассылка завершена!')
+
 
 @client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
 async def manage_user_handler(call: CallbackQuery, state: FSMContext):

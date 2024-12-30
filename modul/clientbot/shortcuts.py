@@ -218,13 +218,14 @@ def fetch_user_ids_sync(bot_instance):
 from asgiref.sync import sync_to_async
 
 @sync_to_async
-def get_all_users(bot):
+def get_all_users(bot_db):
     users = ClientBotUser.objects.filter(
-        bot=bot,
+        bot=bot_db,
         uid__gt=0,
         user__banned=False
     ).values_list('uid', flat=True)
     return list(users)
+
 
 async def get_main_bot_user(uid: int):
     return await models.Bot.objects.filter(uid=uid).first()
