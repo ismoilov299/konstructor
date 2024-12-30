@@ -40,7 +40,9 @@ btn = [
         types.InlineKeyboardButton(
             text='💰 Изменить награду за рефа',
             callback_data='change_money'
-        ),
+        )
+    ],
+    [
         types.InlineKeyboardButton(
             text='📕 Изменить минимальный вывод',
             callback_data='change_min'
@@ -55,6 +57,7 @@ btn = [
 ]
 
 admin_kb = types.InlineKeyboardMarkup(inline_keyboard=btn)
+
 
 
 
