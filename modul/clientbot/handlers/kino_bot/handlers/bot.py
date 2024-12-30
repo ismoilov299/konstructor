@@ -794,32 +794,36 @@ def get_user(uid: int, username: str, first_name: str = None, last_name: str = N
 @sync_to_async
 @transaction.atomic
 def save_user(u, bot: Bot, link=None, inviter=None):
-    bot = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
-    user = models.UserTG.objects.filter(uid=u.id).first()
-    current_ai_limit = 12
-    if not user:
-        user = models.UserTG.objects.create(
-            uid=u.id,
-            username=u.username,
-            first_name=u.first_name,
-            last_name=u.last_name,
-            user_link=link
-        )
-    else:
-        current_ai_limit = 0
+    try:
+        bot_instance = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
+        if not bot_instance:
+            raise ValueError(f"Bot with token {bot.token} not found")
 
-    client_user = models.ClientBotUser.objects.filter(uid=u.id, bot=bot).first()
-    if client_user:
+        user, user_created = models.UserTG.objects.update_or_create(
+            uid=u.id,
+            defaults={
+                "username": u.username,
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+                "user_link": link,
+            }
+        )
+
+        client_user, client_user_created = models.ClientBotUser.objects.update_or_create(
+            uid=u.id,
+            bot=bot_instance,
+            defaults={
+                "user": user,
+                "inviter": inviter,
+                "current_ai_limit": 12 if user_created else 0,
+            }
+        )
+
         return client_user
 
-    client_user = models.ClientBotUser.objects.create(
-        uid=u.id,
-        user=user,
-        bot=bot,
-        inviter=inviter,
-        current_ai_limit=current_ai_limit
-    )
-    return client_user
+    except Exception as e:
+        logger.error(f"Error saving user {u.id}: {e}")
+        raise
 
 
 class NonChatGptFilter(Filter):
@@ -916,8 +920,12 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         def update_referral():
                             try:
                                 user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
+                                admin_info = AdminInfo.objects.first()
+                                if not admin_info:
+                                    raise ValueError("AdminInfo is not configured in the database.")
+
                                 user_tg.refs += 1
-                                user_tg.balance += float(AdminInfo.objects.first().price or 10.0)
+                                user_tg.balance += float(admin_info.price or 10.0)
                                 user_tg.save()
                                 logger.info(f"Referral updated successfully for user {inviter_id}")
                                 return True
@@ -927,6 +935,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                             except Exception as ex:
                                 logger.error(f"Unexpected error during referral update: {ex}")
                                 raise
+
 
                     except Exception as e:
                         logger.error(f"Error updating referral stats: {e}")
