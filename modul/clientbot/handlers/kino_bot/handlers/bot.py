@@ -909,7 +909,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     with suppress(TelegramForbiddenError):
                         user_link = html.link('реферал', f'tg://user?id={uid}')
                         await bot.send_message(
-                            chat_id=inviter_id,
+                            chat_id=command.args,
                             text=f"У вас новый {user_link}!"
                         )
 
@@ -919,25 +919,15 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         @transaction.atomic
                         def update_referral():
                             try:
-                                inviter_user = UserTG.objects.select_for_update().get(uid=inviter_id)
+                                user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
                                 admin_info = AdminInfo.objects.first()
                                 if not admin_info:
                                     raise ValueError("AdminInfo is not configured in the database.")
 
-                                # Update inviter's stats
-                                inviter_user.refs += 1
-                                inviter_user.balance += float(admin_info.price or 10.0)
-                                inviter_user.save()
-
-                                # Save invited user's info
-                                UserTG.objects.create(
-                                    uid=message.from_user.id,
-                                    username=message.from_user.username,
-                                    first_name=message.from_user.first_name,
-                                    invited=inviter_user.username or f"User {inviter_user.uid}",
-                                    invited_id=inviter_id
-                                )
-                                logger.info(f"Referral updated successfully for inviter {inviter_id}")
+                                user_tg.refs += 1
+                                user_tg.balance += float(admin_info.price or 10.0)
+                                user_tg.save()
+                                logger.info(f"Referral updated successfully for user {inviter_id}")
                                 return True
                             except UserTG.DoesNotExist:
                                 logger.error(f"Inviter with ID {inviter_id} does not exist.")
@@ -946,10 +936,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 logger.error(f"Unexpected error during referral update: {ex}")
                                 raise
 
-                        await update_referral()
+
                     except Exception as e:
                         logger.error(f"Error updating referral stats: {e}")
-
             else:
                 inviter = None
 
