@@ -226,15 +226,63 @@ async def admin(message: types.Message):
     await message.answer('Админ панель', reply_markup=admin_kb)
 
 
-@client_bot_router.callback_query(F.data == 'admin_send_message', AdminFilter(), StateFilter('*'))
+@client_bot_router.callback_query(
+    F.data == 'admin_send_message',
+    AdminFilter(),
+    StateFilter('*')
+)
 async def admin_send_message(call: CallbackQuery, state: FSMContext):
     await state.set_state(SendMessagesForm.message)
-    await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)', reply_markup=cancel_kb)
+    await call.message.edit_text(
+        'Отправьте сообщение для рассылки (текст, фото, видео и т.д.)',
+        reply_markup=cancel_kb
+    )
+
+
+async def send_message_to_user(message: types.Message, user_id: int) -> bool:
+    """Send message to a single user based on content type"""
+    try:
+        if message.text:
+            await message.bot.send_message(chat_id=user_id, text=message.text)
+        elif message.photo:
+            await message.bot.send_photo(
+                chat_id=user_id,
+                photo=message.photo[-1].file_id,
+                caption=message.caption
+            )
+        elif message.video:
+            await message.bot.send_video(
+                chat_id=user_id,
+                video=message.video.file_id,
+                caption=message.caption
+            )
+        elif message.audio:
+            await message.bot.send_audio(
+                chat_id=user_id,
+                audio=message.audio.file_id,
+                caption=message.caption
+            )
+        elif message.document:
+            await message.bot.send_document(
+                chat_id=user_id,
+                document=message.document.file_id,
+                caption=message.caption
+            )
+        else:
+            await message.bot.copy_message(
+                chat_id=user_id,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id
+            )
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+        return False
 
 
 @client_bot_router.message(
     SendMessagesForm.message,
-    F.content_type.in_({'text', 'photo', 'video', 'audio', 'document'})
+    F.content_type.in_({'text', 'photo', 'video', 'audio', 'document', 'animation', 'voice', 'video_note'})
 )
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
@@ -245,44 +293,41 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
         await message.answer("Нет пользователей для рассылки.")
         return
 
+    progress_msg = await message.answer("Начинаем рассылку...")
     success_count = 0
     fail_count = 0
+    total_users = len(users)
 
-    for user_id in users:
-        try:
-            if message.content_type == 'text':
-                await message.bot.send_message(chat_id=user_id, text=message.text)
-            elif message.content_type == 'photo':
-                await message.bot.send_photo(
-                    chat_id=user_id,
-                    photo=message.photo[-1].file_id,
-                    caption=message.caption
-                )
-            elif message.content_type == 'video':
-                await message.bot.send_video(
-                    chat_id=user_id,
-                    video=message.video.file_id,
-                    caption=message.caption
-                )
-            elif message.content_type == 'audio':
-                await message.bot.send_audio(
-                    chat_id=user_id,
-                    audio=message.audio.file_id,
-                    caption=message.caption
-                )
-            elif message.content_type == 'document':
-                await message.bot.send_document(
-                    chat_id=user_id,
-                    document=message.document.file_id,
-                    caption=message.caption
-                )
+    # Process users in chunks to avoid overloading
+    chunk_size = 20
+    for i in range(0, total_users, chunk_size):
+        user_chunk = users[i:i + chunk_size]
+        tasks = [send_message_to_user(message, user_id) for user_id in user_chunk]
 
-            success_count += 1
-        except Exception as e:
-            fail_count += 1
-            logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+        # Wait for all tasks in chunk to complete
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    await message.answer(
+        # Update counters
+        for result in results:
+            if isinstance(result, bool) and result:
+                success_count += 1
+            else:
+                fail_count += 1
+
+        # Update progress every 20 users
+        if i % 100 == 0 and i > 0:
+            await progress_msg.edit_text(
+                f'Прогресс рассылки:\n'
+                f'Обработано: {i}/{total_users}\n'
+                f'Успешно: {success_count}\n'
+                f'Не удалось: {fail_count}'
+            )
+
+        # Small delay between chunks to avoid rate limiting
+        await asyncio.sleep(0.5)
+
+    # Send final status
+    await progress_msg.edit_text(
         f'Рассылка завершена!\n'
         f'Успешно отправлено: {success_count}\n'
         f'Не удалось отправить: {fail_count}'
