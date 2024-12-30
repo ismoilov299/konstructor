@@ -321,6 +321,56 @@ async def get_user_info_handler(message: Message, state: FSMContext):
         await message.answer("️️❗Ошибка! Введите числовой ID пользователя.", reply_markup=await main_menu_bt())
         await state.clear()
 
+@client_bot_router.callback_query(F.data.startswith("changerefs_"), AdminFilter(), StateFilter('*'))
+async def change_refs_handler(call: CallbackQuery, state: FSMContext):
+    user_id = int(call.data.replace("changerefs_", ""))
+    await call.message.edit_text(
+        "Введите новое количество рефералов:",
+        reply_markup=await cancel_kb()
+    )
+    await state.set_state(ChangeAdminInfo.change_refs)
+    await state.update_data(user_id=user_id)
+
+@client_bot_router.message(ChangeAdminInfo.change_refs)
+async def set_new_refs_count(message: Message, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get("user_id")
+
+    if message.text == "❌Отменить":
+        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    if message.text.isdigit():
+        new_refs_count = int(message.text)
+
+        try:
+            @sync_to_async
+            @transaction.atomic
+            def update_refs():
+                user = UserTG.objects.select_for_update().filter(uid=user_id).first()
+                if user:
+                    user.refs = new_refs_count
+                    user.save()
+                    return True
+                return False
+
+            updated = await update_refs()
+
+            if updated:
+                await message.answer(f"Количество рефералов для пользователя {user_id} успешно обновлено на {new_refs_count}.", reply_markup=await main_menu_bt())
+            else:
+                await message.answer(f"🚫 Пользователь с ID {user_id} не найден.", reply_markup=await main_menu_bt())
+
+        except Exception as e:
+            logger.error(f"Error updating refs count for user {user_id}: {e}")
+            await message.answer("🚫 Не удалось обновить количество рефералов.", reply_markup=await main_menu_bt())
+    else:
+        await message.answer("❗ Введите корректное числовое значение.")
+
+    await state.clear()
+
+
 @client_bot_router.callback_query(F.data == 'all_payments', AdminFilter(), StateFilter('*'))
 async def all_payments_handler(call: CallbackQuery):
     active_payments = await get_all_wait_payment()
