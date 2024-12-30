@@ -885,9 +885,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
-    """
-    /start komandasi uchun handler
-    """
+
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
         bot_db = await shortcuts.get_bot(bot)
@@ -904,7 +902,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 inviter_id = int(command.args)
                 inviter = await shortcuts.get_user(inviter_id, bot)
                 if inviter:
-                    # Referral xabarini yuborish
                     with suppress(TelegramForbiddenError):
                         user_link = html.link('реферал', f'tg://user?id={uid}')
                         await bot.send_message(
@@ -917,14 +914,20 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         @sync_to_async
                         @transaction.atomic
                         def update_referral():
-                            user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
-                            user_tg.refs += 1
-                            user_tg.balance += float(AdminInfo.objects.first().price or 10.0)
-                            user_tg.save()
-                            return True
+                            try:
+                                user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
+                                user_tg.refs += 1
+                                user_tg.balance += float(AdminInfo.objects.first().price or 10.0)
+                                user_tg.save()
+                                logger.info(f"Referral updated successfully for user {inviter_id}")
+                                return True
+                            except UserTG.DoesNotExist:
+                                logger.error(f"Inviter with ID {inviter_id} does not exist.")
+                                return False
+                            except Exception as ex:
+                                logger.error(f"Unexpected error during referral update: {ex}")
+                                raise
 
-                        await update_referral()
-                        logger.info(f"Successfully updated referral stats for user {inviter_id}")
                     except Exception as e:
                         logger.error(f"Error updating referral stats: {e}")
             else:
