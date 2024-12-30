@@ -390,12 +390,14 @@ async def get_bank(message: Message, state: FSMContext, bot: Bot):
         try:
             await bot.send_message(
                 admin_id,
-                f"<b>Заявка на выплату № {withdrawal[0]}</b>\n"
-                f"ID: <code>{withdrawal[1]}</code>\n"
-                f"Сумма выплаты: {withdrawal[2]}</code>\n"
-                f"Карта: <code>{withdrawal[3]}</code>\n"
-                f"Банк: {withdrawal[4]}</b>",
-                parse_mode="html",
+                (
+                    f"<b>Заявка на выплату № {withdrawal[0]}</b>\n"
+                    f"ID: <code>{withdrawal[1]}</code>\n"
+                    f"Сумма выплаты: <code>{withdrawal[2]}</code>\n"
+                    f"Карта: <code>{withdrawal[3]}</code>\n"
+                    f"Банк: <code>{withdrawal[4]}</code>"
+                ),
+                parse_mode="HTML",
                 reply_markup=await payments_action_in(withdrawal[0])
             )
         except TelegramBadRequest as e:
