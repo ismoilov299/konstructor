@@ -326,7 +326,7 @@ async def change_refs_handler(call: CallbackQuery, state: FSMContext):
     user_id = int(call.data.replace("changerefs_", ""))
     await call.message.edit_text(
         "Введите новое количество рефералов:",
-        reply_markup=await cancel_kb()
+        reply_markup=cancel_kb
     )
     await state.set_state(ChangeAdminInfo.change_refs)
     await state.update_data(user_id=user_id)
