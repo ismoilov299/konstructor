@@ -576,15 +576,29 @@ async def show_refs_handler(call: CallbackQuery):
 
 
 
-
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
 async def admin_get_stats(call: CallbackQuery):
     bot = call.bot
-    users_count = await get_all_users(bot)
-    await call.message.edit_text(
-        f'<b>Количество пользователей в боте:</b> {users_count}',
-        reply_markup=admin_kb
-    )
+
+    try:
+        bot_db = await shortcuts.get_bot(bot)
+
+        users_count = len(await get_all_users(bot_db))
+
+        await call.message.edit_text(
+            f'<b>Количество пользователей в боте:</b> {users_count}',
+            reply_markup=admin_kb,
+            parse_mode='HTML'
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка получения статистики: {e}")
+        await call.message.edit_text(
+            "🚫 Произошла ошибка при получении статистики.",
+            reply_markup=admin_kb,
+            parse_mode='HTML'
+        )
+
 
 
 
