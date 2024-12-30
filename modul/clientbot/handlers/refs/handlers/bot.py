@@ -351,54 +351,60 @@ async def get_card(message: Message, state: FSMContext):
 @client_bot_router.message(PaymentState.get_bank)
 async def get_bank(message: Message, state: FSMContext, bot: Bot):
     if message.text == "❌Отменить":
-        await message.bot.send_message(message.from_user.id, "🚫Действие отменено", reply_markup=await main_menu_bt())
+        await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
         await state.clear()
         return
 
-    elif message.text:
-        bank = message.text
-        card = await state.get_data()
-
-        # Foydalanuvchi ma'lumotlarini olish
-        user_info = await get_user_info_db(message.from_user.id)
-        if not user_info:
-            await message.bot.send_message(message.from_user.id, "❗ Пользователь не найден.", reply_markup=await main_menu_bt())
-            await state.clear()
-            return
-
-        balance = user_info[2]
-
-        # Zayavkani ro‘yxatdan o‘tkazish
-        withdrawal = await reg_withdrawals(
-            tg_id=message.from_user.id,
-            amount=balance,
-            card=card.get('card'),
-            bank=bank
-        )
-
-        # Admin ID ni tekshirish va xabar yuborish
-        admin_id = await admin_id_func(message.from_user.id, bot)
-        if admin_id:
-            try:
-                await message.bot.send_message(
-                    admin_id,
-                    f"<b>Заявка на выплату № {withdrawal[0]}</b>\n"
-                    f"ID: <code>{withdrawal[1]}</code>\n"
-                    f"Сумма выплаты: {withdrawal[2]}\n"
-                    f"Карта: <code>{withdrawal[3]}</code>\n"
-                    f"Банк: {withdrawal[4]}",
-                    parse_mode="html",
-                    reply_markup=await payments_action_in(withdrawal[0])
-                )
-            except TelegramBadRequest as e:
-                logger.error(f"Ошибка отправки сообщения админу: {e}")
-        else:
-            logger.error("Admin ID не найден.")
-
-        await message.bot.send_message(message.from_user.id, "✅ Заявка на выплату принята. Ожидайте ответ.", reply_markup=await main_menu_bt())
+    if not message.text:
+        await message.answer("️️❗ Ошибка", reply_markup=await main_menu_bt())
         await state.clear()
+        return
+
+    bank = message.text
+    card_data = await state.get_data()
+
+    user_info = await get_user_info_db(message.from_user.id)
+    if not user_info:
+        await message.answer("❗ Пользователь не найден.", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    balance = user_info[2]
+
+    withdrawal = await reg_withdrawals(
+        tg_id=message.from_user.id,
+        amount=balance,
+        card=card_data.get('card'),
+        bank=bank
+    )
+
+    if not withdrawal:
+        await message.answer("❗ Ошибка при регистрации заявки.", reply_markup=await main_menu_bt())
+        await state.clear()
+        return
+
+    bot_db = await shortcuts.get_bot(bot)
+    admin_id = bot_db.owner.uid if bot_db and bot_db.owner else None
+
+    if admin_id:
+        try:
+            await bot.send_message(
+                admin_id,
+                f"<b>Заявка на выплату № {withdrawal[0]}</b>\n"
+                f"ID: <code>{withdrawal[1]}</code>\n"
+                f"Сумма выплаты: {withdrawal[2]}</code>\n"
+                f"Карта: <code>{withdrawal[3]}</code>\n"
+                f"Банк: {withdrawal[4]}</b>",
+                parse_mode="html",
+                reply_markup=await payments_action_in(withdrawal[0])
+            )
+        except TelegramBadRequest as e:
+            logger.error(f"Ошибка отправки сообщения админу: {e}")
     else:
-        await message.bot.send_message(message.from_user.id, "️️❗ Ошибка", reply_markup=await main_menu_bt())
-        await state.clear()
+        logger.error("Admin ID не найден.")
+
+    await message.answer("✅ Заявка на выплату принята. Ожидайте ответ.", reply_markup=await main_menu_bt())
+    await state.clear()
+
 
 
