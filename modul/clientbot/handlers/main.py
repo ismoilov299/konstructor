@@ -22,7 +22,7 @@ import logging
 
 from django.db import transaction
 from asgiref.sync import sync_to_async
-from modul.models import UserTG
+from modul.models import UserTG, AdminInfo
 
 logger = logging.getLogger(__name__)
 
@@ -107,34 +107,53 @@ async def on_start(message: Message, command: CommandObject, state: FSMContext, 
     """Handler for /start command"""
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
+        bot_db = await shortcuts.get_bot(bot)
 
-        await state.clear()
-        commands = [BotCommand(command="/start", description="Меню")]
-        await bot.set_my_commands(commands)
+        if command.args:
+            logger.info(f"Referral args received: {command.args}")
+            await state.update_data(referral=command.args)
 
-        # Handle referral
-        referral = command.args
         uid = message.from_user.id
         user = await shortcuts.get_user(uid, bot)
 
         if not user:
-            if referral and referral.isdigit():
-                inviter_id = int(referral)
+            if command.args and command.args.isdigit():
+                inviter_id = int(command.args)
                 inviter = await shortcuts.get_user(inviter_id, bot)
-
-                if inviter and inviter_id != uid:  # Prevent self-referral
-                    # Add referral bonus
-                    await plus_ref(inviter_id)
-                    await plus_money(inviter_id)
-
-                    # Send notification
+                if inviter:
                     with suppress(TelegramForbiddenError):
                         user_link = html.link('реферал', f'tg://user?id={uid}')
                         await bot.send_message(
-                            chat_id=referral,
+                            chat_id=command.args,
                             text=f"У вас новый {user_link}!"
                         )
-                    logger.info(f"Processed referral: user {uid} invited by {inviter_id}")
+
+                    try:
+                        # Process referral in transaction
+                        @sync_to_async
+                        @transaction.atomic
+                        def update_referral():
+                            try:
+                                user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
+                                admin_info = AdminInfo.objects.first()
+                                if not admin_info:
+                                    raise ValueError("AdminInfo is not configured in the database.")
+
+                                user_tg.refs += 1
+                                user_tg.balance += float(admin_info.price or 10.0)
+                                user_tg.save()
+                                logger.info(f"Referral updated successfully for user {inviter_id}")
+                                return True
+                            except UserTG.DoesNotExist:
+                                logger.error(f"Inviter with ID {inviter_id} does not exist.")
+                                return False
+                            except Exception as ex:
+                                logger.error(f"Unexpected error during referral update: {ex}")
+                                raise
+
+
+                    except Exception as e:
+                        logger.error(f"Error updating referral stats: {e}")
             else:
                 inviter = None
 
