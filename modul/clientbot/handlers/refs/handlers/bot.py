@@ -70,7 +70,7 @@ from modul.clientbot.handlers.refs.shortcuts import (
 from aiogram import F, Bot
 logger = logging.getLogger(__name__)
 
-#/ var / www / Konstructor / modul / clientbot / handlers / refs / handlers / bot.py
+
 
 async def check_referral_status(user_id: int) -> dict:
     """
