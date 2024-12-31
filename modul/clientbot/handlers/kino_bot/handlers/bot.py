@@ -232,7 +232,8 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)', reply_markup=cancel_kb)
 
 
-@client_bot_router.message(SendMessagesForm.message, types.ContentType.ANY)
+
+@client_bot_router.message(SendMessagesForm.message)
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
     bot_db = await shortcuts.get_bot(message.bot)
