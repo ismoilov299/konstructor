@@ -327,7 +327,7 @@ async def change_link(message: Message, state: FSMContext):
 
 def anon_bot_handlers():
     @client_bot_router.message(AnonBotFilter())
-    async def any_or_answer(message: Message, state: FSMContext):
+    async def any_or_answer(message: Message, state: FSMContext, bot: Bot):
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
         check = None
@@ -404,7 +404,8 @@ def anon_bot_handlers():
                                                reply_markup=await greeting_in())
                 await state.set_state(Links.change_greeting)
             elif message.text == "📛Изменить ссылку":
-                link = await create_start_link(message.bot, await get_user_link(message.from_user.id))
+                me = await bot.get_me()
+                link = f"https://t.me/{me.username}?start={message.from_user.id}"
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"Сейчас ваша ссылка для получения анонимных сообщений выглядит так:\n"
                                                     f"<code>{link}</code>\n\n"
@@ -414,7 +415,8 @@ def anon_bot_handlers():
                 await state.set_state(Links.change_link)
             elif message.text == "🚀Начать":
                 await state.clear()
-                link = await create_start_link(message.bot, await get_user_link(message.from_user.id))
+                me = await bot.get_me()
+                link = f"https://t.me/{me.username}?start={message.from_user.id}"
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                                                     f"Твоя личная ссылка:\n👉{link}\n\n"

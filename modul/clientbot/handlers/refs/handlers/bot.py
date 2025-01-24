@@ -1,18 +1,19 @@
-import logging
-
 import aiogram
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import BaseFilter
-
-from modul.clientbot import shortcuts
-from modul.loader import client_bot_router
-from aiogram.utils.deep_linking import create_start_link, decode_payload
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, BotCommand, CallbackQuery
 from modul.clientbot.handlers.refs.keyboards.buttons import *
 from modul.clientbot.handlers.refs.shortcuts import *
-from aiogram import F, Bot
 from modul.clientbot.handlers.refs.data.states import PaymentState
+import logging
+from modul.clientbot import shortcuts
+from modul.loader import client_bot_router
+from aiogram.types import Message, BotCommand, CallbackQuery
+from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt
+from modul.clientbot.handlers.refs.shortcuts import (
+    add_user, add_ref, check_user, check_ban, get_user_name, plus_ref, plus_money
+)
+from aiogram import F, Bot
 logger = logging.getLogger(__name__)
 
 # TODO изменить метод получения айди админа
@@ -59,16 +60,7 @@ async def banned(message):
     return True
 
 
-import logging
-from modul.clientbot import shortcuts
-from modul.loader import client_bot_router
-from aiogram.types import Message, BotCommand, CallbackQuery
-from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt
-from modul.clientbot.handlers.refs.shortcuts import (
-    add_user, add_ref, check_user, check_ban, get_user_name, plus_ref, plus_money
-)
-from aiogram import F, Bot
-logger = logging.getLogger(__name__)
+
 
 
 
