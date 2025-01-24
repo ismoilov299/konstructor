@@ -105,7 +105,7 @@ async def start(message: Message, state: FSMContext, command: CommandObject = No
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",
                                               "greeting_rem"]),AnonBotFilter())
-async def call_backs(query: CallbackQuery, state: FSMContext):
+async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
     await state.clear()
     if query.data == "check_chan":
         checking = await check_channels(query)
@@ -117,7 +117,8 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
                                          parse_mode="html", reply_markup=await main_menu_bt())
     if query.data == "cancel":
         await query.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
-        link = await create_start_link(query.bot, await get_user_link(query.from_user.id))
+        me = await bot.get_me()
+        link = f"https://t.me/{me.username}?start={query.from_user.id}"
         await query.bot.send_message(chat_id=query.from_user.id,
                                      text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                                           f"Твоя личная ссылка:\n👉{link}\n\n"
