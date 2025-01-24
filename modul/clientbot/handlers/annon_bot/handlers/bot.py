@@ -13,6 +13,7 @@ from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
+from modul.clientbot.handlers.kino_bot.handlers.bot import save_user
 from modul.loader import client_bot_router
 from modul.clientbot.shortcuts import get_bot_by_token
 logger = logging.getLogger(__name__)
@@ -56,10 +57,30 @@ async def start(message: Message, state: FSMContext,bot: Bot):
         logger.info(f"Start command received with args: {user_id}")  # debug uchun
         #from modul.clientbot.shortcuts import get_bot_by_token
 
-        bot_db = await get_bot_by_token(bot.token)
-        if not bot_db:
-            logger.error(f"Bot not found in database for token: {bot.token}")
-            return
+        try:
+            bot_db = await get_bot_by_token(bot.token)
+            if not bot_db:
+                logger.error(f"Bot not found in database for token: {bot.token}")
+                return
+
+            # Inviterni aniqlash
+            inviter = None
+            if user_id:
+                inviter = await get_user_by_id(user_id)
+
+            # Foydalanuvchini saqlash
+            me = await bot.get_me()
+            new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+            user = await save_user(
+                u=message.from_user,
+                bot=bot,
+                link=new_link,
+                inviter=inviter
+            )
+            if not user:
+                logger.error(f"Failed to save user {message.from_user.id} to database")
+        except Exception as db_error:
+            logger.error(f"Database error while saving user: {db_error}", exc_info=True)
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
 
