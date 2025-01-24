@@ -448,7 +448,8 @@ def anon_bot_handlers():
                                                parse_mode="html", reply_markup=await main_menu_bt())
 
             else:
-                link = await create_start_link(message.bot, await get_user_link(message.from_user.id))
+                me = await bot.get_me()
+                link = f"https://t.me/{me.username}?start={message.from_user.id}"
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                                                     f"Твоя личная ссылка:\n👉{link}\n\n"
