@@ -26,8 +26,8 @@ async def main_menu_bt():
     buttons = [
         [KeyboardButton(text="🚀Начать"), KeyboardButton(text="👋Изменить приветствие")],
         [KeyboardButton(text="📛Изменить ссылку"), KeyboardButton(text="⭐️Ваша статистика")],
-        [KeyboardButton(text="☕️Поддержать разработчика")],
-	[KeyboardButton(text="💸Заработать")]
+        # [KeyboardButton(text="☕️Поддержать разработчика")],
+	# [KeyboardButton(text="💸Заработать")]
         ]
     kb = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=buttons)
     return kb
