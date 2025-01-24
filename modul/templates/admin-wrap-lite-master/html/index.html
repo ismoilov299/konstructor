@@ -5,13 +5,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>DxBot.ru</title>
-    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'assets/images/favicon.png'%}">
+    <!-- Core CSS -->
     <link href="{% static 'assets/node_modules/bootstrap/css/bootstrap.min.css'%}" rel="stylesheet">
+    <link href="{% static 'assets/node_modules/perfect-scrollbar/css/perfect-scrollbar.css'%}" rel="stylesheet">
+    <link href="{% static 'assets/node_modules/morrisjs/morris.css'%}" rel="stylesheet">
+    <link href="{% static 'assets/node_modules/c3-master/c3.min.css'%}" rel="stylesheet">
     <link href="{% static 'css/style.css'%}" rel="stylesheet">
     <link href="{% static 'css/colors/default.css'%}" id="theme" rel="stylesheet">
 </head>
 
 <body class="fix-header fix-sidebar">
+    <!-- Loader -->
     <div class="preloader">
         <div class="loader">
             <div class="loader__figure"></div>
@@ -20,8 +24,9 @@
     </div>
 
     <div id="main-wrapper">
+        <!-- Header -->
         <header class="topbar">
-            <nav class="navbar navbar-expand-md navbar-light">
+            <nav class="navbar top-navbar navbar-expand-md navbar-light">
                 <div class="navbar-header">
                     <a class="navbar-brand" href="{% url 'main' %}">
                         <img src="{% static 'assets/images/logo-icon.png'%}" alt="logo" class="dark-logo">
@@ -42,6 +47,7 @@
             </nav>
         </header>
 
+        <!-- Sidebar -->
         <aside class="left-sidebar">
             <nav class="sidebar-nav">
                 <ul id="sidebarnav">
@@ -52,9 +58,11 @@
             </nav>
         </aside>
 
+        <!-- Page wrapper -->
         <div class="page-wrapper">
             <div class="container-fluid">
                 <div class="row">
+                    <!-- Charts -->
                     <div class="col-lg-8">
                         <div class="card">
                             <div class="card-body">
@@ -80,14 +88,23 @@
         </div>
     </div>
 
+    <!-- Scripts -->
+    <script src="{% static 'assets/node_modules/jquery/jquery.min.js'%}"></script>
+    <script src="{% static 'assets/node_modules/bootstrap/js/bootstrap.bundle.min.js'%}"></script>
+    <script src="{% static 'js/perfect-scrollbar.jquery.min.js'%}"></script>
+    <script src="{% static 'js/waves.js'%}"></script>
+    <script src="{% static 'js/sidebarmenu.js'%}"></script>
+    <script src="{% static 'js/custom.min.js'%}"></script>
+    <script src="{% static 'assets/node_modules/raphael/raphael-min.js'%}"></script>
+    <script src="{% static 'assets/node_modules/morrisjs/morris.min.js'%}"></script>
+    <script src="{% static 'assets/node_modules/d3/d3.min.js'%}"></script>
+    <script src="{% static 'assets/node_modules/c3-master/c3.min.js'%}"></script>
+    <script src="{% static 'js/dashboard1.js'%}"></script>
+
+    <!-- User Data -->
     <script>
         const userData = JSON.parse('{{ user_data|safe }}');
         const userDataCount = JSON.parse('{{ user_data_count|safe }}');
     </script>
-
-    <script src="{% static 'assets/node_modules/jquery/jquery.min.js'%}"></script>
-    <script src="{% static 'assets/node_modules/bootstrap/js/bootstrap.bundle.min.js'%}"></script>
-    <script src="{% static 'js/waves.js'%}"></script>
-    <script src="{% static 'js/dashboard1.js'%}"></script>
 </body>
 </html>
