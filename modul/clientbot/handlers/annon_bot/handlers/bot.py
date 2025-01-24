@@ -13,7 +13,6 @@ from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
-from modul.clientbot.handlers.kino_bot.handlers.bot import save_user
 from modul.loader import client_bot_router
 from modul.clientbot.shortcuts import get_bot_by_token
 logger = logging.getLogger(__name__)
@@ -48,48 +47,19 @@ async def payment(message, amount):
 
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
-async def start(message: Message, state: FSMContext,bot: Bot):
+async def start(message: Message, state: FSMContext, bot: Bot):
     try:
         args = message.text.split(' ')
         user_id = args[1] if len(args) > 1 else None
 
+        logger.info(f"Start command received with args: {user_id}")
 
-        logger.info(f"Start command received with args: {user_id}")  # debug uchun
-        #from modul.clientbot.shortcuts import get_bot_by_token
-
-        try:
-            bot_db = await get_bot_by_token(bot.token)
-            if not bot_db:
-                logger.error(f"Bot not found in database for token: {bot.token}")
-                return
-
-            # Inviterni aniqlash
-            inviter = None
-            if user_id:
-                inviter = await get_user_by_id(user_id)
-
-            # Foydalanuvchini saqlash
-            me = await bot.get_me()
-            new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-            user = await save_user(
-                u=message.from_user,
-                bot=bot,
-                link=new_link,
-                inviter=inviter
-            )
-            if not user:
-                logger.error(f"Failed to save user {message.from_user.id} to database")
-        except Exception as db_error:
-            logger.error(f"Database error while saving user: {db_error}", exc_info=True)
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
 
-
-
-        if not channels_checker:
-            if not checker:
-                await add_user(message.from_user, str(message.from_user.id))
-        else:
+        if not channels_checker and not checker:
+            await add_user(message.from_user, str(message.from_user.id))
+        elif channels_checker:
             if not checker:
                 await add_user(message.from_user, str(message.from_user.id))
 
@@ -114,10 +84,11 @@ async def start(message: Message, state: FSMContext,bot: Bot):
                     await state.set_state(Links.send_st)
                     await state.set_data({"link_user": link_user})
                 else:
-                    logger.error(f"User not found with ID: {user_id}")  # debug uchun
+                    logger.error(f"User not found with ID: {user_id}")
             else:
-                user_link = str(message.from_user.id)
-                link = await create_start_link(message.bot, user_link)
+                me = await bot.get_me()
+                link = f"https://t.me/{me.username}?start={message.from_user.id}"
+
                 await message.bot.send_message(
                     chat_id=message.from_user.id,
                     text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
