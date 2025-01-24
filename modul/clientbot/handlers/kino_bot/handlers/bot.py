@@ -1,5 +1,6 @@
 import asyncio
 import time
+import traceback
 from contextlib import suppress
 
 from aiogram import Bot, F, html
@@ -36,7 +37,7 @@ from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_ac
     change_price, change_min_amount, get_actual_min_amount, status_declined, status_accepted, check_ban, \
     get_user_info_db, changebalance_db, addbalance_db, ban_unban_db
 from modul.clientbot.keyboards import reply_kb
-from modul.clientbot.shortcuts import get_all_users
+from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bot_by_token, get_users, users_count
 from modul.loader import client_bot_router
 from modul.models import UserTG, AdminInfo
 from typing import Union, List
@@ -605,31 +606,42 @@ async def show_refs_handler(call: CallbackQuery):
         await call.message.answer(f"🚫 Произошла ошибка при создании файла: {e}")
 
 
-
-
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
 async def admin_get_stats(call: CallbackQuery):
-    bot = call.bot
-
     try:
-        bot_db = await shortcuts.get_bot(bot)
+        bot_token = call.bot.token
+        print(f"Bot token: {bot_token}")
 
-        users_count = len(await get_all_users(bot_db))
+        # Bot modelini olish
+        bot_db = await get_bot_by_token(bot_token)
+        print(f"Bot DB object: {bot_db}")
 
-        await call.message.edit_text(
-            f'<b>Количество пользователей в боте:</b> {users_count}',
-            reply_markup=admin_kb,
-            parse_mode='HTML'
-        )
+        if bot_db:
+            total = await users_count(bot_db)
+            print(f"Users count: {total}")
+
+            new_text = f'<b>Количество пользователей в боте:</b> {total}'
+
+            try:
+                await call.message.edit_text(
+                    text=new_text,
+                    reply_markup=admin_kb,
+                    parse_mode='HTML'
+                )
+            except TelegramBadRequest as e:
+                if "message is not modified" in str(e):
+                    await call.answer("Статистика актуальна")
+                else:
+                    raise
+
+        else:
+            logger.error(f"Bot not found in database for token: {bot_token}")
+            await call.answer("Бот не найден в базе данных")
 
     except Exception as e:
         logger.error(f"Ошибка получения статистики: {e}")
-        await call.message.edit_text(
-            "🚫 Произошла ошибка при получении статистики.",
-            reply_markup=admin_kb,
-            parse_mode='HTML'
-        )
-
+        logger.error(f"Full error traceback: {traceback.format_exc()}")
+        await call.answer("Ошибка при получении статистики")
 
 
 
@@ -1664,7 +1676,7 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot):
                         await shortcuts.add_to_analitic_data(me.username, url)
                         return
                     except Exception:
-                        # Если не удалось отправить по URL, пробуем скачать
+
                         await download_and_send_video(message, url, ydl_opts, me, bot, "TikTok")
                 else:
                     await message.answer("❌ Не удалось получить ссылку на видео")

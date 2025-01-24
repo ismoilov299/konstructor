@@ -198,16 +198,12 @@ async def increase_referral(user: models.ClientBotUser):
 #     await user_or_uid.save()
 
 
-async def users_count(bot: Bot):
-    # bot = await get_bot(bot)
-    return await models.ClientBotUser.objects.filter(bot=bot).count()
+@sync_to_async
+def users_count(bot_db) -> int:
+    return models.ClientBotUser.objects.filter(bot=bot_db).count()
 
 logger = logging.getLogger(__name__)
-# async def earned():
-#     bot = await get_bot(Bot.get_current())
-#     orders = await models.Order.objects.filter(user__bot=bot, status=strings.COMPLETED)
-#     total_earned = sum(order.bot_admin_profit for order in orders)
-#     return f"{total_earned:.2f}"
+
 from concurrent.futures import ThreadPoolExecutor
 
 executor = ThreadPoolExecutor(max_workers=5)
