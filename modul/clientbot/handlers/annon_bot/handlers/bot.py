@@ -14,7 +14,7 @@ from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_use
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
 from modul.loader import client_bot_router
-
+from modul.clientbot.shortcuts import get_bot_by_token
 logger = logging.getLogger(__name__)
 async def check_channels(message):
     all_channels = await get_channels_for_check()
@@ -47,15 +47,23 @@ async def payment(message, amount):
 
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
-async def start(message: Message, state: FSMContext, command: CommandObject = None):
+async def start(message: Message, state: FSMContext,bot: Bot):
     try:
         args = message.text.split(' ')
         user_id = args[1] if len(args) > 1 else None
 
-        logger.info(f"Start command received with args: {user_id}")  # debug uchun
 
+        logger.info(f"Start command received with args: {user_id}")  # debug uchun
+        #from modul.clientbot.shortcuts import get_bot_by_token
+
+        bot_db = await get_bot_by_token(bot.token)
+        if not bot_db:
+            logger.error(f"Bot not found in database for token: {bot.token}")
+            return
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
+
+
 
         if not channels_checker:
             if not checker:
@@ -332,6 +340,12 @@ def anon_bot_handlers():
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
         check = None
+
+        bot_db = await get_bot_by_token(bot.token)
+        if not bot_db:
+            logger.error(f"Bot not found in database for token: {bot.token}")
+            return
+
         if message.reply_to_message:
             check = await check_reply(message.reply_to_message.message_id)
         if not channels_checker:
