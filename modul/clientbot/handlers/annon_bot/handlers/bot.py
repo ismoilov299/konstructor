@@ -1,10 +1,16 @@
 import logging
 import re
-from aiogram import F, Bot
+from contextlib import suppress
+
+from aiogram import F, Bot, types,html
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.filters import CommandStart, Filter, CommandObject
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, BotCommand, CallbackQuery, LabeledPrice
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from asgiref.sync import sync_to_async
+from django.db import transaction
 
 from modul.clientbot import shortcuts
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in, payment_keyboard, main_menu_bt, cancel_in, \
@@ -13,9 +19,17 @@ from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
+from modul.clientbot.handlers.kino_bot.shortcuts import get_all_channels_sponsors
+from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt2
+from modul.clientbot.handlers.refs.shortcuts import get_actual_price, get_actual_min_amount
 from modul.loader import client_bot_router
 from modul.clientbot.shortcuts import get_bot_by_token
+from modul.models import UserTG, AdminInfo
+
 logger = logging.getLogger(__name__)
+
+
+
 async def check_channels(message):
     all_channels = await get_channels_for_check()
     if all_channels != []:
@@ -45,18 +59,115 @@ async def payment(message, amount):
         reply_markup=await payment_keyboard(amount),
     )
 
+async def check_subs(user_id: int, bot: Bot) -> bool:
+    bot_db = await shortcuts.get_bot(bot)
+    admin_id = bot_db.owner.uid
+
+    if user_id == admin_id:
+        return True
+
+    channels = await get_all_channels_sponsors()
+    print(channels, " ch")
+
+    if not channels:
+        return True
+
+    check_results = []
+    for channel in channels:
+        try:
+            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+            if member.status != 'left':
+                check_results.append(True)
+            else:
+                check_results.append(False)
+        except Exception as e:
+            print(f"Error checking subscription for channel {channel}: {e}")
+            check_results.append(False)
+
+    print(check_results)
+    return all(check_results)
+
+
+
+async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
+    channels = await get_all_channels_sponsors()
+    kb = InlineKeyboardBuilder()
+
+    for channel_id in channels:
+        try:
+            chat_info = await bot.get_chat(channel_id)
+            invite_link = chat_info.invite_link
+            if not invite_link:
+                invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
+
+            kb.button(text=f'{chat_info.title}', url=invite_link)
+        except Exception as e:
+            print(f"Error with channel {channel_id}: {e}")
+            continue
+
+    kb.button(
+        text='✅ Проверить подписку',
+        callback_data='check_subs'
+    )
+
+    kb.adjust(1)
+    return kb.as_markup()
+
+async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
+    channels = await get_all_channels_sponsors()
+    for channel in channels:
+        try:
+            member = await bot.get_chat_member(channel.chanel_id, user_id)
+            if member.status in ['left', 'kicked', 'banned']:
+                return False
+        except Exception as e:
+            print(f"Error checking subscription for channel {channel.chanel_id}: {e}")
+            return False
+
+    return True
+
+@client_bot_router.message(F.text == "💸Заработать")
+async def anon(message: Message, bot: Bot, state: FSMContext):
+   bot_db = await shortcuts.get_bot(bot)
+
+   sub_status = await check_subs(message.from_user.id, bot)
+   if not sub_status:
+       kb = await get_subs_kb(bot)
+       await message.answer(
+           '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
+           reply_markup=kb,
+           parse_mode="HTML"
+       )
+       return
+
+   me = await bot.get_me()
+   anon_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+   ref_link = f"https://t.me/{me.username}?start=r{message.from_user.id}"
+
+   price = await get_actual_price()
+   min_withdraw = await get_actual_min_amount()
+
+   await message.bot.send_message(
+       message.from_user.id,
+       f"👥 Приглашай друзей и зарабатывай! За \nкаждого друга ты получишь {price}₽.\n\n"
+       f"🔗 Ваша ссылка для приглашений:\n{ref_link}\n\n"
+       f"🔒 Ваша ссылка для анонимных сообщений:\n{anon_link}\n\n"
+       f"💰 Минимальная сумма для вывода: {min_withdraw}₽",
+       reply_markup=await main_menu_bt2()
+   )
+
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start(message: Message, state: FSMContext, bot: Bot):
     try:
+        logger.info(f"Start command received from user {message.from_user.id}")
         args = message.text.split(' ')
         user_id = args[1] if len(args) > 1 else None
-
-        logger.info(f"Start command received with args: {user_id}")
 
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
 
+        # Yangi foydalanuvchini qo'shish
         if not channels_checker and not checker:
             await add_user(message.from_user, str(message.from_user.id))
         elif channels_checker:
@@ -64,31 +175,91 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                 await add_user(message.from_user, str(message.from_user.id))
 
             if user_id:
-                logger.info(f"Looking up user with ID: {user_id}")
-                link_user = await get_user_by_id(user_id)
+                # Referal kelgan bo'lsa
+                if user_id.startswith('r') and user_id[1:].isdigit():
+                    inviter_id = int(user_id[1:])
+                    inviter = await get_user_by_id(inviter_id)
 
-                if link_user:
-                    await add_link_statistic(link_user)
-                    greeting = await get_greeting(link_user)
+                    if inviter:
+                        with suppress(TelegramForbiddenError):
+                            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                            await bot.send_message(
+                                chat_id=inviter_id,
+                                text=f"У вас новый {user_link}!"
+                            )
 
+                        try:
+                            @sync_to_async
+                            @transaction.atomic
+                            def update_referral():
+                                try:
+                                    user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
+                                    admin_info = AdminInfo.objects.first()
+
+                                    if not admin_info:
+                                        raise ValueError("AdminInfo is not configured in the database.")
+
+                                    user_tg.refs += 1
+                                    user_tg.balance += float(admin_info.price or 10.0)
+                                    user_tg.save()
+                                    logger.info(f"Referral updated successfully for user {inviter_id}")
+                                    return True
+                                except UserTG.DoesNotExist:
+                                    logger.error(f"Inviter with ID {inviter_id} does not exist.")
+                                    return False
+                                except Exception as ex:
+                                    logger.error(f"Unexpected error during referral update: {ex}")
+                                    raise
+
+                            referral_updated = await update_referral()
+                            if referral_updated:
+                                logger.info(f"Referral updated successfully for {inviter_id}")
+                            else:
+                                logger.warning(f"Failed to update referral for {inviter_id}")
+
+                        except Exception as e:
+                            logger.error(f"Error updating referral stats: {e}")
+
+                    # Yangi foydalanuvchi uchun xabar
+                    me = await bot.get_me()
+                    link = f"https://t.me/{me.username}?start={message.from_user.id}"
                     await message.bot.send_message(
                         chat_id=message.from_user.id,
-                        text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>...",
-                        reply_markup=await cancel_in(),
-                        parse_mode="html"
+                        text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+                             f"Твоя личная ссылка:\n👉{link}\n\n"
+                             f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+                             f"других соц сетях, чтобы начать получать сообщения 💬",
+                        parse_mode="html",
+                        reply_markup=await main_menu_bt()
                     )
 
-                    if greeting:
-                        await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
-
-                    await state.set_state(Links.send_st)
-                    await state.set_data({"link_user": link_user})
+                # Anonim xabar kelgan bo'lsa
                 else:
-                    logger.error(f"User not found with ID: {user_id}")
+                    logger.info(f"Looking up user with ID: {user_id}")
+                    link_user = await get_user_by_id(user_id)
+
+                    if link_user:
+                        await add_link_statistic(link_user)
+                        greeting = await get_greeting(link_user)
+
+                        await message.bot.send_message(
+                            chat_id=message.from_user.id,
+                            text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>...",
+                            reply_markup=await cancel_in(),
+                            parse_mode="html"
+                        )
+
+                        if greeting:
+                            await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
+
+                        await state.set_state(Links.send_st)
+                        await state.set_data({"link_user": link_user})
+                    else:
+                        logger.error(f"User not found with ID: {user_id}")
+
             else:
                 me = await bot.get_me()
                 link = f"https://t.me/{me.username}?start={message.from_user.id}"
-
                 await message.bot.send_message(
                     chat_id=message.from_user.id,
                     text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
@@ -101,6 +272,9 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
     except Exception as e:
         logger.error(f"Error in start handler: {e}", exc_info=True)
+        await message.answer(
+            "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
+        )
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",

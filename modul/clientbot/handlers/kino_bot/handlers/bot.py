@@ -77,23 +77,18 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
-    # Bot egasi (owner) ID sini olish
     bot_db = await shortcuts.get_bot(bot)
     admin_id = bot_db.owner.uid
 
-    # Agar foydalanuvchi owner bo'lsa, obuna talab qilinmaydi
     if user_id == admin_id:
         return True
 
-    # Kanallar ro'yxatini olish
     channels = await get_all_channels_sponsors()
     print(channels, " ch")
 
-    # Agar kanallar bo'sh bo'lsa, obuna talab qilinmaydi
     if not channels:
         return True
 
-    # Obuna tekshiruv
     check_results = []
     for channel in channels:
         try:
@@ -989,10 +984,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
     await message.answer(text, **kwargs)
-
-
-# print(client_bot_router.message.handlers)
-# client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства")
 
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
