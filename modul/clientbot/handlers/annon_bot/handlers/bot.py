@@ -126,7 +126,7 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
 
     return True
 
-@client_bot_router.message(F.text == "💸Заработать")
+@client_bot_router.message(F.text == "💸Заработать", AnonBotFilter())
 async def anon(message: Message, bot: Bot, state: FSMContext):
    bot_db = await shortcuts.get_bot(bot)
 
