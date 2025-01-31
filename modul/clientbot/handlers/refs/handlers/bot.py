@@ -60,10 +60,6 @@ async def banned(message):
     return True
 
 
-
-
-
-
 async def check_referral_status(user_id: int) -> dict:
     """
     Check user's referral status and rewards
@@ -130,6 +126,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
     """Handle /start command with referral"""
     try:
         # Check requirements
+        print('ishladi')
         channels_checker = await check_channels(message)
         is_registered = await check_user(message.from_user.id)
         is_banned = await check_ban(message.from_user.id)
