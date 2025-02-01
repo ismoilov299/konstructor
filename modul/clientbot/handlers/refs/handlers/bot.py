@@ -35,29 +35,33 @@ async def admin_id_func(user_id, bot):
 async def check_channels(message) -> bool:
     try:
         channels = await get_channels_for_check()
+        print("Checking channels:", channels)  # Debug uchun
 
         if not channels:
             return True
 
+        # Admin tekshiruvi
         bot_db = await shortcuts.get_bot(message.bot)
         admin_id = bot_db.owner.uid
         if message.from_user.id == admin_id:
             return True
 
-        check_results = []
-        for channel_id, _ in channels:
+        for channel_id, channel_url in channels:
             try:
-                member = await message.bot.get_chat_member(chat_id=channel_id, user_id=message.from_user.id)
-                if member.status != 'left':
-                    check_results.append(True)
-                else:
-                    check_results.append(False)
+                member = await message.bot.get_chat_member(
+                    chat_id=channel_id,
+                    user_id=message.from_user.id
+                )
+                print(f"Channel {channel_id} status: {member.status}")  # Debug uchun
+
+                if member.status == 'left':
                     await message.bot.send_message(
                         chat_id=message.from_user.id,
                         text="Для использования бота подпишитесь на наших спонсоров",
                         reply_markup=await channels_in(channels)
                     )
                     return False
+
             except TelegramBadRequest as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
                 continue
@@ -65,16 +69,12 @@ async def check_channels(message) -> bool:
                 logger.error(f"Error checking subscription: {e}")
                 continue
 
-        if not check_results:
-            return True
-
         await check_and_add(tg_id=message.from_user.id)
-        return all(check_results)
+        return True
 
     except Exception as e:
         logger.error(f"General error in check_channels: {e}")
         return False
-
 
 async def banned(message):
     check = await check_ban(message.from_user.id)
