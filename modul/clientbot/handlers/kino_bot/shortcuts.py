@@ -16,8 +16,6 @@ def remove_channel_sponsor(channel_id):
     except ChannelSponsor.DoesNotExist:
         print(f"Kanal {channel_id} topilmadi.")
 
-
 @sync_to_async
-def create_channel_sponsor(channel_id: int):
-    ChannelSponsor.objects.get_or_create(chanel_id=channel_id)
-    return
+def get_all_channels_sponsors() -> list:
+    return list(ChannelSponsor.objects.values_list('chanel_id', flat=True))
