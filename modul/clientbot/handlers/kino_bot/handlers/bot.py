@@ -102,6 +102,7 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
                     return False
             except TelegramBadRequest as e:
                 logger.error(f"Error checking channel {channel}: {e}")
+                await remove_invalid_channel(channel)
                 continue
 
         return True
@@ -111,6 +112,14 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         return False
 
 
+@sync_to_async
+def remove_invalid_channel(channel_id: int):
+    """Mavjud bo'lmagan kanalni bazadan o'chirish"""
+    try:
+        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+        logger.info(f"Removed invalid channel {channel_id} from database")
+    except Exception as e:
+        logger.error(f"Error removing channel {channel_id}: {e}")
 
 async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     channels = await get_all_channels_sponsors()
