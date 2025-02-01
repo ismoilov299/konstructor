@@ -3,7 +3,7 @@ import logging
 from asgiref.sync import sync_to_async
 from django.db.models import F, Sum
 from django.utils import timezone
-from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot
+from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot, ChannelSponsor
 
 logger = logging.getLogger(__name__)
 @sync_to_async
@@ -258,7 +258,15 @@ Other Service
 
 @sync_to_async
 def get_channels_for_check():
-    return list(Channels.objects.values_list('channel_id', 'channel_url'))
+    """ChannelSponsor modelidan o'qish"""
+    try:
+        channels = ChannelSponsor.objects.all()
+        # Debug uchun
+        print(f"Found channels in DB: {list(channels)}")
+        return [(c.chanel_id, '') for c in channels]
+    except Exception as e:
+        logger.error(f"Error getting channels: {e}")
+        return []
 
 
 def add_channel(channel_url, channel_id):
