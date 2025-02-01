@@ -7,7 +7,6 @@ def create_channel_sponsor(channel_id: int):
     ChannelSponsor.objects.get_or_create(chanel_id=channel_id)
     return
 
-
 @sync_to_async
 def remove_channel_sponsor(channel_id):
     try:
@@ -19,5 +18,6 @@ def remove_channel_sponsor(channel_id):
 
 
 @sync_to_async
-def get_all_channels_sponsors() -> list:
-    return list(ChannelSponsor.objects.values_list('chanel_id', flat=True))
+def create_channel_sponsor(channel_id: int):
+    ChannelSponsor.objects.get_or_create(chanel_id=channel_id)
+    return

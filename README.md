@@ -64,12 +64,6 @@ Create `.env` file:
 # Main bot token
 BOT_TOKEN=your_main_bot_token
 
-# Additional bot tokens
-ANNON_BOT_TOKEN=your_annon_bot_token
-GPT_BOT_TOKEN=your_gpt_bot_token
-KINO_BOT_TOKEN=your_kino_bot_token
-LEOMATCH_BOT_TOKEN=your_leomatch_bot_token
-
 # Other configurations
 ADMINS=["admin_id_1", "admin_id_2"]
 DATABASE_URL=postgresql://user:password@localhost/dbname

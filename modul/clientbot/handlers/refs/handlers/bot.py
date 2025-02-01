@@ -34,6 +34,7 @@ async def admin_id_func(user_id, bot):
 
 async def check_channels(message):
     all_channels = await get_channels_for_check()
+
     print(all_channels)
     if all_channels != []:
         for i in all_channels:

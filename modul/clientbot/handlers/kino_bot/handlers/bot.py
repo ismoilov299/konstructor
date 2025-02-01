@@ -77,32 +77,41 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
-    bot_db = await shortcuts.get_bot(bot)
-    admin_id = bot_db.owner.uid
+    try:
+        bot_db = await shortcuts.get_bot(bot)
+        admin_id = bot_db.owner.uid
 
-    if user_id == admin_id:
-        return True
+        if user_id == admin_id:
+            return True
 
-    channels = await get_all_channels_sponsors()
-    print(channels, " ch")
+        channels = await get_all_channels_sponsors()
+        logger.info(f"Checking channels: {channels}")
 
-    if not channels:
-        return True
+        if not channels:
+            return True
 
-    check_results = []
-    for channel in channels:
-        try:
-            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-            if member.status != 'left':
-                check_results.append(True)
-            else:
-                check_results.append(False)
-        except Exception as e:
-            print(f"Error checking subscription for channel {channel}: {e}")
-            check_results.append(False)
+        check_results = []
+        for channel in channels:
+            try:
+                member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+                is_member = member.status not in ['left', 'kicked', 'banned']
+                check_results.append(is_member)
+                logger.info(f"Channel {channel} check: {is_member}")
+            except TelegramBadRequest as e:
+                logger.error(f"Bad Request checking channel {channel}: {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Error checking channel {channel}: {e}")
+                continue
 
-    print(check_results)
-    return all(check_results)
+        if not check_results:
+            return True
+
+        return all(check_results)
+
+    except Exception as e:
+        logger.error(f"General error in check_subs: {e}")
+        return False
 
 
 
@@ -823,6 +832,11 @@ class KinoBotFilter(Filter):
         bot_db = await shortcuts.get_bot(bot)
         return shortcuts.have_one_module(bot_db, "kino")
 
+class DavinchiBotFilter(Filter):
+    async def __call__(self, message: types.Message, bot: Bot) -> bool:
+        bot_db = await shortcuts.get_bot(bot)
+        return shortcuts.have_one_module(bot_db, "leo")
+
 
 @client_bot_router.message(F.text == "💸Заработать")
 async def kinogain(message: Message, bot: Bot, state: FSMContext):
@@ -1145,11 +1159,6 @@ async def simple_text_film_handler(message: Message, bot: Bot):
                          parse_mode="HTML")
 
 
-
-
-
-
-
 @client_bot_router.inline_query(F.query)
 async def inline_film_requests(query: InlineQuery):
     results = await film_search(query.query)
@@ -1180,7 +1189,7 @@ async def inline_film_requests(query: InlineQuery):
     await query.answer(inline_answer, cache_time=240, is_personal=True)
 
 
-client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства")
+client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства",DavinchiBotFilter())
 client_bot_router.message.register(bot_start_cancel, F.text == ("Я не хочу никого искать"), LeomatchRegistration.BEGIN)
 client_bot_router.message.register(bot_start_lets_leo, F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 

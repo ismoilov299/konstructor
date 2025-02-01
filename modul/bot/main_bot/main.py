@@ -10,13 +10,9 @@ from modul.loader import main_bot_router, client_bot_router
 
 import requests
 
-# Замените <bot_token> на ваш токен
-#bot_token = '996043954:AAGbwv9SCRyklY4-hMsy3yMkZsiDJbDJ6YU'
+
 webhook_url = 'https://87ab-34-31-35-124.ngrok-free.app/login/'
 
-
-# set_webhook_url = f'https://api.telegram.org/bot{bot_token}/setWebhook'
-# response = requests.post(set_webhook_url, data={'url': webhook_url})
 
 def init_bot_handlers():
     @main_bot_router.message(CommandStart())
