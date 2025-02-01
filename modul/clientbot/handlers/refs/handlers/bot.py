@@ -34,41 +34,46 @@ async def admin_id_func(user_id, bot):
 
 async def check_channels(message) -> bool:
     try:
-        all_channels = await get_channels_for_check()
+        channels = await get_channels_for_check()
 
-        if not all_channels:
+        if not channels:
             return True
 
-        not_subscribed = []
-        for channel_id, channel_url in all_channels:
+        bot_db = await shortcuts.get_bot(message.bot)
+        admin_id = bot_db.owner.uid
+        if message.from_user.id == admin_id:
+            return True
+
+        check_results = []
+        for channel_id, _ in channels:
             try:
-                member = await message.bot.get_chat_member(
-                    chat_id=channel_id,
-                    user_id=message.from_user.id
-                )
-                if member.status == "left":
-                    not_subscribed.append((channel_id, channel_url))
+                member = await message.bot.get_chat_member(chat_id=channel_id, user_id=message.from_user.id)
+                if member.status != 'left':
+                    check_results.append(True)
+                else:
+                    check_results.append(False)
+                    await message.bot.send_message(
+                        chat_id=message.from_user.id,
+                        text="Для использования бота подпишитесь на наших спонсоров",
+                        reply_markup=await channels_in(channels)
+                    )
+                    return False
             except TelegramBadRequest as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
                 continue
             except Exception as e:
-                logger.error(f"Unexpected error checking channel {channel_id}: {e}")
+                logger.error(f"Error checking subscription: {e}")
                 continue
 
-        if not_subscribed:
-            await message.bot.send_message(
-                chat_id=message.from_user.id,
-                text="Для использования бота подпишитесь на наших спонсоров",
-                reply_markup=await channels_in(not_subscribed)
-            )
-            return False
+        if not check_results:
+            return True
 
         await check_and_add(tg_id=message.from_user.id)
-        return True
+        return all(check_results)
 
     except Exception as e:
-        logger.error(f"Error in check_channels: {e}")
-        return True  # Xatolik bo'lsa ham davom etamiz
+        logger.error(f"General error in check_channels: {e}")
+        return False
 
 
 async def banned(message):
