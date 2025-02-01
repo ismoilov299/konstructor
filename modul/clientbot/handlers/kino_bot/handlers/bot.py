@@ -985,20 +985,19 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
     elif shortcuts.have_one_module(bot_db, "refs"):
-        # Get referral ID from message text after /start command
         referral = message.text[7:] if message.text and len(message.text) > 7 else None
         logger.info(f"Processing start command with referral: {referral}")
 
         if referral:
-            # Pass referral ID directly
             await start_ref(message, bot=bot, referral=referral)
         else:
             await start_ref(message, bot=bot)
+        return
 
     elif shortcuts.have_one_module(bot_db, "kino"):
         print("kino")
         await start_kino_bot(message, state, bot)
-        kwargs['parse_mode'] = "HTML"
+        return
 
     elif shortcuts.have_one_module(bot_db, "chatgpt"):
         builder = InlineKeyboardBuilder()
@@ -1014,7 +1013,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup()
 
     else:
-
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
     await message.answer(text, **kwargs)
