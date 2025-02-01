@@ -84,6 +84,7 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
             return True
 
         channels = await get_all_channels_sponsors()
+        print(channels)
         if not channels:
             return True
 
