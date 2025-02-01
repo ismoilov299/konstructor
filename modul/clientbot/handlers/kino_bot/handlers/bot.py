@@ -197,13 +197,21 @@ async def get_remove_channel_sponsor_kb(channels: list, bot: Bot) -> types.Inlin
     kb = InlineKeyboardBuilder()
 
     for channel in channels:
-        channel_data = await bot.get_chat(channel)
-        kb.button(
-            text=channel_data.full_name,
-            callback_data=f'remove_channel|{channel}'
-        )
+        try:
+            channel_data = await bot.get_chat(channel)
+            kb.button(
+                text=channel_data.title,
+                callback_data=f'remove_channel|{channel}'
+            )
+        except TelegramBadRequest as e:
+            logger.error(f"Channel not found or bot was removed: {channel}, Error: {e}")
+            continue
+        except Exception as e:
+            logger.error(f"Error accessing channel {channel}: {e}")
+            continue
 
     kb.button(text='Отменить', callback_data='cancel')
+    kb.adjust(1)
 
     return kb.as_markup()
 
