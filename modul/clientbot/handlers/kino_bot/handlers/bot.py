@@ -84,11 +84,11 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
             return True
 
         channels = await get_all_channels_sponsors()
-        print(channels)
         if not channels:
             return True
 
         for channel in channels:
+            print(channel)
             try:
                 member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
                 if member.status == 'left':
