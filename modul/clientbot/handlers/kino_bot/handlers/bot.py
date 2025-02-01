@@ -1019,16 +1019,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup()
 
     else:
-        if not sub_status:
-            kb = await get_subs_kb(bot)
-            await message.answer(
-                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
-                reply_markup=kb,
-                parse_mode="HTML"
-            )
-            return
-        else:
-            kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
+        kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
     await message.answer(text, **kwargs)
 
