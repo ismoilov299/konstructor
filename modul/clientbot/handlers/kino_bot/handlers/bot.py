@@ -1003,6 +1003,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup()
 
     else:
+        print('ishladi 42')
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
     await message.answer(text, **kwargs)

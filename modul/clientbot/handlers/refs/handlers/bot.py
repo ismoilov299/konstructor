@@ -40,7 +40,6 @@ async def check_channels(message) -> bool:
         if not channels:
             return True
 
-        # Admin tekshiruvi
         bot_db = await shortcuts.get_bot(message.bot)
         admin_id = bot_db.owner.uid
         if message.from_user.id == admin_id:
