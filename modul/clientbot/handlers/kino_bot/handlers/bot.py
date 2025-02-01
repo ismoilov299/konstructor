@@ -80,34 +80,30 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
     try:
         bot_db = await shortcuts.get_bot(bot)
         admin_id = bot_db.owner.uid
-
         if user_id == admin_id:
             return True
 
         channels = await get_all_channels_sponsors()
-        logger.info(f"Checking channels: {channels}")
-
         if not channels:
             return True
 
-        check_results = []
         for channel in channels:
             try:
                 member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-                is_member = member.status not in ['left', 'kicked', 'banned']
-                check_results.append(is_member)
-                logger.info(f"Channel {channel} check: {is_member}")
+                if member.status == 'left':
+                    kb = await get_subs_kb(bot)
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text="<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>",
+                        reply_markup=kb,
+                        parse_mode="HTML"
+                    )
+                    return False
             except TelegramBadRequest as e:
-                logger.error(f"Bad Request checking channel {channel}: {e}")
-                continue
-            except Exception as e:
                 logger.error(f"Error checking channel {channel}: {e}")
                 continue
 
-        if not check_results:
-            return True
-
-        return all(check_results)
+        return True
 
     except Exception as e:
         logger.error(f"General error in check_subs: {e}")
