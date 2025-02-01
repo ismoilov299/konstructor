@@ -148,6 +148,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
         # Check requirements
         print('ishladi')
         channels_checker = await check_channels(message)
+        print(check_channels())
         is_registered = await check_user(message.from_user.id)
         is_banned = await check_ban(message.from_user.id)
 
