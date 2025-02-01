@@ -52,13 +52,13 @@ async def check_channels(message) -> bool:
                     chat_id=channel_id,
                     user_id=message.from_user.id
                 )
-                print(f"Channel {channel_id} status: {member.status}")  # Debug uchun
+                print(f"Channel {channel_id} status: {member.status}")
 
                 if member.status == 'left':
                     await message.bot.send_message(
                         chat_id=message.from_user.id,
                         text="Для использования бота подпишитесь на наших спонсоров",
-                        reply_markup=await channels_in(channels)
+                        reply_markup=await channels_in(channels, message.bot)
                     )
                     return False
 

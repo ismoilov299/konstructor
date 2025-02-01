@@ -1,7 +1,9 @@
+import logging
+
 from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton,
                            InlineKeyboardMarkup, InlineKeyboardButton)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-
+logger = logging.getLogger(__name__)
 
 async def main_menu_bt():
     buttons = [
@@ -30,26 +32,20 @@ async def payment_in():
     return kb
 
 
-async def channels_in(all_channels):
+async def channels_in(all_channels, bot):
     keyboard_builder = InlineKeyboardBuilder()
-    for i in all_channels:
+    for channel_id, _ in all_channels:
         try:
-            keyboard_builder.button(text="💎Спонсор", url=i[1])
-        except:
-            pass
+            # Har bir kanal uchun invite link olish
+            chat_info = await bot.get_chat(channel_id)
+            invite_link = chat_info.invite_link or f"https://t.me/{chat_info.username}"
+            keyboard_builder.button(text="💎Спонсор", url=invite_link)
+        except Exception as e:
+            logger.error(f"Error getting channel info {channel_id}: {e}")
+            continue
+
     keyboard_builder.button(text="Проверить подписки", callback_data="check_chan")
-    if len(all_channels) < 6:
-        keyboard_builder.adjust(1)
-    elif len(all_channels) > 6 <= 12:
-        keyboard_builder.adjust(2)
-    elif len(all_channels) > 12 <= 24:
-        keyboard_builder.adjust(3)
-    elif len(all_channels) > 24 <= 48:
-        keyboard_builder.adjust(4)
-    elif len(all_channels) > 48 <= 96:
-        keyboard_builder.adjust(5)
-    else:
-        keyboard_builder.adjust(6)
+    keyboard_builder.adjust(1)
     return keyboard_builder.as_markup()
 
 

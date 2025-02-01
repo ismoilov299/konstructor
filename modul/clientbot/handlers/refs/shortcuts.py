@@ -261,7 +261,6 @@ def get_channels_for_check():
     """ChannelSponsor modelidan o'qish"""
     try:
         channels = ChannelSponsor.objects.all()
-        # Debug uchun
         print(f"Found channels in DB: {list(channels)}")
         return [(c.chanel_id, '') for c in channels]
     except Exception as e:
