@@ -963,6 +963,17 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
 
+    sub_status = await check_subs(message.from_user.id, bot)
+
+    if not sub_status:
+        kb = await get_subs_kb(bot)
+        await message.answer(
+            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+        return
+
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
@@ -1003,17 +1014,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup()
 
     else:
-
-        sub_status = await check_subs(message.from_user.id, bot)
-
-        if not sub_status:
-            kb = await get_subs_kb(bot)
-            await message.answer(
-                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
-                reply_markup=kb,
-                parse_mode="HTML"
-            )
-            return
 
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
