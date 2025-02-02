@@ -304,6 +304,14 @@ async def profile(message: Message):
 async def info(message: Message):
     channels_checker = await check_channels(message)
     checker_banned = await banned(message)
+
+    user_info = await get_user_info_db(message.from_user.id)
+    if not user_info:
+        await message.answer(
+            "Ошибка получения данных профиля",
+            reply_markup=await main_menu_bt()
+        )
+        return
     if channels_checker and checker_banned:
         all_info = await count_info()
 
@@ -312,7 +320,7 @@ async def info(message: Message):
 
         await message.bot.send_message(
             message.from_user.id,
-            f"👥 Всего пользователей: {all_info[0]}\n"
+            f"👥 Всего пользователей: {user_info[3]}\n"
             f"📤 Выплачено всего: {all_info[1]}",
             reply_markup=await admin_in(admin_user)
         )

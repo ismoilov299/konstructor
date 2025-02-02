@@ -971,16 +971,16 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
 
-    sub_status = await check_subs(message.from_user.id, bot)
-
-    if not sub_status:
-        kb = await get_subs_kb(bot)
-        await message.answer(
-            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-        return
+    # sub_status = await check_subs(message.from_user.id, bot)
+    #
+    # if not sub_status:
+    #     kb = await get_subs_kb(bot)
+    #     await message.answer(
+    #         '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
+    #         reply_markup=kb,
+    #         parse_mode="HTML"
+    #     )
+    #     return
 
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
