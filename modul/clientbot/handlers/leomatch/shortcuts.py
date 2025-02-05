@@ -205,10 +205,10 @@ async def show_media(bot: Bot, to_account: int, from_account: int, text_before: 
         await bot.send_message(to_account, text=text)
 
 
-async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
+async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, url: str,sex,
                        type: str, keyboard=None, comment: str = None):
     text = f"\n\nВам сообщение: {comment}" if comment else ""
-    caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
+    caption = f"{full_name}, {age}, {city}\n{about_me}{text}, {sex}"
     kwargs = {}
     if keyboard:
         kwargs['reply_markup'] = keyboard
