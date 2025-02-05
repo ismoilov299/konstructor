@@ -151,7 +151,6 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
        message.from_user.id,
        f"👥 Приглашай друзей и зарабатывай! За \nкаждого друга ты получишь {price}₽.\n\n"
        f"🔗 Ваша ссылка для приглашений:\n{ref_link}\n\n"
-       f"🔒 Ваша ссылка для анонимных сообщений:\n{anon_link}\n\n"
        f"💰 Минимальная сумма для вывода: {min_withdraw}₽",
        reply_markup=await main_menu_bt2()
    )
@@ -167,7 +166,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         channels_checker = await check_channels(message)
         checker = await check_user(message.from_user.id)
 
-        # Yangi foydalanuvchini qo'shish
         if not channels_checker and not checker:
             await add_user(message.from_user, str(message.from_user.id))
         elif channels_checker:
@@ -175,7 +173,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                 await add_user(message.from_user, str(message.from_user.id))
 
             if user_id:
-                # Referal kelgan bo'lsa
                 if user_id.startswith('r') and user_id[1:].isdigit():
                     inviter_id = int(user_id[1:])
                     inviter = await get_user_by_id(inviter_id)

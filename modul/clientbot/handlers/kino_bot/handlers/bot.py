@@ -1293,7 +1293,12 @@ def download_video(url, format_id):
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info), info
 
+class DownloaderBotFilter(Filter):
+    async def __call__(self, message: types.Message, bot: Bot) -> bool:
+        bot_db = await shortcuts.get_bot(bot)
+        return shortcuts.have_one_module(bot_db, "download")
 
+@client_bot_router.message(DownloaderBotFilter())
 @client_bot_router.message(Download.download)
 async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
 
