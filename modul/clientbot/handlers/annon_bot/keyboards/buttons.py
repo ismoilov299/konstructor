@@ -25,7 +25,7 @@ async def channels_in(all_channels):
 async def main_menu_bt():
     buttons = [
         [KeyboardButton(text="🚀Начать"), KeyboardButton(text="👋Изменить приветствие")],
-        [KeyboardButton(text="📛Изменить ссылку"), KeyboardButton(text="⭐️Ваша статистика")],
+        [ KeyboardButton(text="⭐️Ваша статистика")],
         # [KeyboardButton(text="☕️Поддержать разработчика")],
 	[KeyboardButton(text="💸Заработать")]
         ]
