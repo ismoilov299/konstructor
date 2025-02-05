@@ -15,6 +15,9 @@ class LikeActionEnum(StrEnum):
     DISLIKE = "DISLIKE"
     REPORT = "REPORT"
 
+class AlertActionEnum(StrEnum):
+    YES = "yes"
+    NO = "no"
 
 class LeomatchProfileAction(CallbackData, prefix="leo-pa"):
     action: ProfileActionEnum

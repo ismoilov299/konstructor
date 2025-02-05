@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from modul.clientbot.handlers.leomatch.data.callback_datas import LeomatchLikeAction, LeomatchProfileAction, \
-    LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum
+    LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum, AlertActionEnum
 from aiogram.utils.i18n import gettext as _
 
 
@@ -37,9 +37,22 @@ def profile_like_action(user_id: int):
 def profile_alert(sender_id: int, account_id: int):
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text=_("Да"), callback_data=LeomatchProfileAlert(action="yes", sender_id=sender_id,
-                                                                              account_id=account_id).pack()),
-        InlineKeyboardButton(text=_("Нет"), callback_data=LeomatchProfileAlert(action="no").pack()),
+        InlineKeyboardButton(
+            text="Да",
+            callback_data=LeomatchProfileAlert(
+                action=AlertActionEnum.YES,
+                sender_id=sender_id,
+                account_id=account_id
+            ).pack()
+        ),
+        InlineKeyboardButton(
+            text="Нет",
+            callback_data=LeomatchProfileAlert(
+                action=AlertActionEnum.NO,
+                sender_id=None,
+                account_id=None
+            ).pack()
+        ),
         width=2
     )
     return builder.as_markup()

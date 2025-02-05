@@ -10,7 +10,7 @@ from modul.clientbot.handlers.leomatch.keyboards.inline_kb import profile_alert,
     profile_view_action, write_profile
 from modul.clientbot.handlers.leomatch.keyboards.reply_kb import cancel
 from modul.clientbot.handlers.leomatch.data.callback_datas import LeomatchLikeAction, LeomatchProfileAction, \
-    LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum
+    LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum, AlertActionEnum
 from modul.clientbot.handlers.leomatch.handlers.shorts import manage
 from modul.models import LeoMatchModel, User
 from modul.config import settings_conf
@@ -240,35 +240,42 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 
 
 @client_bot_router.callback_query(LeomatchProfileAlert.filter(), LeomatchProfiles.LOOCK)
-async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAlert):
-    if callback_data.action == "yes":
-        try:
+async def process_alert(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAlert):
+    try:
+        if callback_data.action == AlertActionEnum.YES:
+            # Kerakli foydalanuvchilarni olamiz
             sender = await get_leo(callback_data.sender_id)
             account = await get_leo(callback_data.account_id)
 
-            sender_user = sender.user if sender else None
-            account_user = account.user if account else None
-
-            if sender_user and account_user:
+            if sender and account and sender.user and account.user:
+                # Adminlarga foto yuborish
                 await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
 
+                # Report haqida xabar
                 report_text = (
-                    f"Пользователь: @{sender_user.username} ({sender_user.uid}) пожаловался на\n"
-                    f"Пользователя: @{account_user.username} ({account_user.uid})\n"
+                    f"Пользователь: @{sender.user.username} ({sender.user.uid}) пожаловался на\n"
+                    f"Пользователя: @{account.user.username} ({account.user.uid})\n"
                 )
 
+                # Admin guruhiga yuborish
                 await main_bot.send_message(
                     chat_id=settings_conf.ADMIN,
                     text=report_text,
                     reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
                 )
+
+                # Foydalanuvchiga tasdiqlash
                 await query.message.edit_text("Жалоба отправлена")
             else:
                 await query.message.edit_text("Ошибка: пользователь не найден")
 
-        except Exception as e:
-            print(f"Error processing report: {e}")
-            await query.message.edit_text("Произошла ошибка при обработке жалобы")
+        elif callback_data.action == AlertActionEnum.NO:
+            await query.message.edit_text("Жалоба отменена")
 
-    await state.update_data(me=query.from_user.id)
-    await next_l(query.message, state)
+    except Exception as e:
+        print(f"Error processing report: {e}")
+        await query.message.edit_text("Произошла ошибка при обработке жалобы")
+    finally:
+        # Har qanday holatda keyingi profilga o'tamiz
+        await state.update_data(me=query.from_user.id)
+        await next_l(query.message, state)
