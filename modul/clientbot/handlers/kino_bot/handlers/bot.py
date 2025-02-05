@@ -1622,14 +1622,14 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                             video=FSInputFile(media_path),
                                             caption=f"📹 Instagram video (Низкое качество)\nСкачано через @{me.username}"
                                         )
-                                        await state.set_state(Download.download)
+                                        # await state.set_state(Download.download)
                                     else:
                                         await bot.send_photo(
                                             chat_id=message.chat.id,
                                             photo=FSInputFile(media_path),
                                             caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                                         )
-                                        await state.set_state(Download.download)
+                                        # await state.set_state(Download.download)
                                     await shortcuts.add_to_analitic_data(me.username, url)
                                     await progress_msg.delete()
                                 finally:
