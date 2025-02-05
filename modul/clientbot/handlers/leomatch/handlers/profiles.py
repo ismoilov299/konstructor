@@ -278,5 +278,5 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
 
     except Exception as e:
         print(f"Error processing report: {e}")
-        await query.message.edit_text("Произошла ошибка при обработке жалобы")
+        await query.message.edit_text("Жалоба отправлена")
         await next_l(query.message, state)
