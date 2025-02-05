@@ -205,10 +205,10 @@ async def show_media(bot: Bot, to_account: int, from_account: int, text_before: 
         await bot.send_message(to_account, text=text)
 
 
-async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, url: str,sex,
+async def show_profile(message: types.Message, uid: int, full_name: str,sex:str, age: int, city: str, about_me: str, url: str,
                        type: str, keyboard=None, comment: str = None):
     text = f"\n\nВам сообщение: {comment}" if comment else ""
-    caption = f"{full_name}, {age}, {city}\n{about_me}{text}, {sex}"
+    caption = f"{full_name},{sex} {age}, {city}\n{about_me}{text}, {sex}"
     kwargs = {}
     if keyboard:
         kwargs['reply_markup'] = keyboard
@@ -270,7 +270,7 @@ async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int,
 async def show_profile_db(message: types.Message, uid: int, keyboard=ReplyKeyboardMarkup, comment: str = None):
     leo = await get_leo(uid)
     print(leo, "leo info")
-    await show_profile(message, uid, f'{leo.full_name}', leo.age, leo.city, leo.about_me, leo.photo, leo.media_type,leo.sex,
+    await show_profile(message, uid,  '{leo.full_name}', leo.age, leo.city,  leo.about_me, leo.photo, leo.media_type,leo.sex,
                        keyboard=keyboard, comment=comment)
 
 
