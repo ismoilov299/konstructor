@@ -28,7 +28,6 @@ async def start(message: types.Message, state: FSMContext):
 async def next_l(message: types.Message, state: FSMContext):
     data = await state.get_data()
     leos = data.get("leos")
-    print(leos)
     if len(leos) > 0:
         current = leos.pop(0)
         await state.update_data(leos=leos)
