@@ -239,43 +239,34 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
     await next_like(query.message, state)
 
 
+# Report handler
 @client_bot_router.callback_query(LeomatchProfileAlert.filter(), LeomatchProfiles.LOOCK)
-async def process_alert(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAlert):
+async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert):
     try:
-        if callback_data.action == AlertActionEnum.YES:
-            # Kerakli foydalanuvchilarni olamiz
+        if callback_data.action == "yes":
             sender = await get_leo(callback_data.sender_id)
             account = await get_leo(callback_data.account_id)
 
             if sender and account and sender.user and account.user:
-                # Adminlarga foto yuborish
                 await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
 
-                # Report haqida xabar
                 report_text = (
                     f"Пользователь: @{sender.user.username} ({sender.user.uid}) пожаловался на\n"
                     f"Пользователя: @{account.user.username} ({account.user.uid})\n"
                 )
 
-                # Admin guruhiga yuborish
                 await main_bot.send_message(
                     chat_id=settings_conf.ADMIN,
                     text=report_text,
                     reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
                 )
-
-                # Foydalanuvchiga tasdiqlash
                 await query.message.edit_text("Жалоба отправлена")
             else:
                 await query.message.edit_text("Ошибка: пользователь не найден")
 
-        elif callback_data.action == AlertActionEnum.NO:
+        else:  # "no" holatida
             await query.message.edit_text("Жалоба отменена")
 
     except Exception as e:
         print(f"Error processing report: {e}")
         await query.message.edit_text("Произошла ошибка при обработке жалобы")
-    finally:
-        # Har qanday holatda keyingi profilga o'tamiz
-        await state.update_data(me=query.from_user.id)
-        await next_l(query.message, state)

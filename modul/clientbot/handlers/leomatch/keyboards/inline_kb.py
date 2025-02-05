@@ -40,7 +40,7 @@ def profile_alert(sender_id: int, account_id: int):
         InlineKeyboardButton(
             text="Да",
             callback_data=LeomatchProfileAlert(
-                action=AlertActionEnum.YES,
+                action="yes",
                 sender_id=sender_id,
                 account_id=account_id
             ).pack()
@@ -48,9 +48,7 @@ def profile_alert(sender_id: int, account_id: int):
         InlineKeyboardButton(
             text="Нет",
             callback_data=LeomatchProfileAlert(
-                action=AlertActionEnum.NO,
-                sender_id=None,
-                account_id=None
+                action="no"
             ).pack()
         ),
         width=2
