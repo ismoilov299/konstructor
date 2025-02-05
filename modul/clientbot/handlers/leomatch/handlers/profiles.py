@@ -1,3 +1,5 @@
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 
 from modul.clientbot.handlers.leomatch.data.state import LeomatchProfiles, LeomatchMain
@@ -127,10 +129,29 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
             })
             await state.set_state(LeomatchProfiles.INPUT_MESSAGE)
         elif callback_data.action == ProfileActionEnum.REPORT:
+            # I18n ishlatmasdan to'g'ridan-to'g'ri matn beramiz
+            kb = InlineKeyboardBuilder()
+            kb.row(
+                InlineKeyboardButton(
+                    text="Да",
+                    callback_data=LeomatchProfileAlert(
+                        action="yes",
+                        sender_id=query.from_user.id,
+                        account_id=callback_data.user_id
+                    ).pack()
+                ),
+                InlineKeyboardButton(
+                    text="Нет",
+                    callback_data=LeomatchProfileAlert(action="no").pack()
+                ),
+                width=2
+            )
+
             await query.message.answer(
                 "Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены",
-                reply_markup=profile_alert(query.from_user.id, callback_data.user_id)
+                reply_markup=kb.as_markup()
             )
+
         elif callback_data.action == ProfileActionEnum.SLEEP:
             pass
 
