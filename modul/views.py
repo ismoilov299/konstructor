@@ -45,46 +45,34 @@ def web_main(request):
         current_date = timezone.now().date()
         first_day_of_current_month = current_date.replace(day=1)
 
-        # Получаем UserTG текущего пользователя
-        user_tg = request.user
-        print(user_tg)
         user_data = UserTG.objects.filter(
-            id=user_tg.uid,
-            created_at__lt=first_day_of_current_month
+            id=request.user.uid
         ).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(
             count=Count('id')
-        ).order_by('month')
+        ).order_by('-month')[:12]
 
         user_data_count = UserTG.objects.filter(
-            id=user_tg.uid,
+            id=request.user.uid,
             interaction_count__gt=1
         ).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(
             count=Count('id')
-        ).order_by('month')
+        ).order_by('-month')[:12]
 
-        # Форматируем данные для JavaScript
         formatted_user_data = [
             {
-                'month': item['month'].strftime('%Y-%m-%d'),
-                'count': item['count']
+                'period': item['month'].strftime('%Y-%m'),
+                'Sales': item['count']
             }
             for item in user_data
-        ]
-        formatted_user_data_count = [
-            {
-                'month': item['month'].strftime('%Y-%m-%d'),
-                'count': item['count']
-            }
-            for item in user_data_count
         ]
 
         context = {
             'user_data': json.dumps(formatted_user_data),
-            'user_data_count': json.dumps(formatted_user_data_count),
+            'user_data_count': json.dumps(list(user_data_count)),
         }
 
         return render(request, 'admin-wrap-lite-master/html/index.html', context)
