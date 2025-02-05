@@ -280,11 +280,20 @@ async def bot_show_profile_db(to_uid: int, uid: int, keyboard=types.ReplyKeyboar
                            user.username, keyboard=keyboard)
 
 
-async def update_profile(uid: int, kwargs: dict):
-    leo = await get_leo(uid)
+def _update_profile_sync(leo, kwargs: dict):
     for key, value in kwargs.items():
         setattr(leo, key, value)
     leo.save()
+    return True
+
+async def update_profile(uid: int, kwargs: dict):
+    try:
+        leo = await get_leo(uid)
+        await sync_to_async(_update_profile_sync)(leo, kwargs)
+        return True
+    except Exception as e:
+        print(f"Error updating profile: {e}")
+        return False
 
 
 async def create_like(from_uid: int, to_uid: int, message: str = None):
