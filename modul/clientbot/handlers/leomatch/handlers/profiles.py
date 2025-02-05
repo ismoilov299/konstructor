@@ -1,6 +1,6 @@
 from asgiref.sync import sync_to_async
 
-from modul.clientbot.handlers.leomatch.data.state import LeomatchProfiles
+from modul.clientbot.handlers.leomatch.data.state import LeomatchProfiles, LeomatchMain
 from modul.clientbot.handlers.leomatch.shortcuts import bot_show_profile_db, clear_all_likes, delete_like, get_leo, \
     get_leos_id, get_first_like, leo_set_like, show_media, show_profile_db
 from modul.clientbot.handlers.leomatch.keyboards.inline_kb import profile_alert, profile_alert_action, \
@@ -128,11 +128,13 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
     elif callback_data.action == ProfileActionEnum.SLEEP:
         pass
     elif callback_data.action == ProfileActionEnum.DISLIKE:
-        await query.message.answer(
-            ("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
-            reply_markup=profile_alert(query.from_user.id, callback_data.user_id))
+        # await query.message.answer(
+        #     ("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
+        #     reply_markup=profile_alert(query.from_user.id, callback_data.user_id))
 
-        # await next_l(query.message, state)
+        await next_l(query.message, state)
+        await state.set_state(LeomatchMain.PROFILE_MANAGE)
+
 
 
 @client_bot_router.message(F.text == ("Отменить"), LeomatchProfiles.INPUT_MESSAGE)
