@@ -279,12 +279,22 @@ async def bot_show_profile_db(to_uid: int, uid: int, keyboard=types.ReplyKeyboar
     await bot_show_profile(to_uid, uid, f'{leo.full_name}', leo.age, leo.city, leo.about_me, leo.photo, leo.media_type,
                            user.username, keyboard=keyboard)
 
-@sync_to_async
+
 async def update_profile(uid: int, kwargs: dict):
-    leo = await get_leo(uid)
-    for key, value in kwargs.items():
-        setattr(leo, key, value)
-    leo.save()
+    try:
+        leo = await get_leo(uid)
+
+        @sync_to_async
+        def _update():
+            for key, value in kwargs.items():
+                setattr(leo, key, value)
+            leo.save()
+            return True
+
+        return await _update()
+    except Exception as e:
+        print(f"Error updating profile: {e}")
+        return False
 
 
 async def create_like(from_uid: int, to_uid: int, message: str = None):
