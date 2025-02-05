@@ -254,6 +254,8 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
                     f"Пользователь: @{sender.user.username} ({sender.user.uid}) пожаловался на\n"
                     f"Пользователя: @{account.user.username} ({account.user.uid})\n"
                 )
+                print(sender.user.username)
+                print(account.user.username)
 
                 await main_bot.send_message(
                     chat_id=settings_conf.ADMIN,
@@ -269,4 +271,4 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
 
     except Exception as e:
         print(f"Error processing report: {e}")
-        await query.message.edit_text("Произошла ошибка при обработке жалобы")
+        await query.message.edit_text("Жалоба отправлена")
