@@ -118,16 +118,17 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
         await state.update_data(selected_id=callback_data.user_id)
         await state.set_state(LeomatchProfiles.INPUT_MESSAGE)
     elif callback_data.action == ProfileActionEnum.REPORT:
-        try:
-            await query.message.delete()
-        except:
-            pass
+        # try:
+        #     await query.message.delete()
+        # except:
+        #     pass
         await query.message.answer(
             ("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
             reply_markup=profile_alert(query.from_user.id, callback_data.user_id))
     elif callback_data.action == ProfileActionEnum.SLEEP:
         pass
     elif callback_data.action == ProfileActionEnum.DISLIKE:
+
         await next_l(query.message, state)
 
 
