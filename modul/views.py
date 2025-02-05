@@ -43,10 +43,8 @@ def index(request):
 def web_main(request):
     if request.user.is_authenticated:
         try:
-            # Joriy sana va oyning birinchi kunini olish
             current_date = timezone.now().date()
 
-            # Oxirgi 12 oylik ma'lumotlarni olish
             user_data = UserTG.objects.filter(
                 id=request.user.uid
             ).annotate(
@@ -55,43 +53,35 @@ def web_main(request):
                 count=Count('id')
             ).order_by('month')
 
-            # Ma'lumotlarni JavaScript uchun formatlash
-            formatted_user_data = []
-
-            # Oxirgi 12 oy uchun ma'lumotlarni to'ldirish
-            for i in range(12):
-                date = current_date - timezone.timedelta(days=30 * i)
-                month_start = date.replace(day=1)
-
-                # Shu oy uchun ma'lumotni topish
-                month_data = user_data.filter(month=month_start).first()
-
-                formatted_user_data.append({
-                    'period': month_start.strftime('%Y-%m'),
-                    'Sales': month_data.get('count', 0) if month_data else 0
+            # Ma'lumotlarni formatlash
+            formatted_data = []
+            for item in user_data:
+                formatted_data.append({
+                    'month': item['month'].strftime('%Y-%m-%d'),
+                    'count': item['count']
                 })
 
-            formatted_user_data.reverse()  # Eng eski oydan boshlab tartiblash
+            user_data_count = UserTG.objects.filter(
+                id=request.user.uid,
+                interaction_count__gt=1
+            ).count()
 
             context = {
-                'user_data': json.dumps(formatted_user_data),
-                'user_data_count': json.dumps(list(user_data_count)),
+                'user_data': json.dumps(formatted_data),
+                'user_data_count': json.dumps(user_data_count)
             }
 
-            print("Debug - user_data:", formatted_user_data)  # Debug uchun
-
+            print("Debug - formatted_data:", formatted_data)  # Debug uchun
             return render(request, 'admin-wrap-lite-master/html/index.html', context)
 
         except Exception as e:
-            print("Error in web_main:", str(e))  # Xatoni log qilish
-            context = {
-                'user_data': json.dumps([]),
-                'user_data_count': json.dumps([])
-            }
-            return render(request, 'admin-wrap-lite-master/html/index.html', context)
+            print("Error in web_main:", str(e))
+            return render(request, 'admin-wrap-lite-master/html/index.html', {
+                'user_data': '[]',
+                'user_data_count': '0'
+            })
 
     return redirect('index')
-
 
 def profile(request):
     if not request.user.is_authenticated:
