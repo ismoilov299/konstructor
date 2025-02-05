@@ -242,20 +242,38 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 @client_bot_router.callback_query(LeomatchProfileAlert.filter(), LeomatchProfiles.LOOCK)
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAlert):
     if callback_data.action == "yes":
-        sender: LeoMatchModel = await get_leo(callback_data.sender_id)
-        account: LeoMatchModel = await get_leo(callback_data.account_id)
-        sender_user: User = await sender.user
-        account_user: User = await account.user
-        await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
-        await main_bot.send_message(
-            chat_id=settings_conf.ADMIN,
-            text=("Пользователь: @{sender_user} ({sender_user_id}) пожаловался на \n"
-                  "Пользователя: @{account_user} ({account_user_id})\n").format(sender_user=sender_user.username,
-                                                                                sender_user_id=sender_user.uid,
-                                                                                account_user=account_user.username,
-                                                                                account_user_id=account_user.uid),
-            reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
-        )
-        await query.message.edit_text(("Жалоба отправлена"))
+        try:
+            # sync_to_async funksiyani oldindan tayyorlaymiz
+            get_leo_async = sync_to_async(get_leo)
+
+            # So'ng uni await bilan chaqiramiz
+            sender = await get_leo_async(callback_data.sender_id)
+            account = await get_leo_async(callback_data.account_id)
+
+            # UserTG ma'lumotlarini olamiz
+            sender_user = sender.user if sender else None
+            account_user = account.user if account else None
+
+            if sender_user and account_user:
+                await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
+
+                report_text = (
+                    f"Пользователь: @{sender_user.username} ({sender_user.uid}) пожаловался на\n"
+                    f"Пользователя: @{account_user.username} ({account_user.uid})\n"
+                )
+
+                await main_bot.send_message(
+                    chat_id=settings_conf.ADMIN,
+                    text=report_text,
+                    reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
+                )
+                await query.message.edit_text("Жалоба отправлена")
+            else:
+                await query.message.edit_text("Ошибка: пользователь не найден")
+
+        except Exception as e:
+            print(f"Error processing report: {e}")
+            await query.message.edit_text("Произошла ошибка при обработке жалобы")
+
     await state.update_data(me=query.from_user.id)
     await next_l(query.message, state)
