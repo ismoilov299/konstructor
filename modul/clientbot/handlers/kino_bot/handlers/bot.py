@@ -1104,13 +1104,13 @@ async def start_search(call: types.CallbackQuery, state: FSMContext):
 @client_bot_router.callback_query(F.data.contains('watch_film'), StateFilter('*'))
 async def watch_film(call: CallbackQuery, state: FSMContext):
     film_id = int(call.data.split('|')[-1])
-
+    bot = call.bot.me()
     film_data = await get_film_for_view(film_id)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text='Смотреть', url=film_data['view_link'])],
         [InlineKeyboardButton(text='🔥 Лучшие фильмы 🔥', url='https://t.me/KinoPlay_HD')],
-        [InlineKeyboardButton(text='🔍 Поиск фильмов 🔍', url=f'https://t.me/{BOT_UNAME}')]
+        [InlineKeyboardButton(text='🔍 Поиск фильмов 🔍', url=f'https://t.me/{bot}')]
     ])
 
     caption = f'<b>{film_data["name"]} {film_data["year"]}</b>\n\n{film_data["description"]}\n\n{film_data["country"]}\n{film_data["genres"]}'
@@ -1192,7 +1192,7 @@ async def inline_film_requests(query: InlineQuery):
     results = await film_search(query.query)
 
     inline_answer = []
-
+    bot = query.bot.me()
     for film in results['results']:
         film_data = await get_film_for_view(film['id'])
 
@@ -1201,7 +1201,7 @@ async def inline_film_requests(query: InlineQuery):
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text='Смотреть', url=film_data['view_link'])],
             [InlineKeyboardButton(text='🔥 Лучшие фильмы 🔥', url='https://t.me/KinoPlay_HD')],
-            [InlineKeyboardButton(text='🔍 Поиск фильмов 🔍', url=f'https://t.me/{BOT_UNAME}')]
+            [InlineKeyboardButton(text='🔍 Поиск фильмов 🔍', url=f'https://t.me/{bot}')]
         ])
 
         answer = InlineQueryResultArticle(
@@ -1513,7 +1513,8 @@ class InstagramDownloader:
         return None
 
 
-async def handle_instagram(message: Message, url: str, me, bot: Bot):
+
+async def handle_instagram(message: Message, url: str, me, bot: Bot,state: FSMContext):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
         ydl_opts = {
@@ -1586,12 +1587,14 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                 video=info['url'],
                                 caption=f"📹 Instagram video\nСкачано через @{me.username}"
                             )
+                            await state.set_state(Download.download)
                         else:
                             await bot.send_photo(
                                 chat_id=message.chat.id,
                                 photo=info['url'],
                                 caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                             )
+                            await state.set_state(Download.download)
 
                         await shortcuts.add_to_analitic_data(me.username, url)
                         await progress_msg.delete()
@@ -1614,12 +1617,14 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                             video=FSInputFile(media_path),
                                             caption=f"📹 Instagram video (Низкое качество)\nСкачано через @{me.username}"
                                         )
+                                        await state.set_state(Download.download)
                                     else:
                                         await bot.send_photo(
                                             chat_id=message.chat.id,
                                             photo=FSInputFile(media_path),
                                             caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                                         )
+                                        await state.set_state(Download.download)
                                     await shortcuts.add_to_analitic_data(me.username, url)
                                     await progress_msg.delete()
                                 finally:
@@ -1651,7 +1656,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 #         me = await bot.get_me()
 #         await handle_instagram(message, url, me, bot)
 
-async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str):
+async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str,state: FSMContext):
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -1666,6 +1671,7 @@ async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me
                         caption=f"📹 {info.get('title', 'Video')} (Низкое качество)\nСкачано через @{me.username}",
                         supports_streaming=True
                     )
+                    await state.set_state(Download.download)
                 finally:
                     # Всегда удаляем файл после отправки
                     if os.path.exists(video_path):
@@ -1678,7 +1684,7 @@ async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me
         await message.answer(f"❌ Не удалось скачать видео из {platform}")
 
 
-async def handle_tiktok(message: Message, url: str, me, bot: Bot):
+async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMContext):
     try:
         ydl_opts = {
             'format': 'mp4',
@@ -1701,6 +1707,7 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot):
                             video=info['url'],
                             caption=f"📹 TikTok video\nСкачано через @{me.username}",
                         )
+                        await state.set_state(Download.download)
                         await shortcuts.add_to_analitic_data(me.username, url)
                         return
                     except Exception:
