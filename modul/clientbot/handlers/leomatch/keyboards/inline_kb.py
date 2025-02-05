@@ -14,8 +14,8 @@ def profile_view_action(user_id: int):
                                                                            user_id=user_id).pack()),
         InlineKeyboardButton(text="⚠️",
                              callback_data=LeomatchLikeAction(action=ProfileActionEnum.REPORT, user_id=user_id).pack()),
-        # InlineKeyboardButton(text="💤", callback_data=LeomatchProfileAction(action=ProfileActionEnum.SLEEP).pack()),
-        InlineKeyboardButton(text="👎", callback_data=LeomatchProfileAction(action=ProfileActionEnum.DISLIKE).pack()),
+        # DISLIKE tugmasiga ham user_id ni qo'shamiz
+        InlineKeyboardButton(text="👎", callback_data=LeomatchProfileAction(action=ProfileActionEnum.DISLIKE, user_id=user_id).pack()),
         width=4
     )
     return builder.as_markup()
