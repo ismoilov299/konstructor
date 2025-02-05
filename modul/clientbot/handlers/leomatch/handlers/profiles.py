@@ -243,14 +243,9 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAlert):
     if callback_data.action == "yes":
         try:
-            # sync_to_async funksiyani oldindan tayyorlaymiz
-            get_leo_async = sync_to_async(get_leo)
+            sender = await get_leo(callback_data.sender_id)
+            account = await get_leo(callback_data.account_id)
 
-            # So'ng uni await bilan chaqiramiz
-            sender = await get_leo_async(callback_data.sender_id)
-            account = await get_leo_async(callback_data.account_id)
-
-            # UserTG ma'lumotlarini olamiz
             sender_user = sender.user if sender else None
             account_user = account.user if account else None
 
