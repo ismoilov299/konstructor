@@ -1519,7 +1519,7 @@ class InstagramDownloader:
 
 
 
-async def handle_instagram(message: Message, url: str, me, bot: Bot,state: FSMContext):
+async def handle_instagram(message: Message, url: str, me, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
         ydl_opts = {
@@ -1592,14 +1592,14 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot,state: FSMCo
                                 video=info['url'],
                                 caption=f"📹 Instagram video\nСкачано через @{me.username}"
                             )
-                            await state.set_state(Download.download)
+                            # await state.set_state(Download.download)
                         else:
                             await bot.send_photo(
                                 chat_id=message.chat.id,
                                 photo=info['url'],
                                 caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                             )
-                            await state.set_state(Download.download)
+                            # await state.set_state(Download.download)
 
                         await shortcuts.add_to_analitic_data(me.username, url)
                         await progress_msg.delete()
