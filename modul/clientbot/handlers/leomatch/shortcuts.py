@@ -269,7 +269,7 @@ async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int,
 
 async def show_profile_db(message: types.Message, uid: int, keyboard=ReplyKeyboardMarkup, comment: str = None):
     leo = await get_leo(uid)
-    print(leo)
+    print(leo, "leo info")
     await show_profile(message, uid, f'{leo.full_name}', leo.age, leo.city, leo.about_me, leo.photo, leo.media_type,leo.sex,
                        keyboard=keyboard, comment=comment)
 
