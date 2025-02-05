@@ -1,22 +1,31 @@
 $(function() {
     "use strict";
 
-    try {
-        console.log("Debug - Starting dashboard initialization");
-        console.log("userData:", userData);
-        console.log("userDataCount:", userDataCount);
+    // Debug logging
+    console.log("Starting dashboard initialization...");
 
-        // ===============================================================
-        // Our Visitor Chart
-        // ===============================================================
-        const visitorChart = c3.generate({
+    // Check if required elements exist
+    if (!document.getElementById('visitor') || !document.getElementById('sales-chart')) {
+        console.error("Required chart containers not found");
+        return;
+    }
+
+    // ===============================================================
+    // Visitor Chart
+    // ===============================================================
+    try {
+        var chart = c3.generate({
             bindto: '#visitor',
             data: {
+                // Start with default values
                 columns: [
-                    ['Пользователи', Array.isArray(userData) ? userData.length : 0],
-                    ['Постоянные пользователи', Array.isArray(userDataCount) ? userDataCount.length : 0]
+                    ['Пользователи', 0],
+                    ['Постоянные пользователи', 0]
                 ],
-                type: 'donut'
+                type: 'donut',
+                onclick: function(d, i) { console.log("onclick", d, i); },
+                onmouseover: function(d, i) { console.log("onmouseover", d, i); },
+                onmouseout: function(d, i) { console.log("onmouseout", d, i); }
             },
             donut: {
                 label: {
@@ -33,82 +42,94 @@ $(function() {
             }
         });
 
-        // ===============================================================
-        // Sales Chart - Monthly Data Processing
-        // ===============================================================
-        function generateMonthlyData(data) {
-            if (!Array.isArray(data)) {
-                console.error("Invalid userData format:", data);
-                return [];
-            }
-
-            const currentDate = new Date();
-            const monthlyUsage = {};
-
-            // Process existing data
-            data.forEach(item => {
-                if (item && item.month) {
-                    const date = new Date(item.month);
-                    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    monthlyUsage[key] = item.count || 0;
-                }
-            });
-
-            const result = [];
-            // Generate last 12 months data
-            for (let i = 11; i >= 0; i--) {
-                const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-
-                result.push({
-                    period: key,
-                    Sales: monthlyUsage[key] || 0
+        // Update with actual data if available
+        if (typeof userData !== 'undefined' && typeof userDataCount !== 'undefined') {
+            setTimeout(function() {
+                chart.load({
+                    columns: [
+                        ['Пользователи', Array.isArray(userData) ? userData.length : 0],
+                        ['Постоянные пользователи', Array.isArray(userDataCount) ? userDataCount.length : 0]
+                    ]
                 });
+            }, 1000);
+        }
+    } catch (error) {
+        console.error("Error initializing visitor chart:", error);
+        document.getElementById('visitor').innerHTML = '<div class="alert alert-warning">Ошибка при загрузке диаграммы</div>';
+    }
+
+    // ===============================================================
+    // Sales chart
+    // ===============================================================
+    try {
+        if (typeof userData !== 'undefined' && Array.isArray(userData)) {
+            const monthlyData = prepareMonthlyData(userData);
+            if (monthlyData.length > 0) {
+                Morris.Area({
+                    element: 'sales-chart',
+                    data: monthlyData,
+                    xkey: 'period',
+                    ykeys: ['Sales'],
+                    labels: ['Клиенты'],
+                    pointSize: 0,
+                    fillOpacity: 0.4,
+                    pointStrokeColors: ['#20aee3'],
+                    behaveLikeLine: true,
+                    gridLineColor: '#e0e0e0',
+                    lineWidth: 0,
+                    smooth: true,
+                    hideHover: 'auto',
+                    lineColors: ['#20aee3'],
+                    resize: true,
+                    parseTime: false
+                });
+            } else {
+                document.getElementById('sales-chart').innerHTML =
+                    '<div class="alert alert-info mt-3">Нет данных для отображения</div>';
             }
-
-            return result;
-        }
-
-        // ===============================================================
-        // Sales Chart Creation
-        // ===============================================================
-        const monthlyData = generateMonthlyData(userData);
-        console.log("Generated monthly data:", monthlyData);
-
-        if (monthlyData.length > 0) {
-            Morris.Area({
-                element: 'sales-chart',
-                data: monthlyData,
-                xkey: 'period',
-                ykeys: ['Sales'],
-                labels: ['Клиенты'],
-                pointSize: 3,
-                fillOpacity: 0.6,
-                pointStrokeColors: ['#20aee3'],
-                behaveLikeLine: true,
-                gridLineColor: '#e0e0e0',
-                lineWidth: 3,
-                hideHover: 'auto',
-                lineColors: ['#20aee3'],
-                resize: true,
-                parseTime: false,
-                yLabelFormat: function (y) {
-                    return Math.round(y);
-                },
-                hoverCallback: function (index, options, content, row) {
-                    return 'Период: ' + row.period + '<br>Клиенты: ' + row.Sales;
-                }
-            });
         } else {
-            console.warn("No monthly data available for Morris chart");
+            console.warn("Invalid or missing userData for sales chart");
             document.getElementById('sales-chart').innerHTML =
-                '<div class="text-center p-4">Нет данных для отображения</div>';
+                '<div class="alert alert-warning mt-3">Ошибка загрузки данных</div>';
+        }
+    } catch (error) {
+        console.error("Error initializing sales chart:", error);
+        document.getElementById('sales-chart').innerHTML =
+            '<div class="alert alert-danger mt-3">Ошибка при создании графика</div>';
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function prepareMonthlyData(data) {
+        const currentDate = new Date();
+        const monthlyData = [];
+
+        // Generate last 12 months of data
+        for (let i = 11; i >= 0; i--) {
+            const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+            const monthStr = targetDate.toISOString().slice(0, 7); // YYYY-MM format
+
+            // Find data for this month
+            const monthData = data.find(item => {
+                if (!item || !item.month) return false;
+                return item.month.startsWith(monthStr);
+            });
+
+            monthlyData.push({
+                period: monthStr,
+                Sales: monthData ? monthData.count : 0
+            });
         }
 
-        // ===============================================================
-        // Sales Different Chart (if needed)
-        // ===============================================================
-        const salesDiffChart = c3.generate({
+        return monthlyData;
+    }
+
+    // ===============================================================
+    // Sales Different Chart
+    // ===============================================================
+    try {
+        var salesDiffChart = c3.generate({
             bindto: '#sales',
             data: {
                 columns: [
@@ -135,15 +156,19 @@ $(function() {
                 pattern: ['#eceff1', '#24d2b5', '#6772e5', '#20aee3']
             }
         });
+    } catch (error) {
+        console.error("Error initializing sales diff chart:", error);
+    }
 
-        // ===============================================================
-        // Prediction Chart (if needed)
-        // ===============================================================
-        const predictionChart = c3.generate({
+    // ===============================================================
+    // Prediction Chart
+    // ===============================================================
+    try {
+        var predictionChart = c3.generate({
             bindto: '#prediction',
             data: {
                 columns: [
-                    ['data', 91.4]
+                    ['data', 0]
                 ],
                 type: 'gauge'
             },
@@ -162,26 +187,28 @@ $(function() {
             }
         });
 
-        // Prediction chart animations
-        setTimeout(() => {
+        // Animated loading of prediction data
+        setTimeout(function() {
             predictionChart.load({
                 columns: [['data', 10]]
             });
         }, 1000);
 
-        setTimeout(() => {
+        setTimeout(function() {
             predictionChart.load({
                 columns: [['data', 50]]
             });
         }, 2000);
 
-        setTimeout(() => {
+        setTimeout(function() {
             predictionChart.load({
                 columns: [['data', 70]]
             });
         }, 3000);
-
     } catch (error) {
-        console.error("Error in dashboard initialization:", error);
+        console.error("Error initializing prediction chart:", error);
     }
+
+    // Log completion
+    console.log("Dashboard initialization completed");
 });
