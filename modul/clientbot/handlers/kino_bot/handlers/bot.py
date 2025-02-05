@@ -693,7 +693,9 @@ async def remove_channel(call: CallbackQuery, bot: Bot):
 @client_bot_router.callback_query(F.data == 'admin_add_channel', AdminFilter(), StateFilter('*'))
 async def admin_add_channel(call: CallbackQuery, state: FSMContext):
     await state.set_state(AddChannelSponsorForm.channel)
-    await call.message.edit_text('Отправьте id канала\n\nУбедитесь в том, что бот является администратором в канале',
+    await call.message.edit_text('Отправьте id канала\n\n'
+                                 'Убедитесь в том, что бот является администратором в канале\n\n'
+                                 '@username_to_id_bot id канала можно получить у этого бота',
                                  reply_markup=cancel_kb)
 
 
@@ -884,32 +886,32 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     try:
         bot_db = await shortcuts.get_bot(bot)
-        if shortcuts.have_one_module(bot_db, "kino"):
-            sub_status = await check_subs(message.from_user.id, bot)
+        if not shortcuts.have_one_module(bot_db, "kino"):
+            return
 
-            if not sub_status:
-                kb = await get_subs_kb(bot)
-                await message.answer(
-                    '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
-                    reply_markup=kb,
-                    parse_mode="HTML"
-                )
-                return
-
-            await state.set_state(SearchFilmForm.query)
-
-            earn_kb = ReplyKeyboardBuilder()
-            earn_kb.button(text='💸Заработать')
-            earn_kb = earn_kb.as_markup(resize_keyboard=True)
-
+        sub_status = await check_subs(message.from_user.id, bot)
+        if not sub_status:
+            kb = await get_subs_kb(bot)
             await message.answer(
-                '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
-                'Не указывайте года, озвучки и т.д.\n\n'
-                'Правильный пример: Ведьмак\n'
-                'Неправильный пример: Ведьмак 2022',
-                parse_mode="HTML",
-                reply_markup=earn_kb
+                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
+                reply_markup=kb,
+                parse_mode="HTML"
             )
+            return
+
+        await state.set_state(SearchFilmForm.query)
+        earn_kb = ReplyKeyboardBuilder()
+        earn_kb.button(text='💸Заработать')
+        earn_kb = earn_kb.as_markup(resize_keyboard=True)
+
+        await message.answer(
+            '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
+            'Не указывайте года, озвучки и т.д.\n\n'
+            'Правильный пример: Ведьмак\n'
+            'Неправильный пример: Ведьмак 2022',
+            parse_mode="HTML",
+            reply_markup=earn_kb
+        )
     except Exception as e:
         logger.error(f"Error in start_kino_bot: {e}")
         await message.answer(
