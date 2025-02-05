@@ -241,34 +241,42 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 
 # Report handler
 @client_bot_router.callback_query(LeomatchProfileAlert.filter(), LeomatchProfiles.LOOCK)
-async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert):
+async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert, state: FSMContext):
     try:
-        if callback_data.action == "yes":
+        if callback_data.action == AlertActionEnum.YES:  # Enum qiymatini tekshiramiz
             sender = await get_leo(callback_data.sender_id)
             account = await get_leo(callback_data.account_id)
 
-            if sender and account and sender.user and account.user:
-                await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
+            if sender and account:
+                sender_user = sender.user
+                account_user = account.user
 
-                report_text = (
-                    f"Пользователь: @{sender.user.username} ({sender.user.uid}) пожаловался на\n"
-                    f"Пользователя: @{account.user.username} ({account.user.uid})\n"
-                )
-                print(sender.user.username)
-                print(account.user.username)
+                if sender_user and account_user:
+                    # Adminlarga yuborish
+                    await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
 
-                await main_bot.send_message(
-                    chat_id=settings_conf.ADMIN,
-                    text=report_text,
-                    reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
-                )
-                await query.message.edit_text("Жалоба отправлена")
+                    report_text = (
+                        f"Пользователь: @{sender_user.username} ({sender_user.uid}) пожаловался на\n"
+                        f"Пользователя: @{account_user.username} ({account_user.uid})\n"
+                    )
+
+                    await main_bot.send_message(
+                        chat_id=settings_conf.ADMIN,
+                        text=report_text,
+                        reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
+                    )
+                    await query.message.edit_text("Жалоба отправлена")
+                else:
+                    await query.message.edit_text("Ошибка: пользователь не найден")
             else:
                 await query.message.edit_text("Ошибка: пользователь не найден")
 
-        else:  # "no" holatida
+        elif callback_data.action == AlertActionEnum.NO:  # Enum qiymatini tekshiramiz
             await query.message.edit_text("Жалоба отменена")
+
+        await next_l(query.message, state)
 
     except Exception as e:
         print(f"Error processing report: {e}")
-        await query.message.edit_text("Жалоба отправлена")
+        await query.message.edit_text("Произошла ошибка при обработке жалобы")
+        await next_l(query.message, state)

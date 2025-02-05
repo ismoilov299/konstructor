@@ -30,7 +30,7 @@ class LeomatchLikeAction(CallbackData, prefix="leo-pa"):
 
 
 class LeomatchProfileAlert(CallbackData, prefix="leo-alert"):
-    action: str
+    action: AlertActionEnum
     sender_id: int = None
     account_id: int = None
 
