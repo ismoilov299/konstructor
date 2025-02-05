@@ -128,8 +128,11 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
     elif callback_data.action == ProfileActionEnum.SLEEP:
         pass
     elif callback_data.action == ProfileActionEnum.DISLIKE:
+        await query.message.answer(
+            ("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
+            reply_markup=profile_alert(query.from_user.id, callback_data.user_id))
 
-        await next_l(query.message, state)
+        # await next_l(query.message, state)
 
 
 @client_bot_router.message(F.text == ("Отменить"), LeomatchProfiles.INPUT_MESSAGE)
