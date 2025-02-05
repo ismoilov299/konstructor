@@ -109,31 +109,38 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
 
 @client_bot_router.callback_query(LeomatchProfileAction.filter(), LeomatchProfiles.LOOCK)
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAction):
-    await query.message.edit_reply_markup()
-    await state.update_data(me=query.from_user.id)
-    if callback_data.action == ProfileActionEnum.LIKE:
-        await like(query.message, state, query.from_user.id, callback_data.user_id)
-    elif callback_data.action == ProfileActionEnum.MESSAGE:
-        await query.message.answer(("Введите сообщение или отправьте видео (макс 15 сек)"), reply_markup=cancel())
-        await state.update_data(selected_id=callback_data.user_id)
-        await state.set_state(LeomatchProfiles.INPUT_MESSAGE)
-    elif callback_data.action == ProfileActionEnum.REPORT:
-        # try:
-        #     await query.message.delete()
-        # except:
-        #     pass
-        await query.message.answer(
-            ("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
-            reply_markup=profile_alert(query.from_user.id, callback_data.user_id))
-    elif callback_data.action == ProfileActionEnum.SLEEP:
-        pass
-    elif callback_data.action == ProfileActionEnum.DISLIKE:
-        # await query.message.answer(
-        #     ("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
-        #     reply_markup=profile_alert(query.from_user.id, callback_data.user_id))
+    try:
+        await query.message.edit_reply_markup()
+        await state.update_data(me=query.from_user.id)
 
-        await next_l(query.message, state)
-        await state.set_state(LeomatchMain.PROFILE_MANAGE)
+        if callback_data.action == ProfileActionEnum.LIKE:
+            await like(query.message, state, query.from_user.id, callback_data.user_id)
+        elif callback_data.action == ProfileActionEnum.MESSAGE:
+            current_state = await state.get_state()
+            await query.message.answer(
+                "Введите сообщение или отправьте видео (макс 15 сек)",
+                reply_markup=cancel()
+            )
+            await state.update_data({
+                'selected_id': callback_data.user_id,
+                'previous_state': current_state
+            })
+            await state.set_state(LeomatchProfiles.INPUT_MESSAGE)
+        elif callback_data.action == ProfileActionEnum.REPORT:
+            await query.message.answer(
+                "Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены",
+                reply_markup=profile_alert(query.from_user.id, callback_data.user_id)
+            )
+        elif callback_data.action == ProfileActionEnum.SLEEP:
+            pass
+
+        elif callback_data.action == ProfileActionEnum.DISLIKE:
+            await next_l(query.message, state)
+            await state.set_state(LeomatchProfiles.LOOCK)
+
+    except Exception as e:
+        print(f"Error in choose_percent handler: {e}")
+        await query.message.answer("Произошла ошибка, попробуйте еще раз")
 
 
 
