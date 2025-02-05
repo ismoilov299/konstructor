@@ -43,8 +43,6 @@ def index(request):
 def web_main(request):
     if request.user.is_authenticated:
         try:
-            current_date = timezone.now().date()
-
             user_data = UserTG.objects.filter(
                 id=request.user.uid
             ).annotate(
@@ -53,33 +51,28 @@ def web_main(request):
                 count=Count('id')
             ).order_by('month')
 
-            # Ma'lumotlarni formatlash
-            formatted_data = []
-            for item in user_data:
-                formatted_data.append({
+            formatted_data = [
+                {
                     'month': item['month'].strftime('%Y-%m-%d'),
                     'count': item['count']
-                })
+                } for item in user_data
+            ]
 
-            user_data_count = UserTG.objects.filter(
-                id=request.user.uid,
-                interaction_count__gt=1
-            ).count()
+            print("Debug - formatted_data:", formatted_data)  # Debug log
 
             context = {
                 'user_data': json.dumps(formatted_data),
-                'user_data_count': json.dumps(user_data_count)
+                'user_data_count': json.dumps([])  # Empty array as default
             }
-
-            print("Debug - formatted_data:", formatted_data)  # Debug uchun
             return render(request, 'admin-wrap-lite-master/html/index.html', context)
 
         except Exception as e:
             print("Error in web_main:", str(e))
-            return render(request, 'admin-wrap-lite-master/html/index.html', {
-                'user_data': '[]',
-                'user_data_count': '0'
-            })
+            context = {
+                'user_data': json.dumps([]),
+                'user_data_count': json.dumps([])
+            }
+            return render(request, 'admin-wrap-lite-master/html/index.html', context)
 
     return redirect('index')
 
