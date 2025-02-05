@@ -178,8 +178,10 @@
 
     <!-- Data initialization -->
     <script>
-        const userData = {{ user_data|safe }};
-        const userDataCount = {{ user_data_count|safe }};
+    const userData = {{ user_data|default:'[]'|safe }};
+    const userDataCount = {{ user_data_count|default:'[]'|safe }};
+
+    console.log("Debug - userData:", userData);  // Debug
     </script>
 
     <!-- Core Scripts -->

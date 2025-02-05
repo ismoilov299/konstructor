@@ -1,167 +1,187 @@
 $(function() {
     "use strict";
 
-    const monthlyData = generateMonthlyData(userData);
-    Morris.Area({
-        element: 'sales-chart',
-        data: monthlyData,
-        xkey: 'period',
-        ykeys: ['Sales'],
-        labels: ['Клиенты'],
-        pointSize: 4,
-        fillOpacity: 0.5,
-        pointStrokeColors: ['#20aee3'],
-        behaveLikeLine: true,
-        gridLineColor: '#e0e0e0',
-        lineWidth: 2,
-        hideHover: 'auto',
-        lineColors: ['#20aee3'],
-        resize: true,
-        yLabelFormat: function (y) {
-            if (y === null) return 'Нет данных';
-            return Math.round(y);
-        },
-        hoverCallback: function (index, options, content, row) {
-            if (row.Sales === null) {
-                return 'Период: ' + row.period + '<br>Клиенты: Нет данных';
-            }
-            return 'Период: ' + row.period + '<br>Клиенты: ' + row.Sales;
-        }
-    });
+    try {
+        console.log("Debug - Starting dashboard initialization");
+        console.log("userData:", userData);
+        console.log("userDataCount:", userDataCount);
 
-    var visitorChart = c3.generate({
-        bindto: '#visitor',
-        data: {
-            columns: [
-                ['Пользователи', userData.length],
-                ['Постоянные пользователи', userDataCount.length]
-            ],
-            type: 'donut',
-            onclick: function(d, i) { console.log("onclick", d, i); },
-            onmouseover: function(d, i) { console.log("onmouseover", d, i); },
-            onmouseout: function(d, i) { console.log("onmouseout", d, i); }
-        },
-        donut: {
-            label: {
-                show: false
+        // ===============================================================
+        // Our Visitor Chart
+        // ===============================================================
+        const visitorChart = c3.generate({
+            bindto: '#visitor',
+            data: {
+                columns: [
+                    ['Пользователи', Array.isArray(userData) ? userData.length : 0],
+                    ['Постоянные пользователи', Array.isArray(userDataCount) ? userDataCount.length : 0]
+                ],
+                type: 'donut'
             },
-            title: "Статистика",
-            width: 20
-        },
-        legend: {
-            hide: true
-        },
-        color: {
-            pattern: ['#6772e5', '#24d2b5']
-        }
-    });
-
-    function generateMonthlyData(userData) {
-        const data = [];
-        const currentDate = new Date();
-        const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1;
-
-        const monthlyUsage = {};
-        userData.forEach(item => {
-            const date = new Date(item.month);
-            const key = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-            monthlyUsage[key] = item.count;
+            donut: {
+                label: {
+                    show: false
+                },
+                title: "Статистика",
+                width: 20
+            },
+            legend: {
+                hide: true
+            },
+            color: {
+                pattern: ['#6772e5', '#24d2b5']
+            }
         });
 
-        for (let i = 0; i < 12; i++) {
-            let year = currentYear;
-            let month = currentMonth - i;
-
-            if (month <= 0) {
-                month += 12;
-                year -= 1;
+        // ===============================================================
+        // Sales Chart - Monthly Data Processing
+        // ===============================================================
+        function generateMonthlyData(data) {
+            if (!Array.isArray(data)) {
+                console.error("Invalid userData format:", data);
+                return [];
             }
 
-            const key = `${year}-${month.toString().padStart(2, '0')}`;
-            const value = monthlyUsage[key] || 0;
+            const currentDate = new Date();
+            const monthlyUsage = {};
 
-            data.unshift({
-                period: key,
-                Sales: value
+            // Process existing data
+            data.forEach(item => {
+                if (item && item.month) {
+                    const date = new Date(item.month);
+                    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    monthlyUsage[key] = item.count || 0;
+                }
             });
-        }
 
-        return data;
-    }
+            const result = [];
+            // Generate last 12 months data
+            for (let i = 11; i >= 0; i--) {
+                const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-    var salesDiffChart = c3.generate({
-        bindto: '#sales',
-        data: {
-            columns: [
-                ['One+', 50],
-                ['T', 60],
-                ['Samsung', 20]
-            ],
-            type: 'donut',
-            onclick: function(d, i) { console.log("onclick", d, i); },
-            onmouseover: function(d, i) { console.log("onmouseover", d, i); },
-            onmouseout: function(d, i) { console.log("onmouseout", d, i); }
-        },
-        donut: {
-            label: {
-                show: false
-            },
-            title: "",
-            width: 18
-        },
-        size: {
-            height: 150
-        },
-        legend: {
-            hide: true
-        },
-        color: {
-            pattern: ['#eceff1', '#24d2b5', '#6772e5', '#20aee3']
-        }
-    });
-
-    var predictionChart = c3.generate({
-        bindto: '#prediction',
-        data: {
-            columns: [
-                ['data', 91.4]
-            ],
-            type: 'gauge',
-            onclick: function(d, i) { console.log("onclick", d, i); },
-            onmouseover: function(d, i) { console.log("onmouseover", d, i); },
-            onmouseout: function(d, i) { console.log("onmouseout", d, i); }
-        },
-        color: {
-            pattern: ['#ff9041', '#20aee3', '#24d2b5', '#6772e5'],
-            threshold: {
-                values: [30, 60, 90, 100]
+                result.push({
+                    period: key,
+                    Sales: monthlyUsage[key] || 0
+                });
             }
-        },
-        gauge: {
-            width: 22
-        },
-        size: {
-            height: 120,
-            width: 150
+
+            return result;
         }
-    });
 
-    setTimeout(function() {
-        predictionChart.load({
-            columns: [['data', 10]]
-        });
-    }, 1000);
+        // ===============================================================
+        // Sales Chart Creation
+        // ===============================================================
+        const monthlyData = generateMonthlyData(userData);
+        console.log("Generated monthly data:", monthlyData);
 
-    setTimeout(function() {
-        predictionChart.load({
-            columns: [['data', 50]]
-        });
-    }, 2000);
+        if (monthlyData.length > 0) {
+            Morris.Area({
+                element: 'sales-chart',
+                data: monthlyData,
+                xkey: 'period',
+                ykeys: ['Sales'],
+                labels: ['Клиенты'],
+                pointSize: 3,
+                fillOpacity: 0.6,
+                pointStrokeColors: ['#20aee3'],
+                behaveLikeLine: true,
+                gridLineColor: '#e0e0e0',
+                lineWidth: 3,
+                hideHover: 'auto',
+                lineColors: ['#20aee3'],
+                resize: true,
+                parseTime: false,
+                yLabelFormat: function (y) {
+                    return Math.round(y);
+                },
+                hoverCallback: function (index, options, content, row) {
+                    return 'Период: ' + row.period + '<br>Клиенты: ' + row.Sales;
+                }
+            });
+        } else {
+            console.warn("No monthly data available for Morris chart");
+            document.getElementById('sales-chart').innerHTML =
+                '<div class="text-center p-4">Нет данных для отображения</div>';
+        }
 
-    setTimeout(function() {
-        predictionChart.load({
-            columns: [['data', 70]]
+        // ===============================================================
+        // Sales Different Chart (if needed)
+        // ===============================================================
+        const salesDiffChart = c3.generate({
+            bindto: '#sales',
+            data: {
+                columns: [
+                    ['One+', 50],
+                    ['T', 60],
+                    ['Samsung', 20]
+                ],
+                type: 'donut'
+            },
+            donut: {
+                label: {
+                    show: false
+                },
+                title: "",
+                width: 18
+            },
+            size: {
+                height: 150
+            },
+            legend: {
+                hide: true
+            },
+            color: {
+                pattern: ['#eceff1', '#24d2b5', '#6772e5', '#20aee3']
+            }
         });
-    }, 3000);
+
+        // ===============================================================
+        // Prediction Chart (if needed)
+        // ===============================================================
+        const predictionChart = c3.generate({
+            bindto: '#prediction',
+            data: {
+                columns: [
+                    ['data', 91.4]
+                ],
+                type: 'gauge'
+            },
+            color: {
+                pattern: ['#ff9041', '#20aee3', '#24d2b5', '#6772e5'],
+                threshold: {
+                    values: [30, 60, 90, 100]
+                }
+            },
+            gauge: {
+                width: 22
+            },
+            size: {
+                height: 120,
+                width: 150
+            }
+        });
+
+        // Prediction chart animations
+        setTimeout(() => {
+            predictionChart.load({
+                columns: [['data', 10]]
+            });
+        }, 1000);
+
+        setTimeout(() => {
+            predictionChart.load({
+                columns: [['data', 50]]
+            });
+        }, 2000);
+
+        setTimeout(() => {
+            predictionChart.load({
+                columns: [['data', 70]]
+            });
+        }, 3000);
+
+    } catch (error) {
+        console.error("Error in dashboard initialization:", error);
+    }
 });

@@ -42,40 +42,54 @@ def index(request):
 
 def web_main(request):
     if request.user.is_authenticated:
-        current_date = timezone.now().date()
-        first_day_of_current_month = current_date.replace(day=1)
+        try:
+            # Joriy sana va oyning birinchi kunini olish
+            current_date = timezone.now().date()
 
-        user_data = UserTG.objects.filter(
-            id=request.user.uid
-        ).annotate(
-            month=TruncMonth('created_at')
-        ).values('month').annotate(
-            count=Count('id')
-        ).order_by('-month')[:12]
+            # Oxirgi 12 oylik ma'lumotlarni olish
+            user_data = UserTG.objects.filter(
+                id=request.user.uid
+            ).annotate(
+                month=TruncMonth('created_at')
+            ).values('month').annotate(
+                count=Count('id')
+            ).order_by('month')
 
-        user_data_count = UserTG.objects.filter(
-            id=request.user.uid,
-            interaction_count__gt=1
-        ).annotate(
-            month=TruncMonth('created_at')
-        ).values('month').annotate(
-            count=Count('id')
-        ).order_by('-month')[:12]
+            # Ma'lumotlarni JavaScript uchun formatlash
+            formatted_user_data = []
 
-        formatted_user_data = [
-            {
-                'period': item['month'].strftime('%Y-%m'),
-                'Sales': item['count']
+            # Oxirgi 12 oy uchun ma'lumotlarni to'ldirish
+            for i in range(12):
+                date = current_date - timezone.timedelta(days=30 * i)
+                month_start = date.replace(day=1)
+
+                # Shu oy uchun ma'lumotni topish
+                month_data = user_data.filter(month=month_start).first()
+
+                formatted_user_data.append({
+                    'period': month_start.strftime('%Y-%m'),
+                    'Sales': month_data.get('count', 0) if month_data else 0
+                })
+
+            formatted_user_data.reverse()  # Eng eski oydan boshlab tartiblash
+
+            context = {
+                'user_data': json.dumps(formatted_user_data),
+                'user_data_count': json.dumps(list(user_data_count)),
             }
-            for item in user_data
-        ]
 
-        context = {
-            'user_data': json.dumps(formatted_user_data),
-            'user_data_count': json.dumps(list(user_data_count)),
-        }
+            print("Debug - user_data:", formatted_user_data)  # Debug uchun
 
-        return render(request, 'admin-wrap-lite-master/html/index.html', context)
+            return render(request, 'admin-wrap-lite-master/html/index.html', context)
+
+        except Exception as e:
+            print("Error in web_main:", str(e))  # Xatoni log qilish
+            context = {
+                'user_data': json.dumps([]),
+                'user_data_count': json.dumps([])
+            }
+            return render(request, 'admin-wrap-lite-master/html/index.html', context)
+
     return redirect('index')
 
 
