@@ -14,6 +14,7 @@ from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKe
     InputTextMessageContent, InlineQuery, BotCommand, ReplyKeyboardRemove, URLInputFile
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 import re
@@ -1104,14 +1105,15 @@ async def start_search(call: types.CallbackQuery, state: FSMContext):
 @client_bot_router.callback_query(F.data.contains('watch_film'), StateFilter('*'))
 async def watch_film(call: CallbackQuery, state: FSMContext):
     film_id = int(call.data.split('|')[-1])
-    bot = call.bot.me()
-    print(bot)
+    bot_info = await call.bot.me()
+    bot_username = bot_info.username
+
     film_data = await get_film_for_view(film_id)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text='Смотреть', url=film_data['view_link'])],
         [InlineKeyboardButton(text='🔥 Лучшие фильмы 🔥', url='https://t.me/KinoPlay_HD')],
-        [InlineKeyboardButton(text='🔍 Поиск фильмов 🔍', url=f'https://t.me/{bot}')]
+        [InlineKeyboardButton(text='🔍 Поиск фильмов 🔍', url=f'https://t.me/{bot_username}')]
     ])
 
     caption = f'<b>{film_data["name"]} {film_data["year"]}</b>\n\n{film_data["description"]}\n\n{film_data["country"]}\n{film_data["genres"]}'
