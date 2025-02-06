@@ -110,24 +110,23 @@ async def bot_start(message: types.Message, state: FSMContext):
         if message.photo:
             photo = message.photo[-1].file_id
             media_type = "PHOTO"
-            print(f"Received new photo: {photo}")
-
         elif message.video:
             if message.video.duration > 15:
                 await message.answer("Пожалуйста, пришли видео не более 15 секунд")
                 return
             photo = message.video.file_id
             media_type = "VIDEO"
-
         elif message.video_note:
             if message.video_note.duration > 15:
                 await message.answer("Пожалуйста, пришли видео не более 15 секунд")
                 return
             photo = message.video_note.file_id
             media_type = "VIDEO_NOTE"
+        else:
+            await message.answer("Пожалуйста, отправьте фото или видео")
+            return
 
-        old_leo = await get_leo(message.from_user.id)
-        print(f"Old photo: {old_leo.photo}")
+        print(f"Saving media - type: {media_type}, file_id: {photo}")
 
         success = await update_profile(message.from_user.id, {
             "photo": photo,
@@ -135,11 +134,11 @@ async def bot_start(message: types.Message, state: FSMContext):
         })
 
         if success:
-            await message.answer("✅")
+            await message.answer("✅ ")
             await start(message, state)
         else:
             await message.answer("❌ Произошла ошибка при обновлении")
 
     except Exception as e:
         print(f"Error in SET_PHOTO handler: {e}")
-        await message.answer("❌ Произошла ошибка")
+        await message.answer("❌ Произошла ошибка при обновлении фото/видео")
