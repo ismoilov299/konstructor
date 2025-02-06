@@ -107,42 +107,39 @@ async def bot_start(message: types.Message, state: FSMContext):
         photo = ""
         media_type = ""
 
-
-        print("Received message type:", message.content_type)
-
         if message.photo:
             photo = message.photo[-1].file_id
             media_type = "PHOTO"
-            print("Photo received:", photo)
+            print(f"Received new photo: {photo}")
+
         elif message.video:
             if message.video.duration > 15:
-                await message.answer(("Пожалуйста, пришли видео не более 15 секунд"))
+                await message.answer("Пожалуйста, пришли видео не более 15 секунд")
                 return
             photo = message.video.file_id
             media_type = "VIDEO"
-            print("Video received:", photo)
+
         elif message.video_note:
             if message.video_note.duration > 15:
-                await message.answer(("Пожалуйста, пришли видео не более 15 секунд"))
+                await message.answer("Пожалуйста, пришли видео не более 15 секунд")
                 return
             photo = message.video_note.file_id
             media_type = "VIDEO_NOTE"
-            print("Video note received:", photo)
+
+        old_leo = await get_leo(message.from_user.id)
+        print(f"Old photo: {old_leo.photo}")
+
+        success = await update_profile(message.from_user.id, {
+            "photo": photo,
+            "media_type": media_type
+        })
+
+        if success:
+            await message.answer("✅")
+            await start(message, state)
         else:
-            print("No media detected in message")
-            return
-
-
-        print(f"Updating profile for user {message.from_user.id}")
-        print(f"Update data: photo={photo}, media_type={media_type}")
-
-        await update_profile(message.from_user.id, {"photo": photo, "media_type": media_type})
-
-
-        await message.answer("✅")
-
-        await start(message, state)
+            await message.answer("❌ Произошла ошибка при обновлении")
 
     except Exception as e:
-        print("Error in SET_PHOTO handler:", e)
-        await message.answer("❌ Произошла ошибка при обновлении фото/видео")
+        print(f"Error in SET_PHOTO handler: {e}")
+        await message.answer("❌ Произошла ошибка")

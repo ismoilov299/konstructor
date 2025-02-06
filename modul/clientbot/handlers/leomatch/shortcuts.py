@@ -281,18 +281,42 @@ async def bot_show_profile_db(to_uid: int, uid: int, keyboard=types.ReplyKeyboar
 
 
 def _update_profile_sync(leo, kwargs: dict):
-    for key, value in kwargs.items():
-        setattr(leo, key, value)
-    leo.save()
-    return True
 
-async def update_profile(uid: int, kwargs: dict):
     try:
-        leo = await get_leo(uid)
-        await sync_to_async(_update_profile_sync)(leo, kwargs)
+        if 'photo' in kwargs:
+            leo.photo = kwargs['photo']
+
+        if 'media_type' in kwargs:
+            leo.media_type = kwargs['media_type']
+
+        for key, value in kwargs.items():
+            if key not in ['photo', 'media_type']:
+                setattr(leo, key, value)
+
+        leo.save()
+        print(f"Profile updated successfully with: {kwargs}")
         return True
     except Exception as e:
-        print(f"Error updating profile: {e}")
+        print(f"Error in _update_profile_sync: {e}")
+        return False
+
+
+async def update_profile(uid: int, kwargs: dict):
+
+    try:
+        leo = await get_leo(uid)
+
+        print(f"Before update - photo: {leo.photo}, media_type: {leo.media_type}")
+
+        success = await sync_to_async(_update_profile_sync)(leo, kwargs)
+
+        if success:
+            updated_leo = await get_leo(uid)
+            print(f"After update - photo: {updated_leo.photo}, media_type: {updated_leo.media_type}")
+
+        return success
+    except Exception as e:
+        print(f"Error in update_profile: {e}")
         return False
 
 
