@@ -179,10 +179,10 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     try:
         if message.photo:
             file = await bot.get_file(message.photo[-1].file_id)
-            await bot.download_file(file.file_id, file_path)
+            await bot.download_file(file.file_path, file_path)
         elif message.video:
             file = await bot.get_file(message.video.file_id)
-            await bot.download_file(file.file_id, file_path)
+            await bot.download_file(file.file_path, file_path)
 
         print(f"File saved to: {file_path}")
 
