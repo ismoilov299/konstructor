@@ -168,7 +168,6 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         url = message.video.file_id
         type = "VIDEO"
 
-
     print(f"Received media - type: {type}, file_id: {url}")
 
     base_dir = "modul/clientbot/data"
@@ -179,9 +178,11 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
 
     try:
         if message.photo:
-            await message.photo[-1].download(destination_file=file_path)
+            file = await bot.get_file(message.photo[-1].file_id)
+            await bot.download_file(file.file_id, file_path)
         elif message.video:
-            await message.video.download(destination_file=file_path)
+            file = await bot.get_file(message.video.file_id)
+            await bot.download_file(file.file_id, file_path)
 
         print(f"File saved to: {file_path}")
 
