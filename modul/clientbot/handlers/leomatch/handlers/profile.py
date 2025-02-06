@@ -103,22 +103,46 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 @client_bot_router.message(LeomatchMain.SET_PHOTO)
 async def bot_start(message: types.Message, state: FSMContext):
-    photo = ""
-    media_type = ""
-    if message.photo:
-        photo = message.photo[-1].file_id
-        media_type = "PHOTO"
-    elif message.video:
-        if message.video.duration > 15:
-            await message.answer(("Пожалуйста, пришли видео не более 15 секунд"))
+    try:
+        photo = ""
+        media_type = ""
+
+
+        print("Received message type:", message.content_type)
+
+        if message.photo:
+            photo = message.photo[-1].file_id
+            media_type = "PHOTO"
+            print("Photo received:", photo)
+        elif message.video:
+            if message.video.duration > 15:
+                await message.answer(("Пожалуйста, пришли видео не более 15 секунд"))
+                return
+            photo = message.video.file_id
+            media_type = "VIDEO"
+            print("Video received:", photo)
+        elif message.video_note:
+            if message.video_note.duration > 15:
+                await message.answer(("Пожалуйста, пришли видео не более 15 секунд"))
+                return
+            photo = message.video_note.file_id
+            media_type = "VIDEO_NOTE"
+            print("Video note received:", photo)
+        else:
+            print("No media detected in message")
             return
-        photo = message.video.file_id
-        media_type = "VIDEO"
-    elif message.video_note:
-        if message.video_note.duration > 15:
-            await message.answer(("Пожалуйста, пришли видео не более 15 секунд"))
-            return
-        photo = message.video_note.file_id
-        media_type = "VIDEO_NOTE"
-    await update_profile(message.from_user.id, {"photo": photo, "media_type": media_type})
-    await start(message, state)
+
+
+        print(f"Updating profile for user {message.from_user.id}")
+        print(f"Update data: photo={photo}, media_type={media_type}")
+
+        await update_profile(message.from_user.id, {"photo": photo, "media_type": media_type})
+
+
+        await message.answer("✅")
+
+        await start(message, state)
+
+    except Exception as e:
+        print("Error in SET_PHOTO handler:", e)
+        await message.answer("❌ Произошла ошибка при обновлении фото/видео")
