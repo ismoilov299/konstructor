@@ -1105,6 +1105,7 @@ async def start_search(call: types.CallbackQuery, state: FSMContext):
 async def watch_film(call: CallbackQuery, state: FSMContext):
     film_id = int(call.data.split('|')[-1])
     bot = call.bot.me()
+    print(bot)
     film_data = await get_film_for_view(film_id)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[

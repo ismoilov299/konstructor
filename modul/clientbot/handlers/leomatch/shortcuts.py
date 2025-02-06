@@ -229,7 +229,7 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
             )
             await message.answer(caption, **kwargs)
         else:
-            await message.answer_photo(photo)
+            # bot.send_photo()
             await message.answer_photo(
                 photo=photo,
                 caption=caption,
