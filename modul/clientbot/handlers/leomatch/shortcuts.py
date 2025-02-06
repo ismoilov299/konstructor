@@ -214,38 +214,26 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         if keyboard:
             kwargs['reply_markup'] = keyboard
 
-        # Debug uchun
         print(f"Showing profile - media_type: {media_type}, photo: {photo}")
 
         if media_type == "VIDEO":
-            # Videoni yuborish
             await message.answer_video(
                 video=photo,
                 caption=caption,
                 **kwargs
             )
         elif media_type == "VIDEO_NOTE":
-            # Video note yuborish
             await message.answer_video_note(
                 video_note=photo,
                 **kwargs
             )
             await message.answer(caption, **kwargs)
         else:
-            # Rasmni yuborish
-            try:
-                await message.answer_photo(
-                    photo=photo,
-                    caption=caption,
-                    **kwargs
-                )
-            except Exception as photo_error:
-                print(f"Error sending photo: {photo_error}")
-                # Faqat xabarni yuborish
-                await message.answer(
-                    f"❌ Ошибка при отправке фото\n\n{caption}",
-                    **kwargs
-                )
+            await message.answer_photo(
+                photo=photo,
+                caption=caption,
+                **kwargs
+            )
 
     except Exception as e:
         print(f"Error in show_profile: {e}")
