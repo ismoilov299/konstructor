@@ -208,7 +208,7 @@ async def show_media(bot: Bot, to_account: int, from_account: int, text_before: 
 async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
                        type: str, keyboard=None, comment: str = None):
     text = f"\n\nВам сообщение: {comment}" if comment else ""
-    caption = f"{full_name}, {age}, {city}\n{about_me}{text}, "
+    caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
     kwargs = {}
     if keyboard:
         kwargs['reply_markup'] = keyboard
@@ -218,13 +218,21 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
     try:
         if type == "VIDEO":
             file_path = f"{base_dir}/leo{uid}.mp4"
+            if url:
+                file = await message.bot.get_file(url)
+                await message.bot.download_file(file.file_path, file_path)
+
             if os.path.exists(file_path):
-                await message.answer_video(types.FSInputFile(file_path))
-                await message.answer(caption, **kwargs)
+                await message.answer_video(types.FSInputFile(file_path), caption=caption, **kwargs)
             else:
                 raise FileNotFoundError
-        else:
+
+        else:  # Photo
             file_path = f"{base_dir}/leo{uid}.jpg"
+            if url:
+                file = await message.bot.get_file(url)
+                await message.bot.download_file(file.file_path, file_path)
+
             if os.path.exists(file_path):
                 await message.answer_photo(types.FSInputFile(file_path), caption=caption, **kwargs)
             else:
@@ -233,8 +241,8 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
     except FileNotFoundError:
         await message.answer("Извините, медиафайл не найден. Пожалуйста, загрузите фото/видео заново.")
     except Exception as e:
-        await message.answer("Произошла ошибка при отправке медиа. Пожалуйста, попробуйте позже.")
         print(f"Error in show_profile: {e}")
+        await message.answer("Произошла ошибка при отправке медиа. Пожалуйста, попробуйте позже.")
 
 
 async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
