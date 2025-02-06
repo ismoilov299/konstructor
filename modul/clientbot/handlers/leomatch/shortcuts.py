@@ -229,11 +229,13 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
             )
             await message.answer(caption, **kwargs)
         else:
+            await message.answer_photo(photo)
             await message.answer_photo(
                 photo=photo,
                 caption=caption,
                 **kwargs
             )
+
 
     except Exception as e:
         print(f"Error in show_profile: {e}")
