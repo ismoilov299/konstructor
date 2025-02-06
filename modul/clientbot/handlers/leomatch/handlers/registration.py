@@ -153,7 +153,7 @@ async def bot_start(message: types.Message, state: FSMContext):
 @client_bot_router.message(LeomatchRegistration.SEND_PHOTO)
 async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     if not message.photo and not message.video:
-        await message.answer(("Пожалуйста, пришли фото или видео"))
+        await message.answer("Пожалуйста, пришли фото или видео")
         return
 
     url = ""
@@ -163,34 +163,34 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         type = "PHOTO"
     elif message.video:
         if message.video.duration > 15:
-            await message.answer(("Пожалуйста, пришли видео не более 15 секунд"))
+            await message.answer("Пожалуйста, пришли видео не более 15 секунд")
             return
         url = message.video.file_id
         type = "VIDEO"
 
-    await state.update_data(photo=url, media_type=type)
-    bot = await get_current_bot(bot)
-    format = "jpg" if type == "PHOTO" else "mp4"
 
-    # Create base directory if it doesn't exist
+    print(f"Received media - type: {type}, file_id: {url}")
+
     base_dir = "modul/clientbot/data"
     os.makedirs(base_dir, exist_ok=True)
 
+    format = "jpg" if type == "PHOTO" else "mp4"
     file_path = f"{base_dir}/leo{message.from_user.id}.{format}"
 
     try:
-        async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
-            await bot_.download(url, file_path)
+        if message.photo:
+            await message.photo[-1].download(destination_file=file_path)
+        elif message.video:
+            await message.video.download(destination_file=file_path)
 
-        # After successful download, update state and show profile
+        print(f"File saved to: {file_path}")
+
+        await state.update_data(photo=url, media_type=type)
         await save_media(message, state, file_path, type)
 
-    except TelegramNetworkError as e:
-        await message.answer("Произошла ошибка при загрузке медиа. Пожалуйста, попробуйте еще раз.")
-        print(f"Telegram Network Error: {e}")
     except Exception as e:
+        print(f"Error saving media: {e}")
         await message.answer("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
-        print(f"Error: {e}")
 
 
 @client_bot_router.message(F.text == ("Да"), LeomatchRegistration.FINAL)
