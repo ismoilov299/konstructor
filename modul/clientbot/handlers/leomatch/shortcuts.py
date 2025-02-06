@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from aiogram.types import ReplyKeyboardMarkup
+from aiogram.types import ReplyKeyboardMarkup, FSInputFile
 from django.core.files import File
 from django.db.models import Q, F
 import os
@@ -217,25 +217,25 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         print(f"Showing profile - media_type: {media_type}, photo: {photo}")
 
         if media_type == "VIDEO":
+            # File path emas, file_id yuborish
             await message.answer_video(
-                video=photo,
+                video=FSInputFile(photo),  # FSInputFile orqali local faylni yuborish
                 caption=caption,
                 **kwargs
             )
         elif media_type == "VIDEO_NOTE":
             await message.answer_video_note(
-                video_note=photo,
+                video_note=FSInputFile(photo),  # FSInputFile orqali local faylni yuborish
                 **kwargs
             )
             await message.answer(caption, **kwargs)
         else:
-            # bot.send_photo()
+            # Photo uchun ham FSInputFile ishlatamiz
             await message.answer_photo(
-                photo=photo,
+                photo=FSInputFile(photo),  # FSInputFile orqali local faylni yuborish
                 caption=caption,
                 **kwargs
             )
-
 
     except Exception as e:
         print(f"Error in show_profile: {e}")
