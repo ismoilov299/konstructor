@@ -129,7 +129,6 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
             })
             await state.set_state(LeomatchProfiles.INPUT_MESSAGE)
         elif callback_data.action == ProfileActionEnum.REPORT:
-            # I18n ishlatmasdan to'g'ridan-to'g'ri matn beramiz
             kb = InlineKeyboardBuilder()
             kb.row(
                 InlineKeyboardButton(
@@ -239,11 +238,10 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
     await next_like(query.message, state)
 
 
-# Report handler
 @client_bot_router.callback_query(LeomatchProfileAlert.filter(), LeomatchProfiles.LOOCK)
 async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert, state: FSMContext):
     try:
-        if callback_data.action == AlertActionEnum.YES:  # Enum qiymatini tekshiramiz
+        if callback_data.action == "yes":  # stringda tekshiramiz
             sender = await get_leo(callback_data.sender_id)
             account = await get_leo(callback_data.account_id)
 
@@ -252,7 +250,6 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
                 account_user = account.user
 
                 if sender_user and account_user:
-                    # Adminlarga yuborish
                     await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
 
                     report_text = (
@@ -271,12 +268,12 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
             else:
                 await query.message.edit_text("Ошибка: пользователь не найден")
 
-        elif callback_data.action == AlertActionEnum.NO:  # Enum qiymatini tekshiramiz
+        elif callback_data.action == "no":
             await query.message.edit_text("Жалоба отменена")
 
         await next_l(query.message, state)
 
     except Exception as e:
         print(f"Error processing report: {e}")
-        await query.message.edit_text("Жалоба отправлена")
+        await query.message.edit_text("Произошла ошибка")
         await next_l(query.message, state)

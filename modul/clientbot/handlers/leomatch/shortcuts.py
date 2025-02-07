@@ -217,22 +217,20 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         print(f"Showing profile - media_type: {media_type}, photo: {photo}")
 
         if media_type == "VIDEO":
-            # File path emas, file_id yuborish
             await message.answer_video(
-                video=FSInputFile(photo),  # FSInputFile orqali local faylni yuborish
+                video=FSInputFile(photo),
                 caption=caption,
                 **kwargs
             )
         elif media_type == "VIDEO_NOTE":
             await message.answer_video_note(
-                video_note=FSInputFile(photo),  # FSInputFile orqali local faylni yuborish
+                video_note=FSInputFile(photo),
                 **kwargs
             )
             await message.answer(caption, **kwargs)
         else:
-            # Photo uchun ham FSInputFile ishlatamiz
             await message.answer_photo(
-                photo=FSInputFile(photo),  # FSInputFile orqali local faylni yuborish
+                photo=FSInputFile(photo),
                 caption=caption,
                 **kwargs
             )

@@ -31,8 +31,8 @@ class LeomatchLikeAction(CallbackData, prefix="leo-pa"):
 
 class LeomatchProfileAlert(CallbackData, prefix="leo-alert"):
     action: AlertActionEnum
-    sender_id: int = None
-    account_id: int = None
+    sender_id: int | None = None
+    account_id: int | None = None
 
 
 class LeomatchProfileBlock(CallbackData, prefix="leo-block"):
