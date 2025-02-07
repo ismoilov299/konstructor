@@ -35,8 +35,8 @@ def profile_like_action(user_id: int):
 
 
 def profile_alert(sender_id: int, account_id: int):
-    builder = InlineKeyboardBuilder()
-    builder.row(
+    kb = InlineKeyboardBuilder()
+    kb.row(
         InlineKeyboardButton(
             text="Да",
             callback_data=LeomatchProfileAlert(
@@ -48,12 +48,14 @@ def profile_alert(sender_id: int, account_id: int):
         InlineKeyboardButton(
             text="Нет",
             callback_data=LeomatchProfileAlert(
-                action="no"
+                action="no",
+                sender_id=None,
+                account_id=None
             ).pack()
         ),
         width=2
     )
-    return builder.as_markup()
+    return kb.as_markup()
 
 
 def profile_alert_action(sender_id: int, account_id: int):
