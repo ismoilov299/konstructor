@@ -241,7 +241,9 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 @client_bot_router.callback_query(LeomatchProfileAlert.filter(), LeomatchProfiles.LOOCK)
 async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert, state: FSMContext):
     try:
-        if callback_data.action == "yes":  # stringda tekshiramiz
+        print(f"Processing alert with action: {callback_data.action}")  # Debug
+
+        if callback_data.action == "yes":
             sender = await get_leo(callback_data.sender_id)
             account = await get_leo(callback_data.account_id)
 

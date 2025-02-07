@@ -15,9 +15,11 @@ class LikeActionEnum(StrEnum):
     DISLIKE = "DISLIKE"
     REPORT = "REPORT"
 
+
 class AlertActionEnum(StrEnum):
     YES = "yes"
     NO = "no"
+
 
 class LeomatchProfileAction(CallbackData, prefix="leo-pa"):
     action: ProfileActionEnum
@@ -29,11 +31,11 @@ class LeomatchLikeAction(CallbackData, prefix="leo-pa"):
     user_id: int
 
 
+
 class LeomatchProfileAlert(CallbackData, prefix="leo-alert"):
-    action: AlertActionEnum
+    action: str
     sender_id: int | None = None
     account_id: int | None = None
-
 
 class LeomatchProfileBlock(CallbackData, prefix="leo-block"):
     account_id: int = None
