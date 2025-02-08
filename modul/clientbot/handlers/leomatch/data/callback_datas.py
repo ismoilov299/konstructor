@@ -16,9 +16,9 @@ class LikeActionEnum(StrEnum):
     REPORT = "REPORT"
 
 
-class AlertActionEnum(StrEnum):
-    YES = "yes"
-    NO = "no"
+# class AlertActionEnum(StrEnum):
+#     YES = "yes"
+#     NO = "no"
 
 
 class LeomatchProfileAction(CallbackData, prefix="leo-pa"):
