@@ -352,7 +352,7 @@ class Messages(models.Model):
 
 
 class Link_statistic(models.Model):
-    user_id = models.IntegerField()
+    user_id = models.BigIntegerField()
     reg_date = models.DateTimeField(auto_now_add=True)
 
 

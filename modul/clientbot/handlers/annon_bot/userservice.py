@@ -115,11 +115,9 @@ def add_rating_overall(uid):
 def add_link_statistic(uid):
     Link_statistic.objects.create(
         user_id=uid,
-        reg_date=timezone.now().astimezone(moscow_timezone).date()
     )
     add_rating_today(uid)
     add_rating_overall(uid)
-
 
 @sync_to_async
 def add_answer_statistic(uid):

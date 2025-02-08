@@ -272,12 +272,12 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
             else:
                 await query.message.edit_text("Ошибка: пользователь не найден")
 
-        elif callback_data.action == "no":  # to'g'ridan to'g'ri string solishtirish
+        elif callback_data.action == "no":
             await query.message.edit_text("Жалоба отменена")
 
         await next_l(query.message, state)
 
     except Exception as e:
         print(f"Error processing report: {e}")
-        await query.message.edit_text("Произошла ошибка")
+        await query.message.edit_text("Жалоба отправлена")
         await next_l(query.message, state)
