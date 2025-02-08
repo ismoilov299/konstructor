@@ -18,8 +18,7 @@ from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in, pa
 from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
-    add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id, \
-    add_stats
+    add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
 from modul.clientbot.handlers.kino_bot.shortcuts import get_all_channels_sponsors
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt2
 from modul.clientbot.handlers.refs.shortcuts import get_actual_price, get_actual_min_amount
@@ -159,119 +158,120 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start(message: Message, state: FSMContext, bot: Bot):
-   try:
-       logger.info(f"Start command received from user {message.from_user.id}")
-       args = message.text.split(' ')
-       user_id = args[1] if len(args) > 1 else None
+    try:
+        logger.info(f"Start command received from user {message.from_user.id}")
+        args = message.text.split(' ')
+        user_id = args[1] if len(args) > 1 else None
 
-       channels_checker = await check_channels(message)
-       checker = await check_user(message.from_user.id)
+        channels_checker = await check_channels(message)
+        checker = await check_user(message.from_user.id)
 
-       if not channels_checker and not checker:
-           await add_user(message.from_user, str(message.from_user.id))
-       elif channels_checker:
-           if not checker:
-               await add_user(message.from_user, str(message.from_user.id))
+        if not channels_checker and not checker:
+            await add_user(message.from_user, str(message.from_user.id))
+        elif channels_checker:
+            if not checker:
+                await add_user(message.from_user, str(message.from_user.id))
 
-           if user_id:
-               if user_id.startswith('r') and user_id[1:].isdigit():
-                   inviter_id = int(user_id[1:])
-                   inviter = await get_user_by_id(inviter_id)
+            if user_id:
+                if user_id.startswith('r') and user_id[1:].isdigit():
+                    inviter_id = int(user_id[1:])
+                    inviter = await get_user_by_id(inviter_id)
 
-                   if inviter:
-                       with suppress(TelegramForbiddenError):
-                           user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                           await bot.send_message(
-                               chat_id=inviter_id,
-                               text=f"У вас новый {user_link}!"
-                           )
+                    if inviter:
+                        with suppress(TelegramForbiddenError):
+                            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                            await bot.send_message(
+                                chat_id=inviter_id,
+                                text=f"У вас новый {user_link}!"
+                            )
 
-                       try:
-                           @sync_to_async
-                           @transaction.atomic
-                           def update_referral():
-                               try:
-                                   user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
-                                   admin_info = AdminInfo.objects.first()
+                        try:
+                            @sync_to_async
+                            @transaction.atomic
+                            def update_referral():
+                                try:
+                                    user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
+                                    admin_info = AdminInfo.objects.first()
 
-                                   if not admin_info:
-                                       raise ValueError("AdminInfo is not configured in the database.")
+                                    if not admin_info:
+                                        raise ValueError("AdminInfo is not configured in the database.")
 
-                                   user_tg.refs += 1
-                                   user_tg.balance += float(admin_info.price or 10.0)
-                                   user_tg.save()
-                                   logger.info(f"Referral updated successfully for user {inviter_id}")
-                                   return True
-                               except UserTG.DoesNotExist:
-                                   logger.error(f"Inviter with ID {inviter_id} does not exist.")
-                                   return False
-                               except Exception as ex:
-                                   logger.error(f"Unexpected error during referral update: {ex}")
-                                   raise
+                                    user_tg.refs += 1
+                                    user_tg.balance += float(admin_info.price or 10.0)
+                                    user_tg.save()
+                                    logger.info(f"Referral updated successfully for user {inviter_id}")
+                                    return True
+                                except UserTG.DoesNotExist:
+                                    logger.error(f"Inviter with ID {inviter_id} does not exist.")
+                                    return False
+                                except Exception as ex:
+                                    logger.error(f"Unexpected error during referral update: {ex}")
+                                    raise
 
-                           referral_updated = await update_referral()
-                           if referral_updated:
-                               logger.info(f"Referral updated successfully for {inviter_id}")
-                           else:
-                               logger.warning(f"Failed to update referral for {inviter_id}")
+                            referral_updated = await update_referral()
+                            if referral_updated:
+                                logger.info(f"Referral updated successfully for {inviter_id}")
+                            else:
+                                logger.warning(f"Failed to update referral for {inviter_id}")
 
-                       except Exception as e:
-                           logger.error(f"Error updating referral stats: {e}")
+                        except Exception as e:
+                            logger.error(f"Error updating referral stats: {e}")
 
-                   # Yangi foydalanuvchi uchun xabar
-                   me = await bot.get_me()
-                   link = f"https://t.me/{me.username}?start={message.from_user.id}"
-                   await message.bot.send_message(
-                       chat_id=message.from_user.id,
-                       text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-                            f"Твоя личная ссылка:\n👉{link}\n\n"
-                            f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-                            f"других соц сетях, чтобы начать получать сообщения 💬",
-                       parse_mode="html",
-                       reply_markup=await main_menu_bt()
-                   )
+                    # Yangi foydalanuvchi uchun xabar
+                    me = await bot.get_me()
+                    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                    await message.bot.send_message(
+                        chat_id=message.from_user.id,
+                        text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+                             f"Твоя личная ссылка:\n👉{link}\n\n"
+                             f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+                             f"других соц сетях, чтобы начать получать сообщения 💬",
+                        parse_mode="html",
+                        reply_markup=await main_menu_bt()
+                    )
 
-               else:
-                   logger.info(f"Looking up user with ID: {user_id}")
-                   link_user = await get_user_by_id(user_id)
+                # Anonim xabar kelgan bo'lsa
+                else:
+                    logger.info(f"Looking up user with ID: {user_id}")
+                    link_user = await get_user_by_id(user_id)
 
-                   if link_user:
-                       await add_stats(link_user)
-                       greeting = await get_greeting(link_user)
+                    if link_user:
+                        await add_link_statistic(link_user)
+                        greeting = await get_greeting(link_user)
 
-                       await message.bot.send_message(
-                           chat_id=message.from_user.id,
-                           text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>...",
-                           reply_markup=await cancel_in(),
-                           parse_mode="html"
-                       )
+                        await message.bot.send_message(
+                            chat_id=message.from_user.id,
+                            text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>...",
+                            reply_markup=await cancel_in(),
+                            parse_mode="html"
+                        )
 
-                       if greeting:
-                           await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
+                        if greeting:
+                            await message.bot.send_message(chat_id=message.from_user.id, text=greeting)
 
-                       await state.set_state(Links.send_st)
-                       await state.set_data({"link_user": link_user})
-                   else:
-                       logger.error(f"User not found with ID: {user_id}")
+                        await state.set_state(Links.send_st)
+                        await state.set_data({"link_user": link_user})
+                    else:
+                        logger.error(f"User not found with ID: {user_id}")
 
-           else:
-               me = await bot.get_me()
-               link = f"https://t.me/{me.username}?start={message.from_user.id}"
-               await message.bot.send_message(
-                   chat_id=message.from_user.id,
-                   text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-                        f"Твоя личная ссылка:\n👉{link}\n\n"
-                        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-                        f"других соц сетях, чтобы начать получать сообщения 💬",
-                   parse_mode="html",
-                   reply_markup=await main_menu_bt()
-               )
+            else:
+                me = await bot.get_me()
+                link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                await message.bot.send_message(
+                    chat_id=message.from_user.id,
+                    text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+                         f"Твоя личная ссылка:\n👉{link}\n\n"
+                         f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+                         f"других соц сетях, чтобы начать получать сообщения 💬",
+                    parse_mode="html",
+                    reply_markup=await main_menu_bt()
+                )
 
-   except Exception as e:
-       logger.error(f"Error in start handler: {e}", exc_info=True)
-       await message.answer(
-           "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
-       )
+    except Exception as e:
+        logger.error(f"Error in start handler: {e}", exc_info=True)
+        await message.answer(
+            "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
+        )
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel", "pay10", "pay20", "pay50", "pay100", "pay500",
