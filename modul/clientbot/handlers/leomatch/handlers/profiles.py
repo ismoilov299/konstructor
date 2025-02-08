@@ -242,6 +242,7 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert, state: FSMContext):
     try:
         print(f"Processing alert with action: {callback_data.action}")
+
         if callback_data.action == "yes":
             sender = await get_leo(callback_data.sender_id)
             account = await get_leo(callback_data.account_id)
@@ -251,7 +252,6 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
                 account_user = account.user
 
                 if sender_user and account_user:
-                    # Show media to admin
                     await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
 
                     report_text = (
@@ -270,7 +270,7 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
             else:
                 await query.message.edit_text("Ошибка: пользователь не найден")
 
-        elif callback_data.action == "no":
+        elif callback_data.action == "no":  # to'g'ridan to'g'ri string solishtirish
             await query.message.edit_text("Жалоба отменена")
 
         await next_l(query.message, state)
