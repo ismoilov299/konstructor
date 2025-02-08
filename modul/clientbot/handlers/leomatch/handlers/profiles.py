@@ -242,6 +242,8 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert, state: FSMContext):
     try:
         print(f"Processing alert with action: {callback_data.action}")
+        print(f"Callback data full contents: {callback_data}")
+        print(f"Action type: {type(callback_data.action)}")
 
         if callback_data.action == "yes":
             sender = await get_leo(callback_data.sender_id)
