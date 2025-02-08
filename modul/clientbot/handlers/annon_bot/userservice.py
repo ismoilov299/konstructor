@@ -116,8 +116,12 @@ def add_link_statistic(uid):
     Link_statistic.objects.create(
         user_id=uid,
     )
-    add_rating_today(uid)
-    add_rating_overall(uid)
+    return uid
+
+async def add_stats(uid):
+    user_id = await add_link_statistic(uid)
+    await add_rating_today(user_id)
+    await add_rating_overall(user_id)
 
 @sync_to_async
 def add_answer_statistic(uid):
