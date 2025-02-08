@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from modul.clientbot.handlers.leomatch.data.callback_datas import LeomatchLikeAction, LeomatchProfileAction, \
-    LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum, AlertActionEnum
+    LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum
 from aiogram.utils.i18n import gettext as _
 
 
