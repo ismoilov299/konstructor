@@ -292,7 +292,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                                     chat_id=referrer_id,
                                     text=f"У вас новый {user_link}!"
                                 )
-                                print('refs')
+                                print('refs start')
                             except TelegramForbiddenError:
                                 logger.error(f"Cannot send message to user {referrer_id}")
 
