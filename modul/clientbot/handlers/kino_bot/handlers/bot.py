@@ -1030,11 +1030,9 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
-        bot_db = await shortcuts.get_bot(bot)
 
-        # 1. AVVAL kanal tekshiruvi
+        # Faqat kanal tekshiruvi
         channels = await get_channels_for_check()
-        print("Checking channels:", channels)
 
         if channels:
             for channel_id, channel_url in channels:
@@ -1046,77 +1044,23 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     print(f"Channel {channel_id} status: {member.status}")
 
                     if member.status == "left":
-                        await message.bot.send_message(
-                            chat_id=message.from_user.id,
-                            text="Для использования бота подпишитесь на наших спонсоров",
+                        await message.answer(
+                            "Для использования бота подпишитесь на наших спонсоров",
                             reply_markup=await channels_in(channels)
                         )
                         return
-
                 except Exception as e:
                     logger.error(f"Error checking channel {channel_id}: {e}")
                     continue
 
-        # 2. Referral process (faqat kanal tekshiruvidan o'tgandan keyin)
-        if command.args and command.args.isdigit():
-            referrer_id = int(command.args)
-
-            # Foydalanuvchi borligini tekshiramiz
-            user = await shortcuts.get_user(message.from_user.id, message.bot)
-            if user:
-                print(f"Foydalanuvchi mavjud: {message.from_user.id}")
-            else:
-                # Inviterni tekshiramiz
-                inviter = await shortcuts.get_user(referrer_id, message.bot)
-                if inviter and referrer_id != message.from_user.id:
-                    @sync_to_async
-                    @transaction.atomic
-                    def update_referral():
-                        try:
-                            user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
-                            admin_info = AdminInfo.objects.first()
-
-                            if not admin_info:
-                                return False
-
-                            user_tg.refs += 1
-                            user_tg.balance += float(admin_info.price or 10.0)
-                            user_tg.save()
-                            return True
-                        except Exception as ex:
-                            logger.error(f"Error in referral update: {ex}")
-                            return False
-
-                    referral_success = await update_referral()
-
-                    if referral_success:
-                        # Foydalanuvchini saqlaymiz
-                        me = await message.bot.get_me()
-                        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-                        await save_user(
-                            u=message.from_user,
-                            inviter=inviter,
-                            bot=message.bot,
-                            link=new_link
-                        )
-
-                        # Xabarni yuboramiz
-                        try:
-                            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                            await message.bot.send_message(
-                                chat_id=referrer_id,
-                                text=f"У вас новый {user_link}!"
-                            )
-                            print('Referral xabari yuborildi')
-                        except TelegramForbiddenError:
-                            logger.error(f"Cannot send message to user {referrer_id}")
-
-        # 3. Start command
+        # Agar kanallarga obuna bo'lgan bo'lsa
         await start(message, state, bot)
 
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
-        await message.answer("Произошла ошибка. Пожалуйста, попробуйте позже.")
+        await message.answer(
+            "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
+        )
 
 
 
