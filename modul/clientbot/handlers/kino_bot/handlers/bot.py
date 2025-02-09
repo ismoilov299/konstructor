@@ -22,7 +22,7 @@ import re
 from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
-from modul.clientbot.handlers.annon_bot.handlers.bot import check_channels
+from modul.clientbot.handlers.annon_bot.handlers.bot import check_channels, process_referral
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.shortcuts import *
 from modul.clientbot.handlers.kino_bot.keyboards.kb import *
@@ -982,14 +982,28 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['parse_mode'] = "Markdown"
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
-    elif shortcuts.have_one_module(bot_db, "refs"):
+    if shortcuts.have_one_module(bot_db, "refs"):
+
+        # Kanal tekshiruvi o'tgan bo'lsagina referral bilan ishlaymiz
+
+        channels_checker = await check_channels(message)
+
+        if not channels_checker:
+            return
+
         referral = message.text[7:] if message.text and len(message.text) > 7 else None
+
         logger.info(f"Processing start command with referral: {referral}")
 
-        if referral:
-            await start_ref(message, bot=bot, referral=referral)
-        else:
-            await start_ref(message, bot=bot)
+        if referral and referral.isdigit():
+            await process_referral(message, int(referral))
+        me = await bot.get_me()
+        link = f"https://t.me/{me.username}?start={message.from_user.id}"
+        await message.answer(
+            f"🎉 Привет, {message.from_user.first_name}",
+            reply_markup=await main_menu_bt()
+        )
+
         return
 
     elif shortcuts.have_one_module(bot_db, "kino"):
