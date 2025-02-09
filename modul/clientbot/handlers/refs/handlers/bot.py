@@ -223,45 +223,6 @@ async def check_referral_status(user_id: int) -> dict:
     }
 
 
-async def process_referral(message: Message, referrer_id: int):
-    """Process referral rewards and updates"""
-    try:
-        print(f"Processing referral: new user {message.from_user.id} from referrer {referrer_id}")
-
-        # Get referrer's name
-        referrer_name = await get_user_name(referrer_id)
-        if not referrer_name:
-            print(f"Referrer {referrer_id} not found")
-            return False
-
-        # Add referral record
-        await add_ref(message.from_user.id, referrer_id)
-        print(f"Added ref record: {message.from_user.id} -> {referrer_id}")
-
-        # Add user with referral info
-        await add_user(
-            tg_id=message.from_user.id,
-            user_name=message.from_user.first_name,
-            invited=referrer_name,
-            invited_id=referrer_id
-        )
-        print(f"Added new user with referral info")
-
-        # Update referrer's stats and add money
-        success_ref = await plus_ref(referrer_id)
-        print(f"Updated ref count: {success_ref}")
-
-        success_money = await plus_money(referrer_id)
-        print(f"Added money: {success_money}")
-
-        print(f"Successfully processed referral")
-        return True
-
-    except Exception as e:
-        print(f"Error in process_referral: {e}")
-        return False
-
-
 async def start_ref(message: Message, bot: Bot, referral: str = None):
     try:
         print('ishladi')
