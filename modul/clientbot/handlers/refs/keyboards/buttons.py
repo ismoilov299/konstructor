@@ -36,7 +36,6 @@ async def channels_in(all_channels, bot):
     keyboard_builder = InlineKeyboardBuilder()
     for channel_id, _ in all_channels:
         try:
-            # Har bir kanal uchun invite link olish
             chat_info = await bot.get_chat(channel_id)
             invite_link = chat_info.invite_link or f"https://t.me/{chat_info.username}"
             keyboard_builder.button(text="💎Спонсор", url=invite_link)
