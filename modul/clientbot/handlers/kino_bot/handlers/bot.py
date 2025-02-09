@@ -22,6 +22,7 @@ import re
 from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
+from modul.clientbot.handlers.annon_bot.handlers.bot import check_channels
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.shortcuts import *
 from modul.clientbot.handlers.kino_bot.keyboards.kb import *
@@ -1023,14 +1024,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         uid = message.from_user.id
 
         # Avval kanallarni tekshirish
-        sub_status = await check_subs(message.from_user.id, bot)
-        if not sub_status:
-            kb = await get_subs_kb(bot)
-            await message.answer(
-                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
-                reply_markup=kb,
-                parse_mode="HTML"
-            )
+        channels_checker = await check_channels(message)
+        if not channels_checker:
+            logger.info(f"User {uid} needs to subscribe to channels")
             return
 
         # Keyin referral bilan ishlash
@@ -1041,7 +1037,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         user = await shortcuts.get_user(uid, bot)
 
         # Yangi foydalanuvchi va kanallarga a'zo bo'lgan bo'lsagina referral hisoblanadi
-        if not user and sub_status:
+        if not user and channels_checker:
             inviter = None
             if command.args and command.args.isdigit():
                 inviter_id = int(command.args)
