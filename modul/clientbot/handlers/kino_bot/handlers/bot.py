@@ -1031,9 +1031,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
 
-        # Faqat kanal tekshiruvi
+        # Kanal tekshiruvi
         channels = await get_channels_for_check()
-
         if channels:
             for channel_id, channel_url in channels:
                 try:
@@ -1048,12 +1047,16 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                             "Для использования бота подпишитесь на наших спонсоров",
                             reply_markup=await channels_in(channels)
                         )
-                        return
+                        return False
                 except Exception as e:
                     logger.error(f"Error checking channel {channel_id}: {e}")
                     continue
 
-        # Agar kanallarga obuna bo'lgan bo'lsa
+        # MUHIM: start funksiyasiga referral argumentini o'tkazamiz
+        referral = command.args if command and command.args else None
+        if referral:
+            await state.update_data(referral=referral)
+
         await start(message, state, bot)
 
     except Exception as e:
@@ -1061,7 +1064,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         await message.answer(
             "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
         )
-
 
 
 @client_bot_router.callback_query(F.data == 'start_search')
