@@ -42,15 +42,14 @@ async def check_channels(message) -> bool:
         print("Checking channels:", channels)  # Debug uchun
 
         if not channels:
-            await process_referral(message)
             return True
 
         bot_db = await shortcuts.get_bot(message.bot)
         admin_id = bot_db.owner.uid
         if message.from_user.id == admin_id:
-            await process_referral(message)
             return True
 
+        is_subscribed = True
         for channel_id, channel_url in channels:
             try:
                 member = await message.bot.get_chat_member(
@@ -60,6 +59,7 @@ async def check_channels(message) -> bool:
                 print(f"Channel {channel_id} status: {member.status}")
 
                 if member.status == 'left':
+                    is_subscribed = False
                     await message.bot.send_message(
                         chat_id=message.from_user.id,
                         text="Для использования бота подпишитесь на наших спонсоров",
@@ -74,9 +74,14 @@ async def check_channels(message) -> bool:
                 logger.error(f"Error checking subscription: {e}")
                 continue
 
-        # All channel checks passed, process referral
-        await check_and_add(tg_id=message.from_user.id)
-        await process_referral(message)
+        # Only process referral if all channels are subscribed
+        if is_subscribed and hasattr(message, 'command') and message.command.args:
+            try:
+                referrer_id = int(message.command.args)
+                await process_referral(message, referrer_id)
+            except ValueError:
+                logger.error(f"Invalid referral ID: {message.command.args}")
+
         return True
 
     except Exception as e:
@@ -118,60 +123,73 @@ def save_user(u, bot: Bot, link=None, inviter=None):
         raise
 
 
-async def process_referral(message):
+async def process_referral(message: Message, referrer_id: int):
+    """Process referral rewards and updates"""
     try:
-        if not hasattr(message, 'referral_processed'):
-            user = await shortcuts.get_user(message.from_user.id, message.bot)
+        # Check if user already exists
+        user = await shortcuts.get_user(message.from_user.id, message.bot)
+        if user:
+            return False
 
-            if not user and hasattr(message, 'command') and message.command.args:
-                inviter_id = int(message.command.args)
-                inviter = await shortcuts.get_user(inviter_id, message.bot)
+        print(f"Processing referral: new user {message.from_user.id} from referrer {referrer_id}")
 
-                if inviter and inviter_id != message.from_user.id:
-                    @sync_to_async
-                    @transaction.atomic
-                    def update_referral():
-                        try:
-                            user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
-                            admin_info = AdminInfo.objects.first()
+        # Prevent self-referral
+        if referrer_id == message.from_user.id:
+            logger.warning(f"User {referrer_id} tried to refer themselves")
+            return False
 
-                            if not admin_info:
-                                return False
+        # Get referrer
+        inviter = await shortcuts.get_user(referrer_id, message.bot)
+        if not inviter:
+            return False
 
-                            user_tg.refs += 1
-                            user_tg.balance += float(admin_info.price or 10.0)
-                            user_tg.save()
-                            return True
-                        except Exception as ex:
-                            logger.error(f"Error in referral update: {ex}")
-                            return False
+        # Update referrer's stats
+        @sync_to_async
+        @transaction.atomic
+        def update_referral():
+            try:
+                user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
+                admin_info = AdminInfo.objects.first()
 
-                    referral_success = await update_referral()
+                if not admin_info:
+                    return False
 
-                    if referral_success:
-                        try:
-                            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                            await message.bot.send_message(
-                                chat_id=inviter_id,
-                                text=f"У вас новый {user_link}!"
-                            )
-                        except TelegramForbiddenError:
-                            logger.error(f"Cannot send message to user {inviter_id}")
+                user_tg.refs += 1
+                user_tg.balance += float(admin_info.price or 10.0)
+                user_tg.save()
+                return True
+            except Exception as ex:
+                logger.error(f"Error in referral update: {ex}")
+                return False
 
-                    me = await message.bot.get_me()
-                    new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-                    await save_user(
-                        u=message.from_user,
-                        inviter=inviter,
-                        bot=message.bot,
-                        link=new_link
-                    )
+        referral_success = await update_referral()
 
-            # Mark referral as processed to avoid duplicate processing
-            message.referral_processed = True
+        if referral_success:
+            # First save the new user
+            me = await message.bot.get_me()
+            new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+            await save_user(
+                u=message.from_user,
+                inviter=inviter,
+                bot=message.bot,
+                link=new_link
+            )
+
+            # Then send notification
+            try:
+                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                await message.bot.send_message(
+                    chat_id=referrer_id,
+                    text=f"У вас новый {user_link}!"
+                )
+            except TelegramForbiddenError:
+                logger.error(f"Cannot send message to user {referrer_id}")
+
+        return referral_success
 
     except Exception as e:
-        logger.error(f"Error processing referral: {e}")
+        logger.error(f"Error in process_referral: {e}")
+        return False
 
 async def banned(message):
     check = await check_ban(message.from_user.id)
