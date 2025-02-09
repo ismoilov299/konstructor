@@ -12,6 +12,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 from django.db import transaction
 
+from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in, payment_keyboard, main_menu_bt, cancel_in, \
     again_in, payment_amount_keyboard, greeting_in, link_in
@@ -29,23 +30,110 @@ from modul.models import UserTG, AdminInfo
 logger = logging.getLogger(__name__)
 
 
-
-async def check_channels(message):
+async def check_channels(message, referrer_id=None):
     all_channels = await get_channels_for_check()
     if all_channels != []:
         for i in all_channels:
             try:
                 check = await message.bot.get_chat_member(i[0], user_id=message.from_user.id)
                 if check.status in ["left"]:
-                    await message.bot.send_message(chat_id=message.from_user.id,
-                                                   text="Для использования бота подпишитесь на наших спонсоров",
-                                                   reply_markup=await channels_in(all_channels))
+                    await message.bot.send_message(
+                        chat_id=message.from_user.id,
+                        text="Для использования бота подпишитесь на наших спонсоров",
+                        reply_markup=await channels_in(all_channels)
+                    )
                     return False
-
             except:
                 pass
+
+    # Barcha kanallarga obuna bo'lgan, endi referralni tekshiramiz
+    if referrer_id:
+        await process_referral(message, referrer_id)
+
     return True
 
+@sync_to_async
+@transaction.atomic
+def save_user(u, bot: Bot, link=None, inviter=None):
+    try:
+        bot_instance = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
+        if not bot_instance:
+            raise ValueError(f"Bot with token {bot.token} not found")
+
+        user, user_created = models.UserTG.objects.update_or_create(
+            uid=u.id,
+            defaults={
+                "username": u.username,
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+                "user_link": link,
+            }
+        )
+
+        client_user, client_user_created = models.ClientBotUser.objects.update_or_create(
+            uid=u.id,
+            bot=bot_instance,
+            defaults={
+                "user": user,
+                "inviter": inviter,
+                "current_ai_limit": 12 if user_created else 0,
+            }
+        )
+
+        return client_user
+
+    except Exception as e:
+        logger.error(f"Error saving user {u.id}: {e}")
+        raise
+
+async def process_referral(message, referrer_id):
+    try:
+        user = await shortcuts.get_user(message.from_user.id, message.bot)
+
+        if not user and referrer_id:
+            inviter = await shortcuts.get_user(referrer_id, message.bot)
+
+            if inviter and referrer_id != message.from_user.id:
+                @sync_to_async
+                @transaction.atomic
+                def update_referral():
+                    try:
+                        user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
+                        admin_info = AdminInfo.objects.first()
+
+                        if not admin_info:
+                            return False
+
+                        user_tg.refs += 1
+                        user_tg.balance += float(admin_info.price or 10.0)
+                        user_tg.save()
+                        return True
+                    except Exception as ex:
+                        logger.error(f"Error in referral update: {ex}")
+                        return False
+
+                referral_success = await update_referral()
+
+                if referral_success:
+                    try:
+                        user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                        await message.bot.send_message(
+                            chat_id=referrer_id,
+                            text=f"У вас новый {user_link}!"
+                        )
+                    except TelegramForbiddenError:
+                        logger.error(f"Cannot send message to user {referrer_id}")
+
+                me = await message.bot.get_me()
+                new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                await save_user(
+                    u=message.from_user,
+                    inviter=inviter,
+                    bot=message.bot,
+                    link=new_link
+                )
+    except Exception as e:
+        logger.error(f"Error processing referral: {e}")
 
 async def payment(message, amount):
     prices = [LabeledPrice(label="XTR", amount=amount)]

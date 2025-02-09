@@ -1,6 +1,8 @@
 from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton,
                            InlineKeyboardMarkup, InlineKeyboardButton)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+
 async def channels_in(all_channels):
     keyboard_builder = InlineKeyboardBuilder()
     for i in all_channels:
@@ -9,6 +11,7 @@ async def channels_in(all_channels):
         except:
             pass
     keyboard_builder.button(text="Проверить подписки", callback_data="check_chan")
+
     if len(all_channels) < 6:
         keyboard_builder.adjust(1)
     elif len(all_channels) > 6 <= 12:
@@ -22,6 +25,7 @@ async def channels_in(all_channels):
     else:
         keyboard_builder.adjust(6)
     return keyboard_builder.as_markup()
+
 async def main_menu_bt():
     buttons = [
         [KeyboardButton(text="🚀Начать"), KeyboardButton(text="👋Изменить приветствие")],

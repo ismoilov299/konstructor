@@ -1020,14 +1020,19 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
-        bot_db = await shortcuts.get_bot(bot)
-        uid = message.from_user.id
 
-        channels_checker = await check_channels(message)
+        # Referrer ID ni olish
+        referrer_id = None
+        if command.args and command.args.isdigit():
+            referrer_id = int(command.args)
+
+        # Kanallarni tekshirish va referralni process qilish
+        channels_checker = await check_channels(message, referrer_id)
         if not channels_checker:
-            logger.info(f"User {uid} needs to subscribe to channels")
+            logger.info(f"User {message.from_user.id} needs to subscribe to channels")
             return
 
+        # Start command ni ishga tushirish
         await start(message, state, bot)
 
     except Exception as e:
