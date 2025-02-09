@@ -320,8 +320,8 @@ async def info(message: Message):
 
         await message.bot.send_message(
             message.from_user.id,
-            f"👥 Всего пользователей: {user_info[3]}\n"
-            f"📤 Выплачено всего: {all_info[1]}",
+            f"👥 Всего пользователей: {user_info[3]}\n",
+            # f"📤 Выплачено всего: {all_info[1]}",
             reply_markup=await admin_in(admin_user)
         )
 
