@@ -1014,22 +1014,40 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
     await message.answer(text, **kwargs)
 
+
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
         bot_db = await shortcuts.get_bot(bot)
+        uid = message.from_user.id
+
+        # Avval kanallarni tekshirish
+        sub_status = await check_subs(message.from_user.id, bot)
+        if not sub_status:
+            kb = await get_subs_kb(bot)
+            await message.answer(
+                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
+                reply_markup=kb,
+                parse_mode="HTML"
+            )
+            return
+
+        # Keyin referral bilan ishlash
         if command.args:
             logger.info(f"Referral args received: {command.args}")
             await state.update_data(referral=command.args)
-        uid = message.from_user.id
+
         user = await shortcuts.get_user(uid, bot)
-        if not user:
+
+        # Yangi foydalanuvchi va kanallarga a'zo bo'lgan bo'lsagina referral hisoblanadi
+        if not user and sub_status:
             inviter = None
             if command.args and command.args.isdigit():
                 inviter_id = int(command.args)
                 inviter = await shortcuts.get_user(inviter_id, bot)
-                if inviter:
+
+                if inviter and inviter_id != uid:  # O'zini o'zi refer qilishni oldini olish
                     with suppress(TelegramForbiddenError):
                         user_link = html.link('реферал', f'tg://user?id={uid}')
                         await bot.send_message(
@@ -1068,9 +1086,11 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
 
                     except Exception as e:
                         logger.error(f"Error updating referral stats: {e}")
+
             me = await bot.get_me()
             new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
             await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
+
         await start(message, state, bot)
 
     except Exception as e:
