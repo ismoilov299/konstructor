@@ -211,4 +211,15 @@
     <MESSAGE value="qwe" />
     <option name="LAST_COMMIT_MESSAGE" value="qwe" />
   </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/modul/clientbot/handlers/kino_bot/handlers/bot.py</url>
+          <line>1018</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
 </project>

@@ -1023,36 +1023,29 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         bot_db = await shortcuts.get_bot(bot)
         uid = message.from_user.id
 
-        # Avval kanallarni tekshirish
+        # First check channel subscriptions
         channels_checker = await check_channels(message)
         if not channels_checker:
             logger.info(f"User {uid} needs to subscribe to channels")
             return
 
-        # Keyin referral bilan ishlash
+        # Store referral data if present
         if command.args:
             logger.info(f"Referral args received: {command.args}")
             await state.update_data(referral=command.args)
 
         user = await shortcuts.get_user(uid, bot)
 
-        # Yangi foydalanuvchi va kanallarga a'zo bo'lgan bo'lsagina referral hisoblanadi
+        # Process referral only for new users who have subscribed to channels
         if not user and channels_checker:
             inviter = None
             if command.args and command.args.isdigit():
                 inviter_id = int(command.args)
                 inviter = await shortcuts.get_user(inviter_id, bot)
 
-                if inviter and inviter_id != uid:  # O'zini o'zi refer qilishni oldini olish
-                    with suppress(TelegramForbiddenError):
-                        user_link = html.link('реферал', f'tg://user?id={uid}')
-                        await bot.send_message(
-                            chat_id=inviter_id,
-                            text=f"У вас новый {user_link}!"
-                        )
-                        print("kino start")
-
+                if inviter and inviter_id != uid:  # Prevent self-referral
                     try:
+                        # First update the referral stats
                         @sync_to_async
                         @transaction.atomic
                         def update_referral():
@@ -1076,8 +1069,16 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 raise
 
                         referral_updated = await update_referral()
+
+                        # Only send notification if referral update was successful
                         if referral_updated:
-                            logger.info(f"Referral updated successfully for {inviter_id}")
+                            with suppress(TelegramForbiddenError):
+                                user_link = html.link('реферал', f'tg://user?id={uid}')
+                                await bot.send_message(
+                                    chat_id=inviter_id,
+                                    text=f"У вас новый {user_link}!"
+                                )
+                            logger.info(f"Referral notification sent to {inviter_id}")
                         else:
                             logger.warning(f"Failed to update referral for {inviter_id}")
 
