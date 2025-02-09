@@ -94,24 +94,29 @@ def save_user(u, bot: Bot, link=None, inviter=None):
 
 
 async def process_referral(message, referrer_id):
-    """Markazlashgan referral logikasi"""
     try:
-        # 1. Avval foydalanuvchi borligini tekshiramiz
-        user = await shortcuts.get_user(message.from_user.id, message.bot)
-        if user:
-            return False  # Agar foydalanuvchi mavjud bo'lsa, referral hisoblanmaydi
-
-        # 2. Inviterni tekshiramiz
-        inviter = await shortcuts.get_user(referrer_id, message.bot)
-        if not inviter or referrer_id == message.from_user.id:
-            return False
-
-        # 3. Kanal obunasini tekshiramiz
         channels_checker = await check_channels(message)
         if not channels_checker:
+            print("Kanal obunasi tekshiruvidan o'tmadi")
             return False
 
-        # 4. Referral statistikasini yangilaymiz
+        user = await shortcuts.get_user(message.from_user.id, message.bot)
+        if user:
+            print(f"Foydalanuvchi avvaldan mavjud: {message.from_user.id}")
+            return False
+        inviter = await shortcuts.get_user(referrer_id, message.bot)
+        if not inviter or referrer_id == message.from_user.id:
+            print(f"Inviter noto'g'ri: {referrer_id}")
+            return False
+        print(f"Yangi foydalanuvchini saqlash: {message.from_user.id}")
+        me = await message.bot.get_me()
+        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+        await save_user(
+            u=message.from_user,
+            inviter=inviter,
+            bot=message.bot,
+            link=new_link
+        )
         @sync_to_async
         @transaction.atomic
         def update_referral():
@@ -130,28 +135,18 @@ async def process_referral(message, referrer_id):
                 logger.error(f"Error in referral update: {ex}")
                 return False
 
+        print(f"Referral statistikasini yangilash: {referrer_id}")
         referral_success = await update_referral()
         if not referral_success:
+            print("Referral statistikasi yangilanmadi")
             return False
-
-        # 5. Yangi foydalanuvchini saqlaymiz
-        me = await message.bot.get_me()
-        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-        await save_user(
-            u=message.from_user,
-            inviter=inviter,
-            bot=message.bot,
-            link=new_link
-        )
-
-        # 6. Faqat MUVAFFAQIYATLI bo'lganda xabar yuboramiz
         try:
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
             await message.bot.send_message(
                 chat_id=referrer_id,
                 text=f"У вас новый {user_link}!"
             )
-            print('process anon')
+            print('Referral xabari yuborildi')
             logger.info(f"Referral notification sent to {referrer_id}")
         except TelegramForbiddenError:
             logger.error(f"Cannot send message to user {referrer_id}")
@@ -161,7 +156,6 @@ async def process_referral(message, referrer_id):
     except Exception as e:
         logger.error(f"Error processing referral: {e}")
         return False
-
 
 
 async def payment(message, amount):
