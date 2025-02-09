@@ -184,6 +184,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                                 chat_id=inviter_id,
                                 text=f"У вас новый {user_link}!"
                             )
+                            print("anon start")
 
                         try:
                             @sync_to_async

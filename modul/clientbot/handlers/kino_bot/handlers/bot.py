@@ -1050,6 +1050,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                             chat_id=inviter_id,
                             text=f"У вас новый {user_link}!"
                         )
+                        print("kino start")
 
                     try:
                         @sync_to_async

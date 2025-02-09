@@ -127,6 +127,7 @@ async def on_start(message: Message, command: CommandObject, state: FSMContext, 
                             chat_id=inviter_id,
                             text=f"У вас новый {user_link}!"
                         )
+                        print("main start")
 
                     ref_success = await plus_ref(inviter_id)
                     if ref_success:
