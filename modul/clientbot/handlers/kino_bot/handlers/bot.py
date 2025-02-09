@@ -1023,71 +1023,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         bot_db = await shortcuts.get_bot(bot)
         uid = message.from_user.id
 
-        # First check channel subscriptions
         channels_checker = await check_channels(message)
         if not channels_checker:
             logger.info(f"User {uid} needs to subscribe to channels")
             return
-
-        # Store referral data if present
-        if command.args:
-            logger.info(f"Referral args received: {command.args}")
-            await state.update_data(referral=command.args)
-
-        user = await shortcuts.get_user(uid, bot)
-
-        # Process referral only for new users who have subscribed to channels
-        if not user and channels_checker:
-            inviter = None
-            if command.args and command.args.isdigit():
-                inviter_id = int(command.args)
-                inviter = await shortcuts.get_user(inviter_id, bot)
-
-                if inviter and inviter_id != uid:  # Prevent self-referral
-                    try:
-                        # First update the referral stats
-                        @sync_to_async
-                        @transaction.atomic
-                        def update_referral():
-                            try:
-                                user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
-                                admin_info = AdminInfo.objects.first()
-
-                                if not admin_info:
-                                    raise ValueError("AdminInfo is not configured in the database.")
-
-                                user_tg.refs += 1
-                                user_tg.balance += float(admin_info.price or 10.0)
-                                user_tg.save()
-                                logger.info(f"Referral updated successfully for user {inviter_id}")
-                                return True
-                            except UserTG.DoesNotExist:
-                                logger.error(f"Inviter with ID {inviter_id} does not exist.")
-                                return False
-                            except Exception as ex:
-                                logger.error(f"Unexpected error during referral update: {ex}")
-                                raise
-
-                        referral_updated = await update_referral()
-
-                        # Only send notification if referral update was successful
-                        if referral_updated:
-                            with suppress(TelegramForbiddenError):
-                                user_link = html.link('реферал', f'tg://user?id={uid}')
-                                await bot.send_message(
-                                    chat_id=inviter_id,
-                                    text=f"У вас новый {user_link}!"
-                                )
-                            logger.info(f"Referral notification sent to {inviter_id}")
-                        else:
-                            logger.warning(f"Failed to update referral for {inviter_id}")
-
-                    except Exception as e:
-                        logger.error(f"Error updating referral stats: {e}")
-
-            me = await bot.get_me()
-            new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-            await save_user(u=message.from_user, inviter=inviter, bot=bot, link=new_link)
 
         await start(message, state, bot)
 

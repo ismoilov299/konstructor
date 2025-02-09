@@ -1,7 +1,11 @@
 import aiogram
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
+from django.db import transaction
+from django.utils import html
+
+from modul import models
 from modul.clientbot.handlers.refs.keyboards.buttons import *
 from modul.clientbot.handlers.refs.shortcuts import *
 from modul.clientbot.handlers.refs.data.states import PaymentState
@@ -38,11 +42,13 @@ async def check_channels(message) -> bool:
         print("Checking channels:", channels)  # Debug uchun
 
         if not channels:
+            await process_referral(message)
             return True
 
         bot_db = await shortcuts.get_bot(message.bot)
         admin_id = bot_db.owner.uid
         if message.from_user.id == admin_id:
+            await process_referral(message)
             return True
 
         for channel_id, channel_url in channels:
@@ -68,12 +74,104 @@ async def check_channels(message) -> bool:
                 logger.error(f"Error checking subscription: {e}")
                 continue
 
+        # All channel checks passed, process referral
         await check_and_add(tg_id=message.from_user.id)
+        await process_referral(message)
         return True
 
     except Exception as e:
         logger.error(f"General error in check_channels: {e}")
         return False
+
+@sync_to_async
+@transaction.atomic
+def save_user(u, bot: Bot, link=None, inviter=None):
+    try:
+        bot_instance = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
+        if not bot_instance:
+            raise ValueError(f"Bot with token {bot.token} not found")
+
+        user, user_created = models.UserTG.objects.update_or_create(
+            uid=u.id,
+            defaults={
+                "username": u.username,
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+                "user_link": link,
+            }
+        )
+
+        client_user, client_user_created = models.ClientBotUser.objects.update_or_create(
+            uid=u.id,
+            bot=bot_instance,
+            defaults={
+                "user": user,
+                "inviter": inviter,
+                "current_ai_limit": 12 if user_created else 0,
+            }
+        )
+
+        return client_user
+
+    except Exception as e:
+        logger.error(f"Error saving user {u.id}: {e}")
+        raise
+
+
+async def process_referral(message):
+    try:
+        if not hasattr(message, 'referral_processed'):
+            user = await shortcuts.get_user(message.from_user.id, message.bot)
+
+            if not user and hasattr(message, 'command') and message.command.args:
+                inviter_id = int(message.command.args)
+                inviter = await shortcuts.get_user(inviter_id, message.bot)
+
+                if inviter and inviter_id != message.from_user.id:
+                    @sync_to_async
+                    @transaction.atomic
+                    def update_referral():
+                        try:
+                            user_tg = UserTG.objects.select_for_update().get(uid=inviter_id)
+                            admin_info = AdminInfo.objects.first()
+
+                            if not admin_info:
+                                return False
+
+                            user_tg.refs += 1
+                            user_tg.balance += float(admin_info.price or 10.0)
+                            user_tg.save()
+                            return True
+                        except Exception as ex:
+                            logger.error(f"Error in referral update: {ex}")
+                            return False
+
+                    referral_success = await update_referral()
+
+                    if referral_success:
+                        try:
+                            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                            await message.bot.send_message(
+                                chat_id=inviter_id,
+                                text=f"У вас новый {user_link}!"
+                            )
+                        except TelegramForbiddenError:
+                            logger.error(f"Cannot send message to user {inviter_id}")
+
+                    me = await message.bot.get_me()
+                    new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                    await save_user(
+                        u=message.from_user,
+                        inviter=inviter,
+                        bot=message.bot,
+                        link=new_link
+                    )
+
+            # Mark referral as processed to avoid duplicate processing
+            message.referral_processed = True
+
+    except Exception as e:
+        logger.error(f"Error processing referral: {e}")
 
 async def banned(message):
     check = await check_ban(message.from_user.id)
