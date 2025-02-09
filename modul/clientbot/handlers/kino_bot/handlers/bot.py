@@ -992,9 +992,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             return
 
         referral = message.text[7:] if message.text and len(message.text) > 7 else None
-
         logger.info(f"Processing start command with referral: {referral}")
-
         if referral and referral.isdigit():
             await process_referral(message, int(referral))
         me = await bot.get_me()

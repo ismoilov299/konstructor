@@ -93,30 +93,16 @@ def save_user(u, bot: Bot, link=None, inviter=None):
         raise
 
 
-async def process_referral(message, referrer_id):
+async def process_referral(message: Message, referrer_id: int):
     try:
-        channels_checker = await check_channels(message)
-        if not channels_checker:
-            print("Kanal obunasi tekshiruvidan o'tmadi")
-            return False
-
         user = await shortcuts.get_user(message.from_user.id, message.bot)
         if user:
-            print(f"Foydalanuvchi avvaldan mavjud: {message.from_user.id}")
+            print(f"Foydalanuvchi mavjud: {message.from_user.id}")
             return False
         inviter = await shortcuts.get_user(referrer_id, message.bot)
         if not inviter or referrer_id == message.from_user.id:
-            print(f"Inviter noto'g'ri: {referrer_id}")
+            print(f"Inviter xato: {referrer_id}")
             return False
-        print(f"Yangi foydalanuvchini saqlash: {message.from_user.id}")
-        me = await message.bot.get_me()
-        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-        await save_user(
-            u=message.from_user,
-            inviter=inviter,
-            bot=message.bot,
-            link=new_link
-        )
         @sync_to_async
         @transaction.atomic
         def update_referral():
@@ -135,11 +121,18 @@ async def process_referral(message, referrer_id):
                 logger.error(f"Error in referral update: {ex}")
                 return False
 
-        print(f"Referral statistikasini yangilash: {referrer_id}")
         referral_success = await update_referral()
         if not referral_success:
-            print("Referral statistikasi yangilanmadi")
+            print("Referral yangilanmadi")
             return False
+        me = await message.bot.get_me()
+        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+        await save_user(
+            u=message.from_user,
+            inviter=inviter,
+            bot=message.bot,
+            link=new_link
+        )
         try:
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
             await message.bot.send_message(
