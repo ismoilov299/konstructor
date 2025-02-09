@@ -31,30 +31,28 @@ from modul.models import UserTG, AdminInfo
 logger = logging.getLogger(__name__)
 
 
-async def check_channels(message, referrer_id=None):
+async def check_channels(message):
     all_channels = await get_channels_for_check()
-    is_subscribed = True
 
-    if all_channels:
-        for i in all_channels:
-            try:
-                check = await message.bot.get_chat_member(i[0], user_id=message.from_user.id)
-                print(f"Channel {i[0]} status: {check.status}")
+    if not all_channels:
+        return True
 
-                if check.status == "left":
-                    is_subscribed = False
-                    await message.bot.send_message(
-                        chat_id=message.from_user.id,
-                        text="Для использования бота подпишитесь на наших спонсоров",
-                        reply_markup=await channels_in(all_channels)
-                    )
-                    return False
-            except Exception as e:
-                print(f"Error checking channel {i[0]}: {e}")
-                continue
+    for i in all_channels:
+        try:
+            check = await message.bot.get_chat_member(i[0], user_id=message.from_user.id)
+            print(f"Channel {i[0]} status: {check.status}")
 
-    if is_subscribed and referrer_id:
-        await process_referral(message, referrer_id)
+            if check.status == "left":
+                await message.bot.send_message(
+                    chat_id=message.from_user.id,
+                    text="Для использования бота подпишитесь на наших спонсоров",
+                    reply_markup=await channels_in(all_channels)
+                )
+                return False
+
+        except Exception as e:
+            print(f"Error checking channel {i[0]}: {e}")
+            continue
 
     return True
 
@@ -139,7 +137,7 @@ async def process_referral(message: Message, referrer_id: int):
                 chat_id=referrer_id,
                 text=f"У вас новый {user_link}!"
             )
-            print('Referral xabari yuborildi')
+            print('Referral xabari yuborildi annon bot.py')
             logger.info(f"Referral notification sent to {referrer_id}")
         except TelegramForbiddenError:
             logger.error(f"Cannot send message to user {referrer_id}")
