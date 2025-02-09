@@ -115,7 +115,6 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
 
 @sync_to_async
 def remove_invalid_channel(channel_id: int):
-    """Mavjud bo'lmagan kanalni bazadan o'chirish"""
     try:
         ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
         logger.info(f"Removed invalid channel {channel_id} from database")
@@ -158,8 +157,6 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
             return False
 
     return True
-
-# Callback handler
 @client_bot_router.callback_query(lambda c: c.data == 'check_subs')
 async def check_subs_callback(callback: types.CallbackQuery, state: FSMContext):
     try:
@@ -974,17 +971,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
 
-    # sub_status = await check_subs(message.from_user.id, bot)
-    #
-    # if not sub_status:
-    #     kb = await get_subs_kb(bot)
-    #     await message.answer(
-    #         '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
-    #         reply_markup=kb,
-    #         parse_mode="HTML"
-    #     )
-    #     return
-
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
@@ -1204,7 +1190,7 @@ async def inline_film_requests(query: InlineQuery):
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text='Смотреть', url=film_data['view_link'])],
-            [InlineKeyboardButton(text='🔥 Лучшие фильмы 🔥', url='https://t.me/KinoPlay_HD')],
+            # [InlineKeyboardButton(text='🔥 Лучшие фильмы 🔥', url='https://t.me/KinoPlay_HD')],
             [InlineKeyboardButton(text='🔍 Поиск фильмов 🔍', url=f'https://t.me/{bot}')]
         ])
 

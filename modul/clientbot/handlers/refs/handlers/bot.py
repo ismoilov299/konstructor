@@ -147,76 +147,75 @@ async def process_referral(message: Message, referrer_id: int):
 
 
 async def start_ref(message: Message, bot: Bot, referral: str = None):
-    """Handle /start command with referral"""
     try:
-        # Check requirements
-        print('ishladi')
-        channels_checker = await check_channels(message)
-        print(channels_checker)
-        is_registered = await check_user(message.from_user.id)
-        is_banned = await check_ban(message.from_user.id)
+        logger.info(f"Start ref initiated for user {message.from_user.id} with referral {referral}")
 
-        if not channels_checker or is_banned:
+        is_banned = await check_ban(message.from_user.id)
+        if is_banned:
+            logger.warning(f"Banned user tried to start: {message.from_user.id}")
             return
 
-        if referral and not is_registered:
-            try:
-                referrer_id = int(referral)
+        is_registered = await check_user(message.from_user.id)
 
-                # Log referral process
-                logger.info(f"Processing referral: {message.from_user.id} invited by {referrer_id}")
+        channels_checker = await check_channels(message)
+        if not channels_checker:
+            logger.info(f"User {message.from_user.id} needs to subscribe to channels")
+            return
 
-                # Prevent self-referral
-                if referrer_id == message.from_user.id:
-                    logger.warning(f"User {referrer_id} tried to refer themselves")
-                    await add_user(
-                        tg_id=message.from_user.id,
-                        user_name=message.from_user.first_name
-                    )
-                else:
-                    # Get referrer's name
-                    referrer_name = await get_user_name(referrer_id)
-                    if referrer_name:
-                        # Add new user with referral info
-                        await add_user(
-                            tg_id=message.from_user.id,
-                            user_name=message.from_user.first_name,
-                            invited=referrer_name,
-                            invited_id=referrer_id
-                        )
-
-                        # Add referral record
-                        await add_ref(message.from_user.id, referrer_id)
-
-                        # Update referrer stats and add bonus
-                        await plus_ref(referrer_id)
-                        await plus_money(referrer_id)
-
-                        logger.info(f"Successfully processed referral for {referrer_id}")
-                    else:
-                        logger.error(f"Referrer {referrer_id} not found")
+        if channels_checker and not is_registered:
+            if referral:
+                try:
+                    referrer_id = int(referral)
+                    logger.info(f"Processing referral: {message.from_user.id} invited by {referrer_id}")
+                    if referrer_id == message.from_user.id:
+                        logger.warning(f"User {referrer_id} tried to refer themselves")
                         await add_user(
                             tg_id=message.from_user.id,
                             user_name=message.from_user.first_name
                         )
+                    else:
+                        referrer_name = await get_user_name(referrer_id)
+                        if referrer_name:
+                            await add_user(
+                                tg_id=message.from_user.id,
+                                user_name=message.from_user.first_name,
+                                invited=referrer_name,
+                                invited_id=referrer_id
+                            )
 
-            except ValueError:
-                logger.error(f"Invalid referral ID: {referral}")
+                            await add_ref(message.from_user.id, referrer_id)
+                            await plus_ref(referrer_id)
+                            await plus_money(referrer_id)
+
+                            logger.info(f"Successfully processed referral for {referrer_id}")
+                        else:
+                            logger.error(f"Referrer {referrer_id} not found")
+                            await add_user(
+                                tg_id=message.from_user.id,
+                                user_name=message.from_user.first_name
+                            )
+
+                except ValueError:
+                    logger.error(f"Invalid referral ID: {referral}")
+                    await add_user(
+                        tg_id=message.from_user.id,
+                        user_name=message.from_user.first_name
+                    )
+            else:
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name
                 )
-        elif not is_registered:
-            # Add new user without referral
-            await add_user(
-                tg_id=message.from_user.id,
-                user_name=message.from_user.first_name
-            )
 
-        await message.answer(
-            f"🎉 Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
+            await message.answer(
+                f"🎉 Привет, {message.from_user.first_name}",
+                reply_markup=await main_menu_bt()
+            )
+        elif is_registered:
+            await message.answer(
+                f"С возвращением, {message.from_user.first_name}!",
+                reply_markup=await main_menu_bt()
+            )
 
     except Exception as e:
         logger.error(f"Error in start_ref: {e}")
