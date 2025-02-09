@@ -93,56 +93,73 @@ def save_user(u, bot: Bot, link=None, inviter=None):
 
 
 async def process_referral(message, referrer_id):
+    """Markazlashgan referral logikasi"""
     try:
+        # 1. Avval foydalanuvchi borligini tekshiramiz
         user = await shortcuts.get_user(message.from_user.id, message.bot)
+        if user:
+            return False  # Agar foydalanuvchi mavjud bo'lsa, referral hisoblanmaydi
 
-        if not user and referrer_id:
-            inviter = await shortcuts.get_user(referrer_id, message.bot)
+        # 2. Inviterni tekshiramiz
+        inviter = await shortcuts.get_user(referrer_id, message.bot)
+        if not inviter or referrer_id == message.from_user.id:
+            return False
 
-            if inviter and referrer_id != message.from_user.id:
-                @sync_to_async
-                @transaction.atomic
-                def update_referral():
-                    try:
-                        user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
-                        admin_info = AdminInfo.objects.first()
+        # 3. Kanal obunasini tekshiramiz
+        channels_checker = await check_channels(message)
+        if not channels_checker:
+            return False
 
-                        if not admin_info:
-                            return False
+        # 4. Referral statistikasini yangilaymiz
+        @sync_to_async
+        @transaction.atomic
+        def update_referral():
+            try:
+                user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
+                admin_info = AdminInfo.objects.first()
 
-                        user_tg.refs += 1
-                        user_tg.balance += float(admin_info.price or 10.0)
-                        user_tg.save()
-                        return True
-                    except Exception as ex:
-                        logger.error(f"Error in referral update: {ex}")
-                        return False
+                if not admin_info:
+                    return False
 
-                referral_success = await update_referral()
+                user_tg.refs += 1
+                user_tg.balance += float(admin_info.price or 10.0)
+                user_tg.save()
+                return True
+            except Exception as ex:
+                logger.error(f"Error in referral update: {ex}")
+                return False
 
-                if referral_success:
-                    try:
-                        # Save user info before sending notification
-                        me = await message.bot.get_me()
-                        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-                        await save_user(
-                            u=message.from_user,
-                            inviter=inviter,
-                            bot=message.bot,
-                            link=new_link
-                        )
+        referral_success = await update_referral()
+        if not referral_success:
+            return False
 
-                        # Send notification after successful save
-                        user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                        await message.bot.send_message(
-                            chat_id=referrer_id,
-                            text=f"У вас новый {user_link}!"
-                        )
-                    except TelegramForbiddenError:
-                        logger.error(f"Cannot send message to user {referrer_id}")
+        # 5. Yangi foydalanuvchini saqlaymiz
+        me = await message.bot.get_me()
+        new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+        await save_user(
+            u=message.from_user,
+            inviter=inviter,
+            bot=message.bot,
+            link=new_link
+        )
+
+        # 6. Faqat MUVAFFAQIYATLI bo'lganda xabar yuboramiz
+        try:
+            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+            await message.bot.send_message(
+                chat_id=referrer_id,
+                text=f"У вас новый {user_link}!"
+            )
+            logger.info(f"Referral notification sent to {referrer_id}")
+        except TelegramForbiddenError:
+            logger.error(f"Cannot send message to user {referrer_id}")
+
+        return True
 
     except Exception as e:
         logger.error(f"Error processing referral: {e}")
+        return False
+
 
 
 async def payment(message, amount):
