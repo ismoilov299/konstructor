@@ -182,6 +182,7 @@ async def process_referral(message: Message, referrer_id: int):
                     chat_id=referrer_id,
                     text=f"У вас новый {user_link}!"
                 )
+                print('progress ')
             except TelegramForbiddenError:
                 logger.error(f"Cannot send message to user {referrer_id}")
 

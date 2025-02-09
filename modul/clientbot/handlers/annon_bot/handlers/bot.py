@@ -11,6 +11,7 @@ from aiogram.types import Message, BotCommand, CallbackQuery, LabeledPrice
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 from django.db import transaction
+from openpyxl.styles.builtins import percent
 
 from modul import models
 from modul.clientbot import shortcuts
@@ -150,6 +151,7 @@ async def process_referral(message, referrer_id):
                 chat_id=referrer_id,
                 text=f"У вас новый {user_link}!"
             )
+            print('process anon')
             logger.info(f"Referral notification sent to {referrer_id}")
         except TelegramForbiddenError:
             logger.error(f"Cannot send message to user {referrer_id}")
