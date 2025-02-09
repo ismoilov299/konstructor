@@ -986,7 +986,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
     if shortcuts.have_one_module(bot_db, "refs"):
 
-        # Kanal tekshiruvi o'tgan bo'lsagina referral bilan ishlaymiz
 
         channels_checker = await check_channels(message)
 
@@ -999,10 +998,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             await process_referral(message, int(referral))
         me = await bot.get_me()
         link = f"https://t.me/{me.username}?start={message.from_user.id}"
-        await message.answer(
-            f"🎉 Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
+        await start_ref(message, bot, referral)
 
         return
 
