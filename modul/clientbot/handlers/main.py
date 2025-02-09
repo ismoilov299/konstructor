@@ -13,8 +13,7 @@ from modul.clientbot.data.callback_datas import MainMenuCallbackData
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.handlers.bot import start_kino_bot
 from modul.clientbot.handlers.refs.handlers.bot import start_ref
-from modul.clientbot.handlers.refs.keyboards.buttons import channels_in
-from modul.clientbot.handlers.refs.shortcuts import plus_money, plus_ref, get_channels_for_check, check_and_add
+from modul.clientbot.handlers.refs.shortcuts import plus_money, plus_ref
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.data.states import Download
 from modul.loader import client_bot_router
@@ -102,72 +101,26 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         logger.error(f"Error in start function: {e}")
         raise
 
-async def check_channels(message) -> bool:
-    try:
-        channels = await get_channels_for_check()
-        print("Checking channels:", channels)  # Debug uchun
-
-        if not channels:
-            return True
-
-        bot_db = await shortcuts.get_bot(message.bot)
-        admin_id = bot_db.owner.uid
-        if message.from_user.id == admin_id:
-            return True
-
-        for channel_id, channel_url in channels:
-            try:
-                member = await message.bot.get_chat_member(
-                    chat_id=channel_id,
-                    user_id=message.from_user.id
-                )
-                print(f"Channel {channel_id} status: {member.status}")
-
-                if member.status == 'left':
-                    await message.bot.send_message(
-                        chat_id=message.from_user.id,
-                        text="Для использования бота подпишитесь на наших спонсоров",
-                        reply_markup=await channels_in(channels, message.bot)
-                    )
-                    return False
-
-            except TelegramBadRequest as e:
-                logger.error(f"Error checking channel {channel_id}: {e}")
-                continue
-            except Exception as e:
-                logger.error(f"Error checking subscription: {e}")
-                continue
-
-        await check_and_add(tg_id=message.from_user.id)
-        return True
-
-    except Exception as e:
-        logger.error(f"General error in check_channels: {e}")
-        return False
 
 @client_bot_router.message(CommandStart())
 async def on_start(message: Message, command: CommandObject, state: FSMContext, bot: Bot):
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
-
         bot_db = await shortcuts.get_bot(bot)
+
+        if command.args:
+            logger.info(f"Referral args received: {command.args}")
+            await state.update_data(referral=command.args)
+
         uid = message.from_user.id
         user = await shortcuts.get_user(uid, bot)
 
-        channels_checker = await check_channels(message)
-
-        if not channels_checker:
-            logger.info(f"User {uid} needs to subscribe to channels")
-            return
-
-        if not user and channels_checker:
+        if not user:
             inviter = None
             if command.args and command.args.isdigit():
                 inviter_id = int(command.args)
                 inviter = await shortcuts.get_user(inviter_id, bot)
-
-                if inviter and inviter_id != uid:  # O'zini o'zi refer qilishni oldini olish
-                    # Inviter ga xabar yuborish
+                if inviter:
                     with suppress(TelegramForbiddenError):
                         user_link = html.link('реферал', f'tg://user?id={uid}')
                         await bot.send_message(
@@ -188,11 +141,6 @@ async def on_start(message: Message, command: CommandObject, state: FSMContext, 
                         logger.error(f"Failed to update balance for user {inviter_id}")
 
             await save_user(u=message.from_user, inviter=inviter, bot=bot)
-            logger.info(f"New user saved: {uid}, inviter: {inviter.uid if inviter else None}")
-
-        if command.args:
-            logger.info(f"Referral args received: {command.args}")
-            await state.update_data(referral=command.args)
 
         await start(message, state, bot)
 
