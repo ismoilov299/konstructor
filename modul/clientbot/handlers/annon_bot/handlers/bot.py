@@ -118,7 +118,6 @@ async def process_referral(message: Message, referral_id: int):
     inviter = await get_user_by_id(referral_id)
     if inviter:
         try:
-            print('119 qator anon bot')
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
             await message.bot.send_message(
                 chat_id=referral_id,
@@ -127,7 +126,7 @@ async def process_referral(message: Message, referral_id: int):
             )
             logger.info(f"Referral notification sent to user {referral_id}")
 
-            await update_referral_stats(referral_id)  # Inviter o'rniga referral_id ni yuboramiz
+            await update_referral_stats(referral_id)
             logger.info(f"Referral stats updated for user {referral_id}")
         except Exception as e:
             logger.error(f"Error processing referral: {e}")
@@ -244,6 +243,7 @@ async def check_all_subscriptions(user_id, bot):
             logger.error(f"Error checking channel {channel[0]} for user {user_id}: {e}")
     return True
 
+
 async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
     subscribed = await check_all_subscriptions(message.from_user.id, bot)
     if not subscribed:
@@ -258,6 +258,12 @@ async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
         referral = data.get('referral')
         if referral:
             await process_referral(message, int(referral))
+
+        # Foydalanuvchini saqlash
+        new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+        link_for_db = new_link[new_link.index("=") + 1:]
+        await add_user(message.from_user, link_for_db)
+
         await show_main_menu(message, bot)
 
 async def process_existing_user(message: types.Message, bot: Bot):
