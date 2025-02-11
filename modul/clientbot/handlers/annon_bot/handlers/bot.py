@@ -333,7 +333,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                         reply_markup=await main_menu_bt()
                     )
 
-                # Anonim xabar kelgan bo'lsa
                 else:
                     logger.info(f"Looking up user with ID: {user_id}")
                     link_user = await get_user_by_id(user_id)

@@ -973,7 +973,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     uid = message.from_user.id
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
-
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
@@ -1031,7 +1030,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
     try:
         logger.info(f"Start command received from user {message.from_user.id}")
 
-        # Kanal tekshiruvi
         channels = await get_channels_for_check()
         if channels:
             for channel_id, channel_url in channels:
@@ -1052,7 +1050,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     logger.error(f"Error checking channel {channel_id}: {e}")
                     continue
 
-        # MUHIM: start funksiyasiga referral argumentini o'tkazamiz
         referral = command.args if command and command.args else None
         if referral:
             await state.update_data(referral=referral)
@@ -1070,7 +1067,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
 async def start_search(call: types.CallbackQuery, state: FSMContext):
     await state.set_state(SearchFilmForm.query)
     await call.message.answer(
-        '<b>Отправьте название фильма / сериала / аниме</b>\n\nНе указывайте года, озвучки и т.д.\n\nПравильный пример: Ведьмак\nНеправильный пример: Ведьмак 2022')
+        '<b>Отправьте название фильма / сериала / аниме</b>\n\n'
+        'Не указывайте года, озвучки и т.д.\n\n'
+        'Правильный пример: Ведьмак\n'
+        'Неправильный пример: Ведьмак 2022')
 
 
 @client_bot_router.callback_query(F.data.contains('watch_film'), StateFilter('*'))
@@ -1222,11 +1222,8 @@ def update_download_analytics(bot_username, domain):
 
 
 def get_best_formats(formats):
-    """Get the best video and audio formats"""
     video_formats = {}
     audio_format = None
-
-    # Filter and find best formats
     for f in formats:
         if f.get('ext') == 'mp4' and f.get('height', 0) <= 720:
             height = f.get('height', 0)
@@ -1703,3 +1700,9 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMConte
     except Exception as e:
         logger.error(f"TikTok handler error: {e}")
         await message.answer("❌ Ошибка при обработке TikTok видео")
+
+
+
+
+
+

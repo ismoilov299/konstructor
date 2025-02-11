@@ -230,11 +230,9 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
         channels_checker = await check_channels(message)
         print(channels_checker)
 
-        # Agar kanallarga obuna bo'lmagan bo'lsa, hech narsa qilmaymiz
         if not channels_checker:
             return
 
-        # Kanalga obuna bo'lgan bo'lsa, foydalanuvchi tekshiruvlari
         is_registered = await check_user(message.from_user.id)
         is_banned = await check_ban(message.from_user.id)
 
