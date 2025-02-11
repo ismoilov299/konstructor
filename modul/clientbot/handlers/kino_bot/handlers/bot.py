@@ -971,6 +971,7 @@ class NonChatGptFilter(Filter):
 async def start(message: Message, state: FSMContext, bot: Bot):
     bot_db = await shortcuts.get_bot(bot)
     uid = message.from_user.id
+    print(uid,'kino start 974')
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
     if shortcuts.have_one_module(bot_db, "download"):
@@ -1020,6 +1021,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup()
 
     else:
+
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
     await message.answer(text, **kwargs)
