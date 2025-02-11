@@ -244,14 +244,7 @@ async def check_all_subscriptions(user_id, bot):
             logger.error(f"Error checking channel {channel[0]} for user {user_id}: {e}")
     return True
 
-@client_bot_router.message(CommandStart(), AnonBotFilter())
-async def start_command(message: types.Message, state: FSMContext, bot: Bot):
-    logger.info(f"Start command received from user {message.from_user.id}")
-    args = message.get_args()
-    if args:
-        await state.update_data(referral=args)
-        logger.info(f"Referral {args} saved for user {message.from_user.id}")
-
+async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
     subscribed = await check_all_subscriptions(message.from_user.id, bot)
     if not subscribed:
         logger.info(f"User {message.from_user.id} is not subscribed to all channels")
@@ -261,7 +254,43 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot):
         )
     else:
         logger.info(f"User {message.from_user.id} is subscribed to all channels")
-        await process_start(message, state, bot)
+        data = await state.get_data()
+        referral = data.get('referral')
+        if referral:
+            await process_referral(message, int(referral))
+        await show_main_menu(message, bot)
+
+async def process_existing_user(message: types.Message, bot: Bot):
+    await show_main_menu(message, bot)
+
+async def show_main_menu(message: types.Message, bot: Bot):
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    await message.answer(
+        f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+        f"Твоя личная ссылка:\n👉{link}\n\n"
+        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+        f"других соц сетях, чтобы начать получать сообщения 💬",
+        parse_mode="html",
+        reply_markup=await main_menu_bt()
+    )
+    logger.info(f"Main menu sent to user {message.from_user.id}")
+
+@client_bot_router.message(CommandStart(), AnonBotFilter())
+async def start_command(message: types.Message, state: FSMContext, bot: Bot):
+    logger.info(f"Start command received from user {message.from_user.id}")
+    args = message.get_args()
+
+    user = await get_user_by_id(message.from_user.id)
+    if not user:
+        # Yangi foydalanuvchi
+        if args:
+            await state.update_data(referral=args)
+            logger.info(f"Referral {args} saved for user {message.from_user.id}")
+        await process_new_user(message, state, bot)
+    else:
+        # Mavjud foydalanuvchi
+        await process_existing_user(message, bot)
 
 
 async def process_start(message: types.Message, state: FSMContext, bot: Bot):
