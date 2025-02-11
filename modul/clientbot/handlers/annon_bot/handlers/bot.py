@@ -245,28 +245,21 @@ async def check_all_subscriptions(user_id, bot):
 
 
 async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
-    subscribed = await check_all_subscriptions(message.from_user.id, bot)
-    if not subscribed:
-        logger.info(f"User {message.from_user.id} is not subscribed to all channels")
-        await message.answer(
-            "Для использования бота подпишитесь на наших спонсоров",
-            reply_markup=await channels_in(await get_channels_for_check())
-        )
-    else:
-        logger.info(f"User {message.from_user.id} is subscribed to all channels")
-        data = await state.get_data()
-        referral = data.get('referral')
-        if referral:
-            await process_referral(message, int(referral))
+    logger.info(f"Processing new user {message.from_user.id}")
+    data = await state.get_data()
+    referral = data.get('referral')
 
-        # Foydalanuvchini saqlash
-        new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
-        link_for_db = new_link[new_link.index("=") + 1:]
-        await add_user(message.from_user, link_for_db)
+    if referral:
+        await process_referral(message, int(referral))
 
-        await show_main_menu(message, bot)
+    new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+    link_for_db = new_link[new_link.index("=") + 1:]
+    await add_user(message.from_user, link_for_db)
+
+    await show_main_menu(message, bot)
 
 async def process_existing_user(message: types.Message, bot: Bot):
+    logger.info(f"Processing existing user {message.from_user.id}")
     await show_main_menu(message, bot)
 
 async def show_main_menu(message: types.Message, bot: Bot):
@@ -282,21 +275,30 @@ async def show_main_menu(message: types.Message, bot: Bot):
     )
     logger.info(f"Main menu sent to user {message.from_user.id}")
 
+
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start_command(message: types.Message, state: FSMContext, bot: Bot):
     logger.info(f"Start command received from user {message.from_user.id}")
     args = message.get_args()
 
-    user = await get_user_by_id(message.from_user.id)
-    if not user:
-        # Yangi foydalanuvchi
-        if args:
-            await state.update_data(referral=args)
-            logger.info(f"Referral {args} saved for user {message.from_user.id}")
-        await process_new_user(message, state, bot)
+    if args:
+        await state.update_data(referral=args)
+        logger.info(f"Referral {args} saved for user {message.from_user.id}")
+
+    user_exists = await check_user(message.from_user.id)
+    subscribed = await check_all_subscriptions(message.from_user.id, bot)
+
+    if not subscribed:
+        logger.info(f"User {message.from_user.id} is not subscribed to all channels")
+        await message.answer(
+            "Для использования бота подпишитесь на наших спонсоров",
+            reply_markup=await channels_in(await get_channels_for_check())
+        )
     else:
-        # Mavjud foydalanuvchi
-        await process_existing_user(message, bot)
+        if not user_exists:
+            await process_new_user(message, state, bot)
+        else:
+            await process_existing_user(message, bot)
 
 
 async def process_start(message: types.Message, state: FSMContext, bot: Bot):
@@ -325,17 +327,11 @@ async def check_subscriptions(callback_query: types.CallbackQuery, state: FSMCon
     subscribed = await check_all_subscriptions(callback_query.from_user.id, bot)
     if subscribed:
         logger.info(f"User {callback_query.from_user.id} is now subscribed to all channels")
-        await callback_query.bot.delete_message(
-            chat_id=callback_query.from_user.id,
-            message_id=callback_query.message.message_id
-        )
-        await callback_query.bot.send_message(
-            chat_id=callback_query.from_user.id,
-            text="<b>Готово!\n\nЧтобы задать вопрос вашему другу, перейдите по его ссылке ещё раз 🔗</b>",
-            parse_mode="html",
-            reply_markup=await main_menu_bt()
-        )
-        await process_start(callback_query.message, state, bot)
+        user_exists = await check_user(callback_query.from_user.id)
+        if not user_exists:
+            await process_new_user(callback_query.message, state, bot)
+        else:
+            await process_existing_user(callback_query.message, bot)
     else:
         logger.info(f"User {callback_query.from_user.id} is still not subscribed to all channels")
         await callback_query.answer("Пожалуйста, подпишитесь на все каналы.")
