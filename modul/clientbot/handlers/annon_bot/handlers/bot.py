@@ -91,12 +91,12 @@ def save_user(u, bot: Bot, link=None, inviter=None):
         raise
 
 
-async def update_referral_stats(inviter):
+async def update_referral_stats(referral_id: int):
     try:
         @sync_to_async
         @transaction.atomic
         def update_stats():
-            user_tg = UserTG.objects.select_for_update().get(uid=inviter.id)
+            user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
             admin_info = AdminInfo.objects.first()
 
             if not admin_info:
@@ -105,13 +105,15 @@ async def update_referral_stats(inviter):
             user_tg.refs += 1
             user_tg.balance += float(admin_info.price or 10.0)
             user_tg.save()
-            logger.info(f"Referral stats updated for user {inviter.id}")
+            logger.info(f"Referral stats updated for user {referral_id}")
 
         await update_stats()
+    except UserTG.DoesNotExist:
+        logger.error(f"UserTG with uid {referral_id} does not exist")
     except Exception as e:
-        logger.error(f"Error updating referral stats: {e}")
+        logger.error(f"Error updating referral stats: {e}", exc_info=True)
 
-async def process_referral(message: types.Message, referral_id: int):
+async def process_referral(message: Message, referral_id: int):
     logger.info(f"Processing referral for user {message.from_user.id}, referrer: {referral_id}")
     inviter = await get_user_by_id(referral_id)
     if inviter:
@@ -125,25 +127,13 @@ async def process_referral(message: types.Message, referral_id: int):
             )
             logger.info(f"Referral notification sent to user {referral_id}")
 
-            await update_referral_stats(inviter)
+            await update_referral_stats(referral_id)  # Inviter o'rniga referral_id ni yuboramiz
             logger.info(f"Referral stats updated for user {referral_id}")
         except Exception as e:
             logger.error(f"Error processing referral: {e}")
     else:
         logger.warning(f"Inviter with ID {referral_id} not found")
 
-
-async def payment(message, amount):
-    prices = [LabeledPrice(label="XTR", amount=amount)]
-    await message.answer_invoice(
-        title="Поддержка бота",
-        description=f"Поддержать бота на {amount} звёзд!",
-        prices=prices,
-        provider_token="",
-        payload="bot_support",
-        currency="XTR",
-        reply_markup=await payment_keyboard(amount),
-    )
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
     bot_db = await shortcuts.get_bot(bot)
