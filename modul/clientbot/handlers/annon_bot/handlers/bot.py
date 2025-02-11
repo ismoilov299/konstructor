@@ -116,6 +116,7 @@ async def process_referral(message: types.Message, referral_id: int):
     inviter = await get_user_by_id(referral_id)
     if inviter:
         try:
+            print('119 qator anon bot')
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
             await message.bot.send_message(
                 chat_id=referral_id,
