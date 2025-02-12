@@ -31,7 +31,7 @@ from modul.models import UserTG, AdminInfo
 logger = logging.getLogger(__name__)
 
 
-async def check_channels(message, bot) -> bool:
+async def check_channels(message: types.Message, bot: Bot) -> bool:
     try:
         channels = await get_channels_for_check()
         logger.info(f"Checking channels: {channels}")
@@ -328,9 +328,9 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
     logger.info(f"Main menu sent to user {message.from_user.id}")
 
 @client_bot_router.callback_query(lambda c: c.data == 'check_chan')
-async def check_subscriptions(callback_query: types.CallbackQuery, state: FSMContext, bot: Bot):
+async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, bot: Bot):
     logger.info(f"Subscription check requested by user {callback_query.from_user.id}")
-    subscribed = await check_channels(callback_query)
+    subscribed = await check_channels(callback_query.message, bot)
     if subscribed:
         logger.info(f"User {callback_query.from_user.id} is now subscribed to all channels")
         user_exists = await check_user(callback_query.from_user.id)
