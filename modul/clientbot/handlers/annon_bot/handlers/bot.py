@@ -31,7 +31,7 @@ from modul.models import UserTG, AdminInfo
 logger = logging.getLogger(__name__)
 
 
-async def check_channels(message) -> bool:
+async def check_channels(message, bot) -> bool:
     try:
         channels = await get_channels_for_check()
         logger.info(f"Checking channels: {channels}")
@@ -39,9 +39,9 @@ async def check_channels(message) -> bool:
             return True
 
         is_subscribed = True
-        for channel_id, channel_url in channels:
+        for channel_id, _ in channels:
             try:
-                member = await message.bot.get_chat_member(chat_id=channel_id, user_id=message.from_user.id)
+                member = await bot.get_chat_member(chat_id=channel_id, user_id=message.from_user.id)
                 logger.info(f"Channel {channel_id} status: {member.status}")
                 if member.status == 'left':
                     is_subscribed = False
@@ -51,7 +51,7 @@ async def check_channels(message) -> bool:
 
         if not is_subscribed:
             try:
-                markup = await channels_in(channels)
+                markup = await channels_in(channels, bot)
                 await message.answer(
                     "Для использования бота подпишитесь на наших спонсоров",
                     reply_markup=markup

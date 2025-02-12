@@ -12,9 +12,13 @@ logger = logging.getLogger(__name__)
 
 @sync_to_async
 def get_channels_for_check():
-    channels = list(ChannelSponsor.objects.values_list('channel_id', 'channel_url'))
-    logger.info(f"Retrieved channels: {channels}")
-    return channels
+    try:
+        channels = ChannelSponsor.objects.all()
+        logger.info(f"Found channels in DB: {list(channels)}")
+        return [(str(c.chanel_id), '') for c in channels]
+    except Exception as e:
+        logger.error(f"Error getting channels: {e}")
+        return []
 
 
 

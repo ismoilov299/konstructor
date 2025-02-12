@@ -5,31 +5,19 @@ from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton,
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 logger = logging.getLogger(__name__)
 
-async def channels_in(all_channels):
+async def channels_in(all_channels, bot):
     keyboard_builder = InlineKeyboardBuilder()
-    for channel_id, channel_url in all_channels:
+    for channel_id, _ in all_channels:
         try:
-            keyboard_builder.button(text="💎Спонсор", url=channel_url)
+            chat_info = await bot.get_chat(channel_id)
+            invite_link = chat_info.invite_link or f"https://t.me/{chat_info.username}"
+            keyboard_builder.button(text="💎Спонсор", url=invite_link)
         except Exception as e:
-            logger.error(f"Error adding channel button for {channel_id}: {e}")
+            logger.error(f"Error getting channel info {channel_id}: {e}")
+            continue
 
     keyboard_builder.button(text="Проверить подписки", callback_data="check_chan")
-
-    channels_count = len(all_channels)
-    if channels_count <= 5:
-        adjust_value = 1
-    elif 6 <= channels_count <= 12:
-        adjust_value = 2
-    elif 13 <= channels_count <= 24:
-        adjust_value = 3
-    elif 25 <= channels_count <= 48:
-        adjust_value = 4
-    elif 49 <= channels_count <= 96:
-        adjust_value = 5
-    else:
-        adjust_value = 6
-
-    keyboard_builder.adjust(adjust_value)
+    keyboard_builder.adjust(1)
     return keyboard_builder.as_markup()
 
 async def main_menu_bt():
