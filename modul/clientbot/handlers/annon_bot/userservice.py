@@ -1,15 +1,26 @@
+import logging
+
 from asgiref.sync import sync_to_async
 from django.db.models import Count, F
 from django.utils import timezone
-from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today
+from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today, \
+    ChannelSponsor
 import pytz
 
 moscow_timezone = pytz.timezone('Europe/Moscow')
+logger = logging.getLogger(__name__)
 
 
 @sync_to_async
 def get_channels_for_check():
-    return list(Channels.objects.values_list('channel_id', 'channel_url'))
+    """ChannelSponsor modelidan o'qish"""
+    try:
+        channels = ChannelSponsor.objects.all()
+        print(f"Found channels in DB: {list(channels)}")
+        return [(c.chanel_id, '') for c in channels]
+    except Exception as e:
+        logger.error(f"Error getting channels: {e}")
+        return []
 
 
 @sync_to_async
