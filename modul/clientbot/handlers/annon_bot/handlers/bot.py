@@ -249,12 +249,12 @@ async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     referral = data.get('referral')
 
-    if referral:
-        await process_referral(message, int(referral))
-
-    new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
+    new_link = await create_start_link(bot, str(message.from_user.id), encode=True)
     link_for_db = new_link[new_link.index("=") + 1:]
     await add_user(message.from_user, link_for_db)
+
+    if referral:
+        await process_referral(message, int(referral))
 
     await show_main_menu(message, bot)
 
@@ -277,9 +277,9 @@ async def show_main_menu(message: types.Message, bot: Bot):
 
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
-async def start_command(message: types.Message, state: FSMContext, bot: Bot):
+async def start_command(message: types.Message, state: FSMContext, bot: Bot, command: CommandObject):
     logger.info(f"Start command received from user {message.from_user.id}")
-    args = message.get_args()
+    args = command.args
 
     if args:
         await state.update_data(referral=args)
