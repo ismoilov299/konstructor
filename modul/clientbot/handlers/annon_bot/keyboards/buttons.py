@@ -1,29 +1,35 @@
+import logging
+
 from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton,
                            InlineKeyboardMarkup, InlineKeyboardButton)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-
+logger = logging.getLogger(__name__)
 
 async def channels_in(all_channels):
     keyboard_builder = InlineKeyboardBuilder()
-    for i in all_channels:
+    for channel_id, channel_url in all_channels:
         try:
-            keyboard_builder.button(text="💎Спонсор", url=i[1])
-        except:
-            pass
+            keyboard_builder.button(text="💎Спонсор", url=channel_url)
+        except Exception as e:
+            logger.error(f"Error adding channel button for {channel_id}: {e}")
+
     keyboard_builder.button(text="Проверить подписки", callback_data="check_chan")
 
-    if len(all_channels) < 6:
-        keyboard_builder.adjust(1)
-    elif len(all_channels) > 6 <= 12:
-        keyboard_builder.adjust(2)
-    elif len(all_channels) > 12 <= 24:
-        keyboard_builder.adjust(3)
-    elif len(all_channels) > 24 <= 48:
-        keyboard_builder.adjust(4)
-    elif len(all_channels) > 48 <= 96:
-        keyboard_builder.adjust(5)
+    channels_count = len(all_channels)
+    if channels_count <= 5:
+        adjust_value = 1
+    elif 6 <= channels_count <= 12:
+        adjust_value = 2
+    elif 13 <= channels_count <= 24:
+        adjust_value = 3
+    elif 25 <= channels_count <= 48:
+        adjust_value = 4
+    elif 49 <= channels_count <= 96:
+        adjust_value = 5
     else:
-        keyboard_builder.adjust(6)
+        adjust_value = 6
+
+    keyboard_builder.adjust(adjust_value)
     return keyboard_builder.as_markup()
 
 async def main_menu_bt():

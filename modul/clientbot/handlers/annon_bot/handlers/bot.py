@@ -48,12 +48,12 @@ async def check_channels(message) -> bool:
                     break
             except Exception as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
-                continue
 
         if not is_subscribed:
+            markup = await channels_in(channels)
             await message.answer(
                 "Для использования бота подпишитесь на наших спонсоров",
-                reply_markup=await channels_in(channels)
+                reply_markup=markup
             )
             return False
         return True
