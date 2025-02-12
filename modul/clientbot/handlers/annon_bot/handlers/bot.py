@@ -281,9 +281,9 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot, com
     logger.info(f"Start command received from user {message.from_user.id}")
     args = command.args
 
-    if args:
-        await state.update_data(referral=args)
-        logger.info(f"Referral {args} saved for user {message.from_user.id}")
+    # if args:
+    #     await state.update_data(referral=args)
+    #     logger.info(f"Referral {args} saved for user {message.from_user.id}")
 
     user_exists = await check_user(message.from_user.id)
     subscribed = await check_all_subscriptions(message.from_user.id, bot)
