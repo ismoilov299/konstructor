@@ -233,6 +233,7 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
 async def check_all_subscriptions(user_id, bot):
     channels = await get_channels_for_check()
     logger.info(f"Checking subscriptions for user {user_id}")
+    logger.info(channels)
     for channel in channels:
         try:
             member = await bot.get_chat_member(channel[0], user_id)
