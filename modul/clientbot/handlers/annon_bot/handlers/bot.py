@@ -3,7 +3,7 @@ import re
 from contextlib import suppress
 
 from aiogram import F, Bot, types,html
-from aiogram.exceptions import TelegramForbiddenError
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.filters import CommandStart, Filter, CommandObject
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.fsm.context import FSMContext
@@ -31,30 +31,57 @@ from modul.models import UserTG, AdminInfo
 logger = logging.getLogger(__name__)
 
 
-async def check_channels(message):
-    all_channels = await get_channels_for_check()
+async def check_channels(message) -> bool:
+    try:
+        channels = await get_channels_for_check()
+        print("Checking channels:", channels)  # Debug uchun
 
-    if not all_channels:
+        if not channels:
+            return True
+
+        bot_db = await shortcuts.get_bot(message.bot)
+        admin_id = bot_db.owner.uid
+        if message.from_user.id == admin_id:
+            return True
+
+        is_subscribed = True
+        for channel_id, channel_url in channels:
+            try:
+                member = await message.bot.get_chat_member(
+                    chat_id=channel_id,
+                    user_id=message.from_user.id
+                )
+                print(f"Channel {channel_id} status: {member.status}")
+
+                if member.status == 'left':
+                    is_subscribed = False
+                    await message.bot.send_message(
+                        chat_id=message.from_user.id,
+                        text="Для использования бота подпишитесь на наших спонсоров",
+                        reply_markup=await channels_in(channels)
+                    )
+                    return False
+
+            except TelegramBadRequest as e:
+                logger.error(f"Error checking channel {channel_id}: {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Error checking subscription: {e}")
+                continue
+
+        # Only process referral if all channels are subscribed
+        if is_subscribed and hasattr(message, 'command') and message.command.args:
+            try:
+                referrer_id = int(message.command.args)
+                await process_referral(message, referrer_id)
+            except ValueError:
+                logger.error(f"Invalid referral ID: {message.command.args}")
+
         return True
 
-    for i in all_channels:
-        try:
-            check = await message.bot.get_chat_member(i[0], user_id=message.from_user.id)
-            print(f"Channel {i[0]} status: {check.status}")
-
-            if check.status == "left":
-                await message.bot.send_message(
-                    chat_id=message.from_user.id,
-                    text="Для использования бота подпишитесь на наших спонсоров",
-                    reply_markup=await channels_in(all_channels)
-                )
-                return False
-
-        except Exception as e:
-            print(f"Error checking channel {i[0]}: {e}")
-            continue
-
-    return True
+    except Exception as e:
+        logger.error(f"General error in check_channels: {e}")
+        return False
 
 @sync_to_async
 @transaction.atomic

@@ -1,5 +1,3 @@
-import logging
-
 from asgiref.sync import sync_to_async
 from django.db.models import Count, F
 from django.utils import timezone
@@ -9,7 +7,6 @@ import pytz
 
 moscow_timezone = pytz.timezone('Europe/Moscow')
 logger = logging.getLogger(__name__)
-
 
 @sync_to_async
 def get_channels_for_check():
@@ -21,6 +18,7 @@ def get_channels_for_check():
     except Exception as e:
         logger.error(f"Error getting channels: {e}")
         return []
+
 
 
 @sync_to_async
