@@ -34,51 +34,29 @@ logger = logging.getLogger(__name__)
 async def check_channels(message) -> bool:
     try:
         channels = await get_channels_for_check()
-        print("Checking channels:", channels)  # Debug uchun
-
+        logger.info(f"Checking channels: {channels}")
         if not channels:
-            return True
-
-        bot_db = await shortcuts.get_bot(message.bot)
-        admin_id = bot_db.owner.uid
-        if message.from_user.id == admin_id:
             return True
 
         is_subscribed = True
         for channel_id, channel_url in channels:
             try:
-                member = await message.bot.get_chat_member(
-                    chat_id=channel_id,
-                    user_id=message.from_user.id
-                )
-                print(f"Channel {channel_id} status: {member.status}")
-
+                member = await message.bot.get_chat_member(chat_id=channel_id, user_id=message.from_user.id)
+                logger.info(f"Channel {channel_id} status: {member.status}")
                 if member.status == 'left':
                     is_subscribed = False
-                    await message.bot.send_message(
-                        chat_id=message.from_user.id,
-                        text="Для использования бота подпишитесь на наших спонсоров",
-                        reply_markup=await channels_in(channels)
-                    )
-                    return False
-
-            except TelegramBadRequest as e:
+                    break
+            except Exception as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
                 continue
-            except Exception as e:
-                logger.error(f"Error checking subscription: {e}")
-                continue
 
-        # Only process referral if all channels are subscribed
-        if is_subscribed and hasattr(message, 'command') and message.command.args:
-            try:
-                referrer_id = int(message.command.args)
-                await process_referral(message, referrer_id)
-            except ValueError:
-                logger.error(f"Invalid referral ID: {message.command.args}")
-
+        if not is_subscribed:
+            await message.answer(
+                "Для использования бота подпишитесь на наших спонсоров",
+                reply_markup=await channels_in(channels)
+            )
+            return False
         return True
-
     except Exception as e:
         logger.error(f"General error in check_channels: {e}")
         return False
@@ -309,21 +287,14 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot, com
     logger.info(f"Start command received from user {message.from_user.id}")
     args = command.args
 
-    # if args:
-    #     await state.update_data(referral=args)
-    #     logger.info(f"Referral {args} saved for user {message.from_user.id}")
+    if args:
+        await state.update_data(referral=args)
+        logger.info(f"Referral {args} saved for user {message.from_user.id}")
 
     user_exists = await check_user(message.from_user.id)
     subscribed = await check_channels(message)
-    print(subscribed)
 
-    if not subscribed:
-        logger.info(f"User {message.from_user.id} is not subscribed to all channels")
-        await message.answer(
-            "Для использования бота подпишитесь на наших спонсоров",
-            reply_markup=await channels_in(await get_channels_for_check())
-        )
-    else:
+    if subscribed:
         if not user_exists:
             await process_new_user(message, state, bot)
         else:
