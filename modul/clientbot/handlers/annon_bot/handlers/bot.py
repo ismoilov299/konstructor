@@ -295,13 +295,16 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot, com
         logger.info(f"Referral {args} saved for user {message.from_user.id}")
 
     user_exists = await check_user(message.from_user.id)
-    subscribed = await check_channels(message)
+    subscribed = await check_channels(message, bot)
 
-    if subscribed:
-        if not user_exists:
-            await process_new_user(message, state, bot)
-        else:
-            await process_existing_user(message, bot)
+    if not subscribed:
+        logger.info(f"User {message.from_user.id} is not subscribed to all channels")
+        return  #
+
+    if not user_exists:
+        await process_new_user(message, state, bot)
+    else:
+        await process_existing_user(message, bot)
 
 
 async def process_start(message: types.Message, state: FSMContext, bot: Bot):
