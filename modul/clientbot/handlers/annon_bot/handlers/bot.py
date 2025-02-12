@@ -287,6 +287,7 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot, com
 
     user_exists = await check_user(message.from_user.id)
     subscribed = await check_all_subscriptions(message.from_user.id, bot)
+    print(subscribed)
 
     if not subscribed:
         logger.info(f"User {message.from_user.id} is not subscribed to all channels")
