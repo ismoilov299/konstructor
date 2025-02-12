@@ -257,19 +257,19 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
        reply_markup=await main_menu_bt2()
    )
 
-async def check_all_subscriptions(user_id, bot):
-    channels = await get_channels_for_check()
-    logger.info(f"Checking subscriptions for user {user_id}")
-    logger.info(channels)
-    for channel in channels:
-        try:
-            member = await bot.get_chat_member(channel[0], user_id)
-            logger.info(f"User {user_id} status in channel {channel[0]}: {member.status}")
-            if member.status == "left":
-                return False
-        except Exception as e:
-            logger.error(f"Error checking channel {channel[0]} for user {user_id}: {e}")
-    return True
+# async def check_all_subscriptions(user_id, bot):
+#     channels = await get_channels_for_check()
+#     logger.info(f"Checking subscriptions for user {user_id}")
+#     logger.info(channels)
+#     for channel in channels:
+#         try:
+#             member = await bot.get_chat_member(channel[0], user_id)
+#             logger.info(f"User {user_id} status in channel {channel[0]}: {member.status}")
+#             if member.status == "left":
+#                 return False
+#         except Exception as e:
+#             logger.error(f"Error checking channel {channel[0]} for user {user_id}: {e}")
+#     return True
 
 
 async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
@@ -314,7 +314,7 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot, com
     #     logger.info(f"Referral {args} saved for user {message.from_user.id}")
 
     user_exists = await check_user(message.from_user.id)
-    subscribed = await check_all_subscriptions(message.from_user.id, bot)
+    subscribed = await check_channels(message.from_user.id, bot)
     print(subscribed)
 
     if not subscribed:
@@ -353,7 +353,7 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
 @client_bot_router.callback_query(lambda c: c.data == 'check_chan')
 async def check_subscriptions(callback_query: types.CallbackQuery, state: FSMContext, bot: Bot):
     logger.info(f"Subscription check requested by user {callback_query.from_user.id}")
-    subscribed = await check_all_subscriptions(callback_query.from_user.id, bot)
+    subscribed = await check_channels(callback_query.from_user.id, bot)
     if subscribed:
         logger.info(f"User {callback_query.from_user.id} is now subscribed to all channels")
         user_exists = await check_user(callback_query.from_user.id)

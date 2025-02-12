@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 @sync_to_async
 def get_channels_for_check():
-    """ChannelSponsor modelidan o'qish"""
     try:
         channels = ChannelSponsor.objects.all()
         print(f"Found channels in DB: {list(channels)}")
