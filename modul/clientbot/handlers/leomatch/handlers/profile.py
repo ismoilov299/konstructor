@@ -1,3 +1,5 @@
+import os
+
 from aiogram import types, F
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
 from modul.clientbot.handlers.leomatch.data.state import LeomatchMain
@@ -133,6 +135,10 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         if photo:
             file = await bot.get_file(photo.file_id)
             file_path = f"clientbot/data/leo/{message.from_user.id}{file_extension}"
+
+            # Fayl yo'lini to'liq yaratish
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
             await bot.download_file(file.file_path, file_path)
 
             print(f"Saving media - type: {media_type}, file_path: {file_path}")

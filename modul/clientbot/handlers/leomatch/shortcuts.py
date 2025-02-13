@@ -308,11 +308,20 @@ def _update_profile_sync(leo, kwargs: dict):
 
 
 async def update_profile(uid: int, kwargs: dict):
-
     try:
         leo = await get_leo(uid)
 
         print(f"Before update - photo: {leo.photo}, media_type: {leo.media_type}")
+
+        if 'photo' in kwargs:
+            new_photo = kwargs['photo']
+            if os.path.exists(new_photo):
+                if leo.photo and os.path.exists(leo.photo):
+                    os.remove(leo.photo)
+                leo.photo = new_photo
+            else:
+                print(f"New photo file does not exist: {new_photo}")
+                return False
 
         success = await sync_to_async(_update_profile_sync)(leo, kwargs)
 
