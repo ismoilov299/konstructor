@@ -31,7 +31,7 @@ from modul.models import UserTG, AdminInfo
 logger = logging.getLogger(__name__)
 
 
-async def check_channels(message: types.Message, bot: Bot) -> bool:
+async def check_channels(user_id: int, bot: Bot) -> bool:
     try:
         channels = await get_channels_for_check()
         logger.info(f"Checking channels: {channels}")
@@ -40,20 +40,21 @@ async def check_channels(message: types.Message, bot: Bot) -> bool:
 
         for channel_id, _ in channels:
             try:
-                member = await bot.get_chat_member(chat_id=channel_id, user_id=message.from_user.id)
-                logger.info(f"Channel {channel_id} status: {member.status}")
+                member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+                logger.info(f"Channel {channel_id} status for user {user_id}: {member.status}")
                 if member.status not in ['member', 'creator', 'administrator']:
-                    logger.info(f"User {message.from_user.id} is not subscribed to channel {channel_id}")
+                    logger.info(f"User {user_id} is not subscribed to channel {channel_id}")
                     return False
             except Exception as e:
-                logger.error(f"Error checking channel {channel_id}: {e}")
+                logger.error(f"Error checking channel {channel_id} for user {user_id}: {e}")
                 return False
 
-        logger.info(f"User {message.from_user.id} is subscribed to all channels")
+        logger.info(f"User {user_id} is subscribed to all channels")
         return True
     except Exception as e:
-        logger.error(f"General error in check_channels: {e}")
+        logger.error(f"General error in check_channels for user {user_id}: {e}")
         return False
+
 
 @sync_to_async
 @transaction.atomic
@@ -326,12 +327,13 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.callback_query(lambda c: c.data == 'check_chan')
 async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, bot: Bot):
-    logger.info(f"Subscription check requested by user {callback_query.from_user.id}")
-    subscribed = await check_channels(callback_query.message, bot)
-    logger.info(f"Subscription check result for user {callback_query.from_user.id}: {subscribed}")
+    user_id = callback_query.from_user.id
+    logger.info(f"Subscription check requested by user {user_id}")
+    subscribed = await check_channels(user_id, bot)
+    logger.info(f"Subscription check result for user {user_id}: {subscribed}")
 
     if subscribed:
-        logger.info(f"User {callback_query.from_user.id} is now subscribed to all channels")
+        logger.info(f"User {user_id} is now subscribed to all channels")
 
         data = await state.get_data()
         referral = data.get('referral')
@@ -339,7 +341,7 @@ async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, 
             await process_referral(callback_query.message, int(referral))
             await state.clear()
 
-        user_exists = await check_user(callback_query.from_user.id)
+        user_exists = await check_user(user_id)
         if not user_exists:
             await process_new_user(callback_query.message, state, bot)
         else:
@@ -348,12 +350,12 @@ async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, 
         await callback_query.answer("Вы успешно подписались на все каналы!")
         await show_main_menu(callback_query.message, bot)
     else:
-        logger.info(f"User {callback_query.from_user.id} is still not subscribed to all channels")
+        logger.info(f"User {user_id} is not subscribed to all channels")
 
         await callback_query.answer("Пожалуйста, подпишитесь на все каналы.")
         channels = await get_channels_for_check()
         markup = await channels_in(channels, bot)
-        await callback_query.message.answer(
+        await callback_query.message.edit_text(
             "Для использования бота подпишитесь на наших спонсоров",
             reply_markup=markup
         )
