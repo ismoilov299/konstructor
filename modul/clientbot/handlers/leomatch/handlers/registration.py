@@ -18,6 +18,7 @@ from aiogram.fsm.context import FSMContext
 async def now_send_photo(message: types.Message, state: FSMContext):
     leo = await get_leo(message.from_user.id)
     kwargs = {}
+    print(kwargs)
     if leo:
         kwargs['reply_markup'] = reply_kb.save_current()
     await message.answer(("Теперь пришли фото или запиши видео 👍 (до 15 сек), его будут видеть другие пользователи"),
