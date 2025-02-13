@@ -326,10 +326,20 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
 @client_bot_router.callback_query(lambda c: c.data == 'check_chan')
 async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, bot: Bot):
     logger.info(f"Subscription check requested by user {callback_query.from_user.id}")
-    subscribed = await check_channels(callback_query.message, bot)
+    nosubscribed = await check_channels(callback_query.message, bot)
 
-    if subscribed:
+    if nosubscribed:
         logger.info(f"User {callback_query.from_user.id} is now subscribed to all channels")
+
+        await callback_query.answer("Пожалуйста, подпишитесь на все каналы.")
+        channels = await get_channels_for_check()
+        markup = await channels_in(channels, bot)
+        await callback_query.message.answer(
+            "Для использования бота подпишитесь на наших спонсоров",
+            reply_markup=markup
+        )
+    else:
+        logger.info(f"User {callback_query.from_user.id} is still not subscribed to all channels")
 
         data = await state.get_data()
         referral = data.get('referral')
@@ -345,15 +355,8 @@ async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, 
 
         await callback_query.answer("Вы успешно подписались на все каналы!")
         await show_main_menu(callback_query.message, bot)
-    else:
-        logger.info(f"User {callback_query.from_user.id} is still not subscribed to all channels")
-        await callback_query.answer("Пожалуйста, подпишитесь на все каналы.")
-        channels = await get_channels_for_check()
-        markup = await channels_in(channels, bot)
-        await callback_query.message.answer(
-            "Для использования бота подпишитесь на наших спонсоров",
-            reply_markup=markup
-        )
+
+
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
                                               "greeting_rem"]),AnonBotFilter())
 async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
