@@ -134,7 +134,7 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
 
         if photo:
             file = await bot.get_file(photo.file_id)
-            file_path = f"clientbot/data/leo/{message.from_user.id}{file_extension}"
+            file_path = f"modul/clientbot/data/leo{message.from_user.id}{file_extension}"
 
             # Fayl yo'lini to'liq yaratish
             os.makedirs(os.path.dirname(file_path), exist_ok=True)

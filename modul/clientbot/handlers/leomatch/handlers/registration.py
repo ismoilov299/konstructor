@@ -32,38 +32,59 @@ def get_file_extension(media_type):
 
 
 async def save_media(message: types.Message, state: FSMContext, bot: Bot):
-    file_id = None
-    media_type = None
+    try:
+        photo = None
+        media_type = None
+        file_extension = None
 
-    if message.photo:
-        file_id = message.photo[-1].file_id
-        media_type = "PHOTO"
-    elif message.video:
-        file_id = message.video.file_id
-        media_type = "VIDEO"
-    elif message.video_note:
-        file_id = message.video_note.file_id
-        media_type = "VIDEO_NOTE"
+        if message.photo:
+            photo = message.photo[-1]
+            media_type = "PHOTO"
+            file_extension = ".jpg"
+        elif message.video:
+            if message.video.duration > 15:
+                await message.answer("Пожалуйста, пришли видео не более 15 секунд")
+                return
+            photo = message.video
+            media_type = "VIDEO"
+            file_extension = ".mp4"
+        elif message.video_note:
+            if message.video_note.duration > 15:
+                await message.answer("Пожалуйста, пришли видео не более 15 секунд")
+                return
+            photo = message.video_note
+            media_type = "VIDEO_NOTE"
+            file_extension = ".mp4"
+        else:
+            await message.answer("Пожалуйста, отправьте фото или видео")
+            return
 
-    if file_id:
-        file = await bot.get_file(file_id)
-        file_extension = os.path.splitext(file.file_path)[1]
-        file_path = f"clientbot/data/leo/{message.from_user.id}{file_extension}"
+        if photo:
+            file = await bot.get_file(photo.file_id)
+            file_path = f"modul/clientbot/data/leo{message.from_user.id}{file_extension}"
 
-        await bot.download_file(file.file_path, file_path)
+            # Fayl yo'lini to'liq yaratish
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-        await state.update_data(photo=file_path, media_type=media_type)
-        data = await state.get_data()
-        age = data['age']
-        full_name = data['full_name']
-        about_me = data['about_me']
-        city = data['city']
-        await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, media_type)
-        await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
-        await state.set_state(LeomatchRegistration.FINAL)
-    else:
-        await message.answer("Пожалуйста, отправьте фото или видео.")
+            await bot.download_file(file.file_path, file_path)
+            print(f"File saved to: {file_path}")
 
+            await state.update_data(photo=file_path, media_type=media_type)
+            data = await state.get_data()
+            age = data.get('age')
+            full_name = data.get('full_name')
+            about_me = data.get('about_me')
+            city = data.get('city')
+
+            await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, media_type)
+            await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
+            await state.set_state(LeomatchRegistration.FINAL)
+        else:
+            await message.answer("Не удалось получить файл")
+
+    except Exception as e:
+        print(f"Error saving media: {e}")
+        await message.answer("Произошла ошибка при сохранении медиа")
 
 async def download_file(url: str, file_path: str):
     async with aiohttp.ClientSession() as session:
