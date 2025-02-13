@@ -140,8 +140,7 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
             await bot.download_file(file.file_path, file_path)
-
-            print(f"Saving media - type: {media_type}, file_path: {file_path}")
+            print(f"File saved to: {file_path}")
 
             success = await update_profile(message.from_user.id, {
                 "photo": file_path,
