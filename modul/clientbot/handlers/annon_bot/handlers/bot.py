@@ -43,23 +43,13 @@ async def check_channels(message: types.Message, bot: Bot) -> bool:
             try:
                 member = await bot.get_chat_member(chat_id=channel_id, user_id=message.from_user.id)
                 logger.info(f"Channel {channel_id} status: {member.status}")
-                if member.status == 'left':
+                if member.status not in ['member', 'creator', 'administrator']:
                     is_subscribed = False
                     break
             except Exception as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
 
-        if not is_subscribed:
-            try:
-                markup = await channels_in(channels, bot)
-                await message.answer(
-                    "Для использования бота подпишитесь на наших спонсоров",
-                    reply_markup=markup
-                )
-            except Exception as e:
-                logger.error(f"Error sending channel subscription message: {e}")
-            return False
-        return True
+        return is_subscribed
     except Exception as e:
         logger.error(f"General error in check_channels: {e}")
         return False
@@ -294,18 +284,20 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot, com
         await state.update_data(referral=args)
         logger.info(f"Referral {args} saved for user {message.from_user.id}")
 
-    user_exists = await check_user(message.from_user.id)
     subscribed = await check_channels(message, bot)
-
     if not subscribed:
         logger.info(f"User {message.from_user.id} is not subscribed to all channels")
-        return  #
-
-    if not user_exists:
-        await process_new_user(message, state, bot)
+        markup = await channels_in(await get_channels_for_check(), bot)
+        await message.answer(
+            "Для использования бота подпишитесь на наших спонсоров",
+            reply_markup=markup
+        )
     else:
-        await process_existing_user(message, bot)
-
+        user_exists = await check_user(message.from_user.id)
+        if not user_exists:
+            await process_new_user(message, state, bot)
+        else:
+            await process_existing_user(message, bot)
 
 async def process_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
@@ -341,6 +333,11 @@ async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, 
     else:
         logger.info(f"User {callback_query.from_user.id} is still not subscribed to all channels")
         await callback_query.answer("Пожалуйста, подпишитесь на все каналы.")
+        markup = await channels_in(await get_channels_for_check(), bot)
+        await callback_query.message.answer(
+            "Для использования бота подпишитесь на наших спонсоров",
+            reply_markup=markup
+        )
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
