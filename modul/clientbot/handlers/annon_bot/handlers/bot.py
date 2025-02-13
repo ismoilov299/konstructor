@@ -339,7 +339,6 @@ async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, 
             reply_markup=markup
         )
 
-
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
                                               "greeting_rem"]),AnonBotFilter())
 async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
