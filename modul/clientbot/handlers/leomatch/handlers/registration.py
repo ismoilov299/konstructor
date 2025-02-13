@@ -30,25 +30,39 @@ def get_file_extension(media_type):
     else:
         return "jpg"
 
-async def save_media(message: types.Message, state: FSMContext, url: str, type: str):
-    file_path = f"clientbot/data/leo/{message.from_user.id}.{get_file_extension(type)}"
 
-    try:
-        await download_file(url, file_path)
-    except Exception as e:
-        print(f"Error downloading file: {e}")
-        await message.answer("Произошла ошибка при сохранении медиа. Пожалуйста, попробуйте загрузить снова.")
-        return
+async def save_media(message: types.Message, state: FSMContext, bot: Bot):
+    file_id = None
+    media_type = None
 
-    await state.update_data(photo=file_path, media_type=type)
-    data = await state.get_data()
-    age = data['age']
-    full_name = data['full_name']
-    about_me = data['about_me']
-    city = data['city']
-    await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, type)
-    await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
-    await state.set_state(LeomatchRegistration.FINAL)
+    if message.photo:
+        file_id = message.photo[-1].file_id
+        media_type = "PHOTO"
+    elif message.video:
+        file_id = message.video.file_id
+        media_type = "VIDEO"
+    elif message.video_note:
+        file_id = message.video_note.file_id
+        media_type = "VIDEO_NOTE"
+
+    if file_id:
+        file = await bot.get_file(file_id)
+        file_extension = os.path.splitext(file.file_path)[1]
+        file_path = f"clientbot/data/leo/{message.from_user.id}{file_extension}"
+
+        await bot.download_file(file.file_path, file_path)
+
+        await state.update_data(photo=file_path, media_type=media_type)
+        data = await state.get_data()
+        age = data['age']
+        full_name = data['full_name']
+        about_me = data['about_me']
+        city = data['city']
+        await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, media_type)
+        await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
+        await state.set_state(LeomatchRegistration.FINAL)
+    else:
+        await message.answer("Пожалуйста, отправьте фото или видео.")
 
 
 async def download_file(url: str, file_path: str):

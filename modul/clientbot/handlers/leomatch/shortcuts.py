@@ -205,6 +205,7 @@ async def show_media(bot: Bot, to_account: int, from_account: int, text_before: 
         await bot.send_message(to_account, text=text)
 
 
+
 async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, photo: str,
                       media_type: str, keyboard=None, comment: str = None):
     try:
@@ -287,10 +288,9 @@ def _update_profile_sync(leo, kwargs: dict):
         if 'photo' in kwargs:
             old_file = leo.photo
             new_file = kwargs['photo']
-            if old_file != new_file:
-                if os.path.exists(old_file):
-                    os.remove(old_file)
-                leo.photo = new_file
+            if old_file and old_file != new_file and os.path.exists(old_file):
+                os.remove(old_file)
+            leo.photo = new_file
 
         if 'media_type' in kwargs:
             leo.media_type = kwargs['media_type']
