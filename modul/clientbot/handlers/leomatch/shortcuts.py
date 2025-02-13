@@ -218,23 +218,43 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         print(f"Showing profile - media_type: {media_type}, photo: {photo}")
 
         if media_type == "VIDEO":
-            await message.answer_video(
-                video=FSInputFile(photo),
-                caption=caption,
-                **kwargs
-            )
+            if os.path.exists(photo):
+                await message.answer_video(
+                    video=FSInputFile(photo),
+                    caption=caption,
+                    **kwargs
+                )
+            else:
+                await message.answer_video(
+                    video=photo,
+                    caption=caption,
+                    **kwargs
+                )
         elif media_type == "VIDEO_NOTE":
-            await message.answer_video_note(
-                video_note=FSInputFile(photo),
-                **kwargs
-            )
+            if os.path.exists(photo):
+                await message.answer_video_note(
+                    video_note=FSInputFile(photo),
+                    **kwargs
+                )
+            else:
+                await message.answer_video_note(
+                    video_note=photo,
+                    **kwargs
+                )
             await message.answer(caption, **kwargs)
         else:
-            await message.answer_photo(
-                photo=FSInputFile(photo),
-                caption=caption,
-                **kwargs
-            )
+            if os.path.exists(photo):
+                await message.answer_photo(
+                    photo=FSInputFile(photo),
+                    caption=caption,
+                    **kwargs
+                )
+            else:
+                await message.answer_photo(
+                    photo=photo,
+                    caption=caption,
+                    **kwargs
+                )
 
     except Exception as e:
         print(f"Error in show_profile: {e}")
