@@ -250,7 +250,10 @@ async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
 
     new_link = await create_start_link(bot, str(message.from_user.id), encode=True)
     link_for_db = new_link[new_link.index("=") + 1:]
-    await add_user(message.from_user, link_for_db)
+
+    user_exists = await check_user(message.from_user.id)
+    if not user_exists:
+        await add_user(message.from_user, link_for_db)
 
     if referral:
         await process_referral(message, int(referral))
@@ -319,26 +322,38 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
     )
     logger.info(f"Main menu sent to user {message.from_user.id}")
 
+
 @client_bot_router.callback_query(lambda c: c.data == 'check_chan')
 async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, bot: Bot):
     logger.info(f"Subscription check requested by user {callback_query.from_user.id}")
     subscribed = await check_channels(callback_query.message, bot)
+
     if subscribed:
         logger.info(f"User {callback_query.from_user.id} is now subscribed to all channels")
+
+        data = await state.get_data()
+        referral = data.get('referral')
+        if referral:
+            await process_referral(callback_query.message, int(referral))
+            await state.clear()
+
         user_exists = await check_user(callback_query.from_user.id)
         if not user_exists:
             await process_new_user(callback_query.message, state, bot)
         else:
             await process_existing_user(callback_query.message, bot)
+
+        await callback_query.answer("Вы успешно подписались на все каналы!")
+        await show_main_menu(callback_query.message, bot)
     else:
         logger.info(f"User {callback_query.from_user.id} is still not subscribed to all channels")
         await callback_query.answer("Пожалуйста, подпишитесь на все каналы.")
-        markup = await channels_in(await get_channels_for_check(), bot)
+        channels = await get_channels_for_check()
+        markup = await channels_in(channels, bot)
         await callback_query.message.answer(
             "Для использования бота подпишитесь на наших спонсоров",
             reply_markup=markup
         )
-
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
                                               "greeting_rem"]),AnonBotFilter())
 async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
