@@ -7,7 +7,7 @@ from modul.clientbot.handlers.leomatch.handlers import profiles
 from modul.clientbot.utils.functs import return_main
 from modul.loader import client_bot_router
 from aiogram.fsm.context import FSMContext
-
+from aiogram import Bot
 
 async def start(message: types.Message, state: FSMContext):
     await show_profile_db(message, message.from_user.id, reply_kb.get_numbers(4, True))
@@ -102,42 +102,53 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 
 @client_bot_router.message(LeomatchMain.SET_PHOTO)
-async def bot_start(message: types.Message, state: FSMContext):
+async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     try:
-        photo = ""
-        media_type = ""
+        photo = None
+        media_type = None
+        file_extension = None
 
         if message.photo:
-            photo = message.photo[-1].file_id
+            photo = message.photo[-1]
             media_type = "PHOTO"
+            file_extension = ".jpg"
         elif message.video:
             if message.video.duration > 15:
                 await message.answer("Пожалуйста, пришли видео не более 15 секунд")
                 return
-            photo = message.video.file_id
+            photo = message.video
             media_type = "VIDEO"
+            file_extension = ".mp4"
         elif message.video_note:
             if message.video_note.duration > 15:
                 await message.answer("Пожалуйста, пришли видео не более 15 секунд")
                 return
-            photo = message.video_note.file_id
+            photo = message.video_note
             media_type = "VIDEO_NOTE"
+            file_extension = ".mp4"
         else:
             await message.answer("Пожалуйста, отправьте фото или видео")
             return
 
-        print(f"Saving media - type: {media_type}, file_id: {photo}")
+        if photo:
+            file = await bot.get_file(photo.file_id)
+            file_path = f"clientbot/data/leo/{message.from_user.id}{file_extension}"
+            await bot.download_file(file.file_path, file_path)
 
-        success = await update_profile(message.from_user.id, {
-            "photo": photo,
-            "media_type": media_type
-        })
+            print(f"Saving media - type: {media_type}, file_path: {file_path}")
 
-        if success:
-            await message.answer("✅ ")
-            await start(message, state)
+            success = await update_profile(message.from_user.id, {
+                "photo": file_path,
+                "media_type": media_type
+            })
+
+            if success:
+                await message.answer("✅ Фото/видео успешно обновлено")
+                await start(message, state)
+            else:
+                await message.answer("❌ Произошла ошибка при обновлении")
         else:
-            await message.answer("❌ Произошла ошибка при обновлении")
+            await message.answer("❌ Не удалось получить файл")
 
     except Exception as e:
         print(f"Error in SET_PHOTO handler: {e}")
