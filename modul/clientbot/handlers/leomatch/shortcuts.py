@@ -283,10 +283,14 @@ async def bot_show_profile_db(to_uid: int, uid: int, keyboard=types.ReplyKeyboar
 
 
 def _update_profile_sync(leo, kwargs: dict):
-
     try:
         if 'photo' in kwargs:
-            leo.photo = kwargs['photo']
+            old_file = leo.photo
+            new_file = kwargs['photo']
+            if old_file != new_file:
+                if os.path.exists(old_file):
+                    os.remove(old_file)
+                leo.photo = new_file
 
         if 'media_type' in kwargs:
             leo.media_type = kwargs['media_type']

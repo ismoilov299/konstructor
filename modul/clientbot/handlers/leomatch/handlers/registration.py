@@ -1,5 +1,6 @@
 import os
 
+import aiohttp
 from aiogram import types, Bot, F
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import Message
@@ -23,17 +24,45 @@ async def now_send_photo(message: types.Message, state: FSMContext):
                          **kwargs)
     await state.set_state(LeomatchRegistration.SEND_PHOTO)
 
+def get_file_extension(media_type):
+    if media_type in ["VIDEO", "VIDEO_NOTE"]:
+        return "mp4"
+    else:
+        return "jpg"
 
 async def save_media(message: types.Message, state: FSMContext, url: str, type: str):
-    await state.update_data(photo=url, media_type=type)
+    file_path = f"clientbot/data/leo/{message.from_user.id}.{get_file_extension(type)}"
+
+    try:
+        await download_file(url, file_path)
+    except Exception as e:
+        print(f"Error downloading file: {e}")
+        await message.answer("Произошла ошибка при сохранении медиа. Пожалуйста, попробуйте загрузить снова.")
+        return
+
+    await state.update_data(photo=file_path, media_type=type)
     data = await state.get_data()
     age = data['age']
     full_name = data['full_name']
     about_me = data['about_me']
     city = data['city']
-    await show_profile(message, message.from_user.id, full_name, age, city, about_me, url, type)
-    await message.answer(("Всё верно?"), reply_markup=reply_kb.final_registration())
+    await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, type)
+    await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
     await state.set_state(LeomatchRegistration.FINAL)
+
+
+async def download_file(url: str, file_path: str):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                with open(file_path, 'wb') as f:
+                    while True:
+                        chunk = await response.content.read(1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+            else:
+                raise Exception(f"Failed to download file: HTTP {response.status}")
 
 
 @client_bot_router.message(F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
