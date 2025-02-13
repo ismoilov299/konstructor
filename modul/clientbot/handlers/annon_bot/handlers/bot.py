@@ -327,6 +327,7 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
 async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, bot: Bot):
     logger.info(f"Subscription check requested by user {callback_query.from_user.id}")
     nosubscribed = await check_channels(callback_query.message, bot)
+    print(nosubscribed)
 
     if nosubscribed:
         logger.info(f"User {callback_query.from_user.id} is now subscribed to all channels")
