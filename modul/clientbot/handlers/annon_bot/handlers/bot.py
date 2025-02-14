@@ -363,10 +363,8 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 
     await callback.answer("Вы успешно подписались на все каналы!")
 
-    # Foydalanuvchini tekshirish
     user_exists = await check_user(user_id)
 
-    # Yangi foydalanuvchi bo'lsa qo'shamiz
     if not user_exists:
         new_link = await create_start_link(bot, str(callback.from_user.id))
         link_for_db = new_link[new_link.index("=") + 1:]
@@ -413,7 +411,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         )
 
 
-@client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
+@client_bot_router.callback_query(F.data.in_(["cancel",
                                               "greeting_rem"]),AnonBotFilter())
 async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
     await state.clear()

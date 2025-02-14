@@ -95,19 +95,23 @@ def owner_bots_filter(owner):
 
 async def gen_buttons(current_bot: Bot, uid: int):
     try:
+        btns = []
+
+        if getattr(current_bot, "enable_leo", False):
+            btns.append("🫰 Знакомства")
+
         bot_instance = await get_bot_by_token(current_bot.token)
-        if bot_instance and hasattr(bot_instance, 'enable_anon') and bot_instance.enable_anon:
-            btns = [
+
+        if bot_instance and getattr(bot_instance, "enable_anon", False):
+            btns.extend([
                 "🚀Начать", "👋Изменить приветствие",
-                "⭐️Ваша статистика",
-                "💸Заработать"
-            ]
+                "⭐️Ваша статистика", "💸Заработать"
+            ])
             return btns
     except Exception as e:
         logger.error(f"Error in gen_buttons: {e}")
 
     return ["💸Заработать"]
-
 
 async def main_menu(uid: int, bot: Bot):
     builder = ReplyKeyboardBuilder()
