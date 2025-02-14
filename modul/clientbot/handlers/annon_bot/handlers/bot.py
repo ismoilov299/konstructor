@@ -34,25 +34,18 @@ logger = logging.getLogger(__name__)
 async def check_channels(user_id: int, bot: Bot) -> bool:
     try:
         channels = await get_channels_for_check()
-        logger.info(f"Checking channels: {channels}")
         if not channels:
             return True
 
         for channel_id, _ in channels:
             try:
                 member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
-                logger.info(f"Channel {channel_id} status for user {user_id}: {member.status}")
                 if member.status not in ['member', 'creator', 'administrator']:
-                    logger.info(f"User {user_id} is not subscribed to channel {channel_id}")
                     return False
             except Exception as e:
-                logger.error(f"Error checking channel {channel_id} for user {user_id}: {e}")
                 return False
-
-        logger.info(f"User {user_id} is subscribed to all channels")
         return True
     except Exception as e:
-        logger.error(f"General error in check_channels for user {user_id}: {e}")
         return False
 
 
@@ -113,25 +106,26 @@ async def update_referral_stats(referral_id: int):
     except Exception as e:
         logger.error(f"Error updating referral stats: {e}", exc_info=True)
 
+
 async def process_referral(message: Message, referral_id: int):
-    logger.info(f"Processing referral for user {message.from_user.id}, referrer: {referral_id}")
     inviter = await get_user_by_id(referral_id)
     if inviter:
         try:
-            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+            user_link = f'tg://user?id={message.from_user.id}'
             await message.bot.send_message(
                 chat_id=referral_id,
                 text=f"У вас новый {user_link}!",
                 parse_mode="html"
             )
-            logger.info(f"Referral notification sent to user {referral_id}")
 
-            await update_referral_stats(referral_id)
-            logger.info(f"Referral stats updated for user {referral_id}")
+            user_tg = await UserTG.objects.filter(uid=referral_id).first()
+            if user_tg:
+                user_tg.refs += 1
+                user_tg.balance += 10.0
+                await user_tg.save()
+
         except Exception as e:
             logger.error(f"Error processing referral: {e}")
-    else:
-        logger.warning(f"Inviter with ID {referral_id} not found")
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
@@ -230,21 +224,6 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
        reply_markup=await main_menu_bt2()
    )
 
-# async def check_all_subscriptions(user_id, bot):
-#     channels = await get_channels_for_check()
-#     logger.info(f"Checking subscriptions for user {user_id}")
-#     logger.info(channels)
-#     for channel in channels:
-#         try:
-#             member = await bot.get_chat_member(channel[0], user_id)
-#             logger.info(f"User {user_id} status in channel {channel[0]}: {member.status}")
-#             if member.status == "left":
-#                 return False
-#         except Exception as e:
-#             logger.error(f"Error checking channel {channel[0]} for user {user_id}: {e}")
-#     return True
-
-
 async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
     logger.info(f"Processing new user {message.from_user.id}")
     data = await state.get_data()
@@ -283,28 +262,52 @@ async def show_main_menu(message: types.Message, bot: Bot):
 
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
-async def start_command(message: types.Message, state: FSMContext, bot: Bot, command: CommandObject):
-    logger.info(f"Start command received from user {message.from_user.id}")
+async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     args = command.args
-
     if args:
         await state.update_data(referral=args)
-        logger.info(f"Referral {args} saved for user {message.from_user.id}")
 
     subscribed = await check_channels(message.from_user.id, bot)
     if not subscribed:
-        logger.info(f"User {message.from_user.id} is not subscribed to all channels")
         markup = await channels_in(await get_channels_for_check(), bot)
         await message.answer(
             "Для использования бота подпишитесь на наших спонсоров",
             reply_markup=markup
         )
-    else:
-        user_exists = await check_user(message.from_user.id)
-        if not user_exists:
-            await process_new_user(message, state, bot)
-        else:
-            await process_existing_user(message, bot)
+        return
+
+    user_exists = await check_user(message.from_user.id)
+
+    if not user_exists:
+        new_link = await create_start_link(bot, str(message.from_user.id))
+        link_for_db = new_link[new_link.index("=") + 1:]
+        await add_user(message.from_user, link_for_db)
+
+        data = await state.get_data()
+        referral = data.get('referral')
+        if referral and len(referral) < 10:
+            await process_referral(message, int(referral))
+            await state.clear()
+
+    if args and len(args) > 10:
+        await state.set_state(Links.send_st)
+        await state.update_data({"link_user": int(args)})
+        await message.answer(
+            "🚀 Здесь можно отправить анонимное сообщение.\n"
+            "Напишите сообщение которое хотите отправить анонимно.",
+            reply_markup=await main_menu_bt()
+        )
+        return
+
+    # Asosiy menu
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    await message.answer(
+        f"🚀 Начни получать анонимные сообщения прямо сейчас!\n\n"
+        f"Твоя личная ссылка:\n👉{link}\n\n"
+        f"Размести эту ссылку ☝️ в своём профиле",
+        reply_markup=await main_menu_bt()
+    )
 
 async def process_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
@@ -329,39 +332,55 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
 
 
 @client_bot_router.callback_query(lambda c: c.data == 'check_chan')
-async def check_subscriptions(callback_query: CallbackQuery, state: FSMContext, bot: Bot):
-    user_id = callback_query.from_user.id
-    logger.info(f"Subscription check requested by user {user_id}")
-    subscribed = await check_channels(user_id, bot)
-    logger.info(f"Subscription check result for user {user_id}: {subscribed}")
+async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    # 1. Mandatory subscription verification
+    subscribed = await check_channels(callback.from_user.id, bot)
 
-    if subscribed:
-        logger.info(f"User {user_id} is now subscribed to all channels")
-
-        data = await state.get_data()
-        referral = data.get('referral')
-        if referral:
-            await process_referral(callback_query.message, int(referral))
-            await state.clear()
-
-        user_exists = await check_user(user_id)
-        if not user_exists:
-            await process_new_user(callback_query.message, state, bot)
-        else:
-            await process_existing_user(callback_query.message, bot)
-
-        await callback_query.answer("Вы успешно подписались на все каналы!")
-        await show_main_menu(callback_query.message, bot)
-    else:
-        logger.info(f"User {user_id} is not subscribed to all channels")
-
-        await callback_query.answer("Пожалуйста, подпишитесь на все каналы.")
+    if not subscribed:
+        await callback.answer("Пожалуйста, подпишитесь на все каналы.")
         channels = await get_channels_for_check()
         markup = await channels_in(channels, bot)
-        await callback_query.message.edit_text(
+        await callback.message.edit_text(
             "Для использования бота подпишитесь на наших спонсоров",
             reply_markup=markup
         )
+        return
+
+    # 2. User and referral verification
+    user_exists = await check_user(callback.from_user.id)
+    data = await state.get_data()
+    referral = data.get('referral')
+
+    if not user_exists:
+        new_link = await create_start_link(bot, str(callback.from_user.id))
+        link_for_db = new_link[new_link.index("=") + 1:]
+        await add_user(callback.from_user, link_for_db)
+
+        if referral:
+            await process_referral(callback.message, int(referral))
+            await state.clear()
+
+    # 3. For anonymous message (if the start parameter contains user_id)
+    if referral and len(referral) > 10:
+        await state.set_state(Links.send_st)
+        await state.update_data({"link_user": int(referral)})
+        await callback.message.answer(
+            "🚀 Здесь можно отправить анонимное сообщение.\n"
+            "Напишите сообщение которое хотите отправить анонимно.",
+            reply_markup=await main_menu_bt()
+        )
+        return
+
+    # Main menu
+    await callback.answer("Вы успешно подписались на все каналы!")
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={callback.from_user.id}"
+    await callback.message.edit_text(
+        f"🚀 Начни получать анонимные сообщения прямо сейчас!\n\n"
+        f"Твоя личная ссылка:\n👉{link}\n\n"
+        f"Размести эту ссылку ☝️ в своём профиле",
+        reply_markup=await main_menu_bt()
+    )
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",

@@ -10,6 +10,8 @@ from modul.models import Bot
 from aiogram import Bot as CBot
 from modul.config import settings_conf
 logger = logging.getLogger(__name__)
+
+
 MUSIC_MENU_BUTTONS_TEXT = [
     ("🎙Лучшая музыка"),
     ("🎧Новые песни"),
