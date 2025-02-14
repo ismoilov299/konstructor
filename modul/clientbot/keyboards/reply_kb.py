@@ -103,7 +103,7 @@ def owner_bots_filter(owner):
 
 
 async def gen_buttons(current_bot: Bot, uid: int):
-    owner = await get_bot_owner(current_bot)
+    # owner = await get_bot_owner(current_bot)
 
     if current_bot.enable_anon:
         btns = [
