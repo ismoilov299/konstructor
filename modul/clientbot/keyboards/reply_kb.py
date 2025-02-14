@@ -5,7 +5,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
 from asgiref.sync import sync_to_async
 
 from modul.clientbot import strings
-from modul.clientbot.shortcuts import get_current_bot, have_one_module, get_bot_by_token
+from modul.clientbot.shortcuts import get_current_bot,  get_bot_by_token
 from modul.models import Bot
 from aiogram import Bot as CBot
 from modul.config import settings_conf
@@ -93,25 +93,56 @@ def owner_bots_filter(owner):
     return owner.bots.filter(owner=owner, unauthorized=False).count()
 
 
+def have_one_module(bot: CBot, module_name: str):
+    modules = [
+        "enable_promotion",
+        "enable_music",
+        "enable_download",
+        "enable_leo",
+        "enable_chatgpt",
+        "enable_horoscope",
+        "enable_anon",
+        "enable_sms",
+    ]
+    if getattr(bot, f"enable_{module_name}"):
+        return [getattr(bot, x) for x in modules].count(True) == 1
+    return False
+
 async def gen_buttons(current_bot: Bot, uid: int):
-    try:
-        btns = []
+    btns = []
+    owner = await get_bot_owner(current_bot)
+    if current_bot.enable_promotion:
+        btns.append(("⭐️ Социальные сети"))
+        btns.append(("📋 Мои заказы"))
+        btns.append(("💰 Баланс"))
+        btns.append(("👤 Реферальная система"))
+        btns.append(("🌍 Поменять язык"))
+    if current_bot.enable_music:
+        if have_one_module(current_bot, "music"):
+            [btns.append(i) for i in MUSIC_MENU_BUTTONS_TEXT]
+        else:
+            btns.append(("🎧 Музыка"))
+    if current_bot.enable_download:
+        if not have_one_module(current_bot, "download"):
+            btns.append(("🎥 Скачать видео"))
+    if current_bot.enable_chatgpt:
+        pass
+    if current_bot.enable_leo:
+        btns.append(("🫰 Знакомства"))
+    if current_bot.enable_horoscope:
+        if have_one_module(current_bot, "horoscope"):
+            [btns.append(i) for i in HOROSCOPE_BUTTONS_TEXT]
+        else:
+            btns.append(("♈️ Гороскоп"))
+    if current_bot.enable_promotion:
+        btns.append(("ℹ️ Информация"))
+    if current_bot.enable_anon:
+        btns.append(("🚀Начать"))
+        btns.append(("👋Изменить приветствие"))
+        btns.append(("⭐️Ваша статистика"))
+    btns.append(("💸Заработать"))
+    return btns
 
-        if getattr(current_bot, "leo", False):
-            btns.append("🫰 Знакомства")
-
-        bot_instance = await get_bot_by_token(current_bot.token)
-
-        if bot_instance and getattr(bot_instance, "enable_anon", False):
-            btns.extend([
-                "🚀Начать", "👋Изменить приветствие",
-                "⭐️Ваша статистика", "💸Заработать"
-            ])
-            return btns
-    except Exception as e:
-        logger.error(f"Error in gen_buttons: {e}")
-
-    return ["💸Заработать"]
 
 async def main_menu(uid: int, bot: Bot):
     builder = ReplyKeyboardBuilder()
