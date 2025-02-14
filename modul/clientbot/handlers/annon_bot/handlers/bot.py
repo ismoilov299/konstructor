@@ -217,7 +217,7 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
 
    me = await bot.get_me()
    anon_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-   ref_link = f"https://t.me/{me.username}?start=r{message.from_user.id}"
+   ref_link = f"https://t.me/{me.username}?start={message.from_user.id}"
 
    price = await get_actual_price()
    min_withdraw = await get_actual_min_amount()
@@ -268,6 +268,7 @@ async def process_existing_user(message: types.Message, bot: Bot):
 
 async def show_main_menu(message: types.Message, bot: Bot):
     me = await bot.get_me()
+    print(271)
     link = f"https://t.me/{me.username}?start={message.from_user.id}"
     await message.answer(
         f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
@@ -314,6 +315,7 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
 
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    print(317)
     await message.answer(
         f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
         f"Твоя личная ссылка:\n👉{link}\n\n"
@@ -377,6 +379,7 @@ async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
         await query.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
         me = await bot.get_me()
         link = f"https://t.me/{me.username}?start={query.from_user.id}"
+        print(382)
         await query.bot.send_message(chat_id=query.from_user.id,
                                      text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                                           f"Твоя личная ссылка:\n👉{link}\n\n"
@@ -599,7 +602,7 @@ def anon_bot_handlers():
             new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
             link_for_db = new_link[new_link.index("=") + 1:]
             await add_user(message.from_user, link_for_db)
-
+            print(605)
             await message.bot.send_message(chat_id=message.from_user.id,
                                            text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                                                 f"Твоя личная ссылка:\n👉{new_link}\n\n"
@@ -673,6 +676,7 @@ def anon_bot_handlers():
                 await state.clear()
                 me = await bot.get_me()
                 link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                print(679)
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                                                     f"Твоя личная ссылка:\n👉{link}\n\n"
@@ -705,6 +709,7 @@ def anon_bot_handlers():
             else:
                 me = await bot.get_me()
                 link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                print(712)
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
                                                     f"Твоя личная ссылка:\n👉{link}\n\n"
