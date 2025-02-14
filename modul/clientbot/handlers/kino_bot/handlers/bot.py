@@ -1019,6 +1019,18 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         await process_referral(callback.message, int(referral))
 
     # 3. Bot turini tekshirib, tegishli start funksiyani chaqirish
+    if shortcuts.have_one_module(bot_db, "leo"):
+        await callback.message.delete()
+        # LEO moduli uchun maxsus start funksiyasini chaqirish
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🫰 Знакомства")
+        builder.button(text="💸Заработать")
+        builder.adjust(2)
+        await callback.message.answer(
+            "Добро пожаловать в бот знакомств!",
+            reply_markup=builder.as_markup(resize_keyboard=True)
+        )
+
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
