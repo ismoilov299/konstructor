@@ -266,6 +266,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
     logger.info(f"Start command received from user {message.from_user.id}")
     args = command.args
 
+    # 1. Majburiy obunani tekshirish
     subscribed = await check_channels(message.from_user.id, bot)
     if not subscribed:
         markup = await channels_in(await get_channels_for_check(), bot)
@@ -275,20 +276,25 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         )
         return
 
+    # 2. Argumentni tekshirish
     if args:
         try:
             target_id = int(args)
-            if len(args) > 10:
+            if len(args) > 8:  # Agar uzun bo'lsa - bu foydalanuvchi ID (anonim xabar)
+                # Anonim xabar uchun state o'rnatish
                 await state.set_state(Links.send_st)
                 await state.update_data({"link_user": target_id})
                 await message.answer(
-                    "🚀 Здесь можно отправить анонимное сообщение.\n"
-                    "Напишите сообщение которое хотите отправить анонимно.",
-                    reply_markup=await main_menu_bt()
+                    "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+                    "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+                    "получит ваше сообщение, но не будет знать от кого.\n\n"
+                    "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+                    "(кружки), а также стикеры.\n\n"
+                    "⚠️ Это полностью анонимно!",
+                    reply_markup=await cancel_in()
                 )
                 return
-            # Aks holda bu referal
-            else:
+            else:  # Qisqa bo'lsa - bu referal ID
                 await state.update_data(referral=args)
         except ValueError:
             logger.error(f"Invalid start parameter: {args}")
