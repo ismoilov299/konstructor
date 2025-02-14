@@ -84,33 +84,24 @@ def save_user(u, bot: Bot, link=None, inviter=None):
         raise
 
 
-async def update_referral_stats(referral_id: int):
+@sync_to_async
+def update_referral_stats(referral_id: int):
     try:
-        @sync_to_async
-        @transaction.atomic
-        def update_stats():
-            user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
-            admin_info = AdminInfo.objects.first()
-
-            if not admin_info:
-                raise ValueError("AdminInfo is not configured in the database.")
-
-            user_tg.refs += 1
-            user_tg.balance += float(admin_info.price or 10.0)
-            user_tg.save()
-            logger.info(f"Referral stats updated for user {referral_id}")
-
-        await update_stats()
+        user_tg = UserTG.objects.get(uid=referral_id)
+        user_tg.refs += 1
+        user_tg.balance += 10.0  # yoki admin_info.price
+        user_tg.save()
+        logger.info(f"Referral stats updated for user {referral_id}")
     except UserTG.DoesNotExist:
         logger.error(f"UserTG with uid {referral_id} does not exist")
     except Exception as e:
-        logger.error(f"Error updating referral stats: {e}", exc_info=True)
+        logger.error(f"Error updating referral stats: {e}")
 
 
 async def process_referral(message: Message, referral_id: int):
-    inviter = await get_user_by_id(referral_id)
-    if inviter:
-        try:
+    try:
+        inviter = await get_user_by_id(referral_id)
+        if inviter:
             user_link = f'tg://user?id={message.from_user.id}'
             await message.bot.send_message(
                 chat_id=referral_id,
@@ -118,14 +109,11 @@ async def process_referral(message: Message, referral_id: int):
                 parse_mode="html"
             )
 
-            user_tg = await UserTG.objects.filter(uid=referral_id).first()
-            if user_tg:
-                user_tg.refs += 1
-                user_tg.balance += 10.0
-                await user_tg.save()
+            await update_referral_stats(referral_id)
+            logger.info(f"Referral processed for user {referral_id}")
 
-        except Exception as e:
-            logger.error(f"Error processing referral: {e}")
+    except Exception as e:
+        logger.error(f"Error processing referral: {e}")
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
