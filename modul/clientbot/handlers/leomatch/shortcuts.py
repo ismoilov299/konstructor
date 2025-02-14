@@ -16,8 +16,15 @@ from django.db import transaction
 
 @sync_to_async
 def get_client(uid: int):
-    print(UserTG.objects.filter(uid=uid).first(), "qwerty")
-    return UserTG.objects.filter(uid=uid).first()
+    try:
+        user = UserTG.objects.filter(uid=uid).first()
+        print(f"Trying to get user with uid {uid}. Result: {user}")
+        if user is None:
+            print(f"No UserTG found with uid {uid}")
+        return user
+    except Exception as e:
+        print(f"Error in get_client for uid {uid}: {str(e)}")
+        return None
 
 
 
@@ -106,19 +113,15 @@ async def exists_leo(uid: int):
 
 @sync_to_async
 def create_leomatch(user, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username):
+    print(f"Creating LeoMatch for user: {user}")
     if user is None:
         raise ValueError("User object is None.")
 
     if not hasattr(user, 'uid') or user.uid is None:
-        raise ValueError("User object does not have a valid 'uid' attribute.")
-
-    try:
-        user_tg = UserTG.objects.get(uid=user.uid)
-    except UserTG.DoesNotExist:
-        raise ValueError(f"UserTG with uid {user.uid} does not exist.")
+        raise ValueError(f"User object does not have a valid 'uid' attribute. User: {user}")
 
     return LeoMatchModel.objects.create(
-        user=user_tg,
+        user=user,
         photo=photo,
         media_type=media_type,
         sex=sex,
@@ -130,21 +133,23 @@ def create_leomatch(user, photo, media_type, sex, age, full_name, about_me, city
         bot_username=bot_username
     )
 
+
 async def add_leo(uid: int, photo: str, media_type: str, sex: str, age: int, full_name: str, about_me: str, city: str,
                   which_search: str, bot_username: str):
     try:
         client = await get_client(uid)
+
         if client is None:
-            raise ValueError(f"Client with uid {uid} not found")
+            print(f"Creating new UserTG for uid {uid}")
+            client = await UserTG.objects.acreate(uid=uid)
+
+        print(f"Client for LeoMatch creation: {client}")
 
         info = await create_leomatch(client, photo, media_type, sex, age, full_name, about_me, city, which_search,
                                      bot_username)
         return info
-    except ValueError as e:
-        print(f"Error in add_leo: {e}")
-        raise
     except Exception as e:
-        print(f"Unexpected error in add_leo: {e}")
+        print(f"Error in add_leo for uid {uid}: {str(e)}")
         raise
 
 
