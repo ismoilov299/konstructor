@@ -107,22 +107,14 @@ async def exists_leo(uid: int):
 @sync_to_async
 def create_leomatch(user, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username):
     if user is None:
-        print("User object is None.")
         raise ValueError("User object is None.")
 
-    if not hasattr(user, 'uid'):
-        print("User object does not have 'uid' attribute.")
-        raise ValueError("User object does not have 'uid' attribute.")
+    if not hasattr(user, 'uid') or user.uid is None:
+        raise ValueError("User object does not have a valid 'uid' attribute.")
 
-    if user.uid is None:
-        print("User uid is None.")
-        raise ValueError("User uid is None.")
-
-    # Ensure the user exists
     try:
         user_tg = UserTG.objects.get(uid=user.uid)
     except UserTG.DoesNotExist:
-        print(f"UserTG with uid {user.uid} does not exist.")
         raise ValueError(f"UserTG with uid {user.uid} does not exist.")
 
     return LeoMatchModel.objects.create(
@@ -140,13 +132,20 @@ def create_leomatch(user, photo, media_type, sex, age, full_name, about_me, city
 
 async def add_leo(uid: int, photo: str, media_type: str, sex: str, age: int, full_name: str, about_me: str, city: str,
                   which_search: str, bot_username: str):
-    client = await get_client(uid)
-    # bot = await shortcuts.get_bot_by_username(bot_username)
-    # async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
-    #     format_m = "jpg" if media_type == "PHOTO" else "mp4"
-    #     await bot_.download(photo, f"/Users/ibragimkadamzanov/PycharmProjects/pythonProject21/modul/clientbot/data/leo{uid}.{format_m}")
-    info = await create_leomatch(client, photo, media_type, sex, age, full_name, about_me, city, which_search,
-                                 bot_username)
+    try:
+        client = await get_client(uid)
+        if client is None:
+            raise ValueError(f"Client with uid {uid} not found")
+
+        info = await create_leomatch(client, photo, media_type, sex, age, full_name, about_me, city, which_search,
+                                     bot_username)
+        return info
+    except ValueError as e:
+        print(f"Error in add_leo: {e}")
+        raise
+    except Exception as e:
+        print(f"Unexpected error in add_leo: {e}")
+        raise
 
 
 @sync_to_async
