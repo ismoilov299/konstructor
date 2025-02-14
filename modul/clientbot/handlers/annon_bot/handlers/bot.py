@@ -276,35 +276,54 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         )
         return
 
-    # 2. Argumentni tekshirish
+    # 2. Foydalanuvchini tekshirish
+    user_exists = await check_user(message.from_user.id)
+
+    # 3. Yangi foydalanuvchi bo'lsa qo'shamiz
+    if not user_exists:
+        new_link = await create_start_link(bot, str(message.from_user.id))
+        link_for_db = new_link[new_link.index("=") + 1:]
+        await add_user(message.from_user, link_for_db)
+
+        # Agar args bo'lsa va raqam bo'lsa referal sifatida hisoblaymiz
+        if args:
+            try:
+                referral_id = int(args)
+                await process_referral(message, referral_id)
+            except ValueError:
+                logger.error(f"Invalid referral ID: {args}")
+
+    # 4. Anonim xabar yoki asosiy menu
     if args:
         try:
             target_id = int(args)
-            if len(args) > 8:  # Agar uzun bo'lsa - bu foydalanuvchi ID (anonim xabar)
-                # Anonim xabar uchun state o'rnatish
-                await state.set_state(Links.send_st)
-                await state.update_data({"link_user": target_id})
-                await message.answer(
-                    "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
-                    "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-                    "получит ваше сообщение, но не будет знать от кого.\n\n"
-                    "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-                    "(кружки), а также стикеры.\n\n"
-                    "⚠️ Это полностью анонимно!",
-                    reply_markup=await cancel_in()
-                )
-                return
-            else:  # Qisqa bo'lsa - bu referal ID
-                await state.update_data(referral=args)
+            # Anonim xabar uchun state o'rnatish
+            await state.set_state(Links.send_st)
+            await state.update_data({"link_user": target_id})
+            await message.answer(
+                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+                "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+                "получит ваше сообщение, но не будет знать от кого.\n\n"
+                "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+                "(кружки), а также стикеры.\n\n"
+                "⚠️ Это полностью анонимно!",
+                reply_markup=await cancel_in()
+            )
+            return
         except ValueError:
-            logger.error(f"Invalid start parameter: {args}")
+            logger.error(f"Invalid target ID: {args}")
 
-    # 3. Foydalanuvchini tekshirish
-    user_exists = await check_user(message.from_user.id)
-    if not user_exists:
-        await process_new_user(message, state, bot)
-    else:
-        await process_existing_user(message, bot)
+    # 5. Oddiy start uchun
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    await message.answer(
+        f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+        f"Твоя личная ссылка:\n👉{link}\n\n"
+        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+        f"других соц сетях, чтобы начать получать сообщения 💬",
+        parse_mode="html",
+        reply_markup=await main_menu_bt()
+    )
 
 async def process_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
@@ -334,7 +353,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
     subscribed = await check_channels(user_id, bot)
 
     if not subscribed:
-        # InlineKeyboardMarkup yaratamiz
+        await callback.answer("Пожалуйста, подпишитесь на все каналы.")
         channels = await get_channels_for_check()
         markup = InlineKeyboardBuilder()
 
@@ -349,28 +368,57 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         markup.button(text="✅ Проверить подписку", callback_data="check_chan")
         markup.adjust(1)
 
-        await callback.answer("Пожалуйста, подпишитесь на все каналы.")
         await callback.message.edit_text(
             "Для использования бота подпишитесь на наших спонсоров",
-            reply_markup=markup.as_markup()  # InlineKeyboardMarkup qaytaradi
+            reply_markup=markup.as_markup()
         )
         return
 
-    # Qolgan kodlar o'zgarmaydi
-    data = await state.get_data()
-    referral = data.get('referral')
-    if referral:
-        await process_referral(callback.message, int(referral))
-        await state.clear()
-
-    user_exists = await check_user(user_id)
-    if not user_exists:
-        await process_new_user(callback.message, state, bot)
-    else:
-        await process_existing_user(callback.message, bot)
-
     await callback.answer("Вы успешно подписались на все каналы!")
-    await show_main_menu(callback.message, bot)
+
+    # Foydalanuvchini tekshirish
+    user_exists = await check_user(user_id)
+
+    # Yangi foydalanuvchi bo'lsa qo'shamiz
+    if not user_exists:
+        new_link = await create_start_link(bot, str(callback.from_user.id))
+        link_for_db = new_link[new_link.index("=") + 1:]
+        await add_user(callback.from_user, link_for_db)
+
+        data = await state.get_data()
+        referral = data.get('referral')
+        if referral:
+            try:
+                referral_id = int(referral)
+                await process_referral(callback.message, referral_id)
+            except ValueError:
+                logger.error(f"Invalid referral ID: {referral}")
+
+    data = await state.get_data()
+    target_id = data.get('link_user')
+
+    if target_id:
+        await state.set_state(Links.send_st)
+        await callback.message.edit_text(
+            "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+            "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+            "получит ваше сообщение, но не будет знать от кого.\n\n"
+            "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+            "(кружки), а также стикеры.\n\n"
+            "⚠️ Это полностью анонимно!",
+            reply_markup=await cancel_in()
+        )
+    else:
+        me = await bot.get_me()
+        link = f"https://t.me/{me.username}?start={callback.from_user.id}"
+        await callback.message.edit_text(
+            f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+            f"Твоя личная ссылка:\n👉{link}\n\n"
+            f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+            f"других соц сетях, чтобы начать получать сообщения 💬",
+            parse_mode="html",
+            reply_markup=await main_menu_bt()
+        )
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
