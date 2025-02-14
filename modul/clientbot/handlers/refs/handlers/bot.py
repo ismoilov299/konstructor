@@ -432,7 +432,7 @@ async def info(message: Message):
 
 
 
-@client_bot_router.callback_query(F.data.in_(["payment", "check_chan"]))
+@client_bot_router.callback_query(F.data.in_(["payment",]))
 async def call_backs(query: CallbackQuery, state: FSMContext):
     await state.clear()
     if query.data == "payment":

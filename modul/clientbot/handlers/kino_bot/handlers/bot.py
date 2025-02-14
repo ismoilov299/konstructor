@@ -1012,16 +1012,13 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 
     await callback.answer("Вы успешно подписались на все каналы!")
 
-    # 2. Referalni tekshirish
     data = await state.get_data()
     referral = data.get('referral')
     if referral and referral.isdigit():
         await process_referral(callback.message, int(referral))
 
-    # 3. Bot turini tekshirib, tegishli start funksiyani chaqirish
     if shortcuts.have_one_module(bot_db, "leo"):
         await callback.message.delete()
-        # LEO moduli uchun maxsus start funksiyasini chaqirish
         builder = ReplyKeyboardBuilder()
         builder.button(text="🫰 Знакомства")
         builder.button(text="💸Заработать")
