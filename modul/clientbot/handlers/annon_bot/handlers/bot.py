@@ -402,7 +402,8 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
     else:
         me = await bot.get_me()
         link = f"https://t.me/{me.username}?start={callback.from_user.id}"
-        await callback.message.edit_text(
+        await callback.message.delete()
+        await callback.message.answer(
             f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
             f"Твоя личная ссылка:\n👉{link}\n\n"
             f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
