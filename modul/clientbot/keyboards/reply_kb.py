@@ -1,13 +1,15 @@
+import logging
+
 from aiogram.types import KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
 from asgiref.sync import sync_to_async
 
 from modul.clientbot import strings
-from modul.clientbot.shortcuts import get_current_bot, have_one_module
+from modul.clientbot.shortcuts import get_current_bot, have_one_module, get_bot_by_token
 from modul.models import Bot
 from aiogram import Bot as CBot
 from modul.config import settings_conf
-
+logger = logging.getLogger(__name__)
 MUSIC_MENU_BUTTONS_TEXT = [
     ("🎙Лучшая музыка"),
     ("🎧Новые песни"),
@@ -70,20 +72,7 @@ def yes_no():
     return builder.as_markup(resize_keyboard=True)
 
 
-def have_one_module(bot: CBot, module_name: str):
-    modules = [
-        "enable_promotion",
-        "enable_music",
-        "enable_download",
-        "enable_leo",
-        "enable_chatgpt",
-        "enable_horoscope",
-        "enable_anon",
-        "enable_sms",
-    ]
-    if getattr(bot, f"enable_{module_name}"):
-        return [getattr(bot, x) for x in modules].count(True) == 1
-    return False
+
 
 
 async def turn_bot_data(attr: str, bot: CBot):
@@ -103,17 +92,19 @@ def owner_bots_filter(owner):
 
 
 async def gen_buttons(current_bot: Bot, uid: int):
-    # owner = await get_bot_owner(current_bot)
+    try:
+        bot_instance = await get_bot_by_token(current_bot.token)
+        if bot_instance and hasattr(bot_instance, 'enable_anon') and bot_instance.enable_anon:
+            btns = [
+                "🚀Начать", "👋Изменить приветствие",
+                "⭐️Ваша статистика",
+                "💸Заработать"
+            ]
+            return btns
+    except Exception as e:
+        logger.error(f"Error in gen_buttons: {e}")
 
-    if current_bot.enable_anon:
-        btns = [
-            "🚀Начать", "👋Изменить приветствие",
-            "⭐️Ваша статистика",
-            "💸Заработать"
-        ]
-        return btns
-
-    return []
+    return ["💸Заработать"]
 
 
 async def main_menu(uid: int, bot: Bot):
