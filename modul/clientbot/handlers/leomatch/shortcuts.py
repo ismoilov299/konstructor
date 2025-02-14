@@ -106,14 +106,27 @@ async def exists_leo(uid: int):
 
 @sync_to_async
 def create_leomatch(user, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username):
- 
+    if user is None:
+        print("User object is None.")
+        raise ValueError("User object is None.")
+
+    if not hasattr(user, 'uid'):
+        print("User object does not have 'uid' attribute.")
+        raise ValueError("User object does not have 'uid' attribute.")
+
+    if user.uid is None:
+        print("User uid is None.")
+        raise ValueError("User uid is None.")
+
     # Ensure the user exists
-    if not UserTG.objects.filter(uid=user.uid).exists():
-        print(f"UserTG with pk {user.uid} does not exist.")
-        raise ValueError(f"UserTG with pk {user.uid} does not exist.")
+    try:
+        user_tg = UserTG.objects.get(uid=user.uid)
+    except UserTG.DoesNotExist:
+        print(f"UserTG with uid {user.uid} does not exist.")
+        raise ValueError(f"UserTG with uid {user.uid} does not exist.")
 
     return LeoMatchModel.objects.create(
-        user=user,
+        user=user_tg,
         photo=photo,
         media_type=media_type,
         sex=sex,
@@ -124,7 +137,6 @@ def create_leomatch(user, photo, media_type, sex, age, full_name, about_me, city
         which_search=which_search,
         bot_username=bot_username
     )
-
 
 async def add_leo(uid: int, photo: str, media_type: str, sex: str, age: int, full_name: str, about_me: str, city: str,
                   which_search: str, bot_username: str):
