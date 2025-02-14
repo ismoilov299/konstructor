@@ -1045,7 +1045,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     if member.status == "left":
                         await message.answer(
                             "Для использования бота подпишитесь на наших спонсоров",
-                            reply_markup=await channels_in(channels)
+                            reply_markup=await channels_in(channels,bot)
                         )
                         return False
                 except Exception as e:
