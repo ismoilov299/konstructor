@@ -4,7 +4,7 @@ from aiogram.types import KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
 from asgiref.sync import sync_to_async
 
-from modul.clientbot import strings
+from modul.clientbot import strings, shortcuts
 from modul.clientbot.shortcuts import get_current_bot,  get_bot_by_token
 from modul.models import Bot
 from aiogram import Bot as CBot
@@ -93,7 +93,49 @@ def owner_bots_filter(owner):
     return owner.bots.filter(owner=owner, unauthorized=False).count()
 
 
-def have_one_module(bot: CBot, module_name: str):
+async def gen_buttons(current_bot: Bot, uid: int):
+    btns = []
+    # Avval Django modeldan bot ma'lumotlarini olish
+    bot_db = await shortcuts.get_bot(current_bot)
+    if not bot_db:
+        logger.error(f"Bot not found in database: {current_bot.token}")
+        return btns
+
+    # Endi bot_db orqali attributlarga murojaat qilamiz
+    if bot_db.enable_promotion:
+        btns.append(("⭐️ Социальные сети"))
+        btns.append(("📋 Мои заказы"))
+        btns.append(("💰 Баланс"))
+        btns.append(("👤 Реферальная система"))
+        btns.append(("🌍 Поменять язык"))
+    if bot_db.enable_music:
+        if have_one_module(bot_db, "music"):
+            [btns.append(i) for i in MUSIC_MENU_BUTTONS_TEXT]
+        else:
+            btns.append(("🎧 Музыка"))
+    if bot_db.enable_download:
+        if not have_one_module(bot_db, "download"):
+            btns.append(("🎥 Скачать видео"))
+    if bot_db.enable_chatgpt:
+        pass
+    if bot_db.enable_leo:
+        btns.append(("🫰 Знакомства"))
+    if bot_db.enable_horoscope:
+        if have_one_module(bot_db, "horoscope"):
+            [btns.append(i) for i in HOROSCOPE_BUTTONS_TEXT]
+        else:
+            btns.append(("♈️ Гороскоп"))
+    if bot_db.enable_promotion:
+        btns.append(("ℹ️ Информация"))
+    if bot_db.enable_anon:
+        btns.append(("🚀Начать"))
+        btns.append(("👋Изменить приветствие"))
+        btns.append(("⭐️Ваша статистика"))
+    btns.append(("💸Заработать"))
+    return btns
+
+# have_one_module funksiyasini ham o'zgartiramiz
+def have_one_module(bot_db, module_name: str):
     modules = [
         "enable_promotion",
         "enable_music",
@@ -104,45 +146,9 @@ def have_one_module(bot: CBot, module_name: str):
         "enable_anon",
         "enable_sms",
     ]
-    if getattr(bot, f"enable_{module_name}"):
-        return [getattr(bot, x) for x in modules].count(True) == 1
+    if getattr(bot_db, f"enable_{module_name}"):
+        return [getattr(bot_db, x) for x in modules].count(True) == 1
     return False
-
-async def gen_buttons(current_bot: Bot, uid: int):
-    btns = []
-    owner = await get_bot_owner(current_bot)
-    if current_bot.enable_promotion:
-        btns.append(("⭐️ Социальные сети"))
-        btns.append(("📋 Мои заказы"))
-        btns.append(("💰 Баланс"))
-        btns.append(("👤 Реферальная система"))
-        btns.append(("🌍 Поменять язык"))
-    if current_bot.enable_music:
-        if have_one_module(current_bot, "music"):
-            [btns.append(i) for i in MUSIC_MENU_BUTTONS_TEXT]
-        else:
-            btns.append(("🎧 Музыка"))
-    if current_bot.enable_download:
-        if not have_one_module(current_bot, "download"):
-            btns.append(("🎥 Скачать видео"))
-    if current_bot.enable_chatgpt:
-        pass
-    if current_bot.enable_leo:
-        btns.append(("🫰 Знакомства"))
-    if current_bot.enable_horoscope:
-        if have_one_module(current_bot, "horoscope"):
-            [btns.append(i) for i in HOROSCOPE_BUTTONS_TEXT]
-        else:
-            btns.append(("♈️ Гороскоп"))
-    if current_bot.enable_promotion:
-        btns.append(("ℹ️ Информация"))
-    if current_bot.enable_anon:
-        btns.append(("🚀Начать"))
-        btns.append(("👋Изменить приветствие"))
-        btns.append(("⭐️Ваша статистика"))
-    btns.append(("💸Заработать"))
-    return btns
-
 
 async def main_menu(uid: int, bot: Bot):
     builder = ReplyKeyboardBuilder()
