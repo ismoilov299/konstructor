@@ -1018,7 +1018,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         await process_referral(callback.message, int(referral))
 
     if shortcuts.have_one_module(bot_db, "leo"):
-        await callback.message.delete()
+        # await callback.message.delete()
         builder = ReplyKeyboardBuilder()
         builder.button(text="🫰 Знакомства")
         builder.button(text="💸Заработать")
