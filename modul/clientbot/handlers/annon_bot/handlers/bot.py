@@ -305,7 +305,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
     await message.answer(
         f"🚀 Начни получать анонимные сообщения прямо сейчас!\n\n"
         f"Твоя личная ссылка:\n👉{link}\n\n"
-        f"Размести эту ссылку ☝️ в своём профиле",
+        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или других соц сетях, чтобы начать получать сообщения 💬",
         reply_markup=await main_menu_bt()
     )
 
@@ -333,54 +333,47 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.callback_query(lambda c: c.data == 'check_chan')
 async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    # 1. Mandatory subscription verification
-    subscribed = await check_channels(callback.from_user.id, bot)
+    user_id = callback.from_user.id
+    subscribed = await check_channels(user_id, bot)
 
     if not subscribed:
-        await callback.answer("Пожалуйста, подпишитесь на все каналы.")
+        # InlineKeyboardMarkup yaratamiz
         channels = await get_channels_for_check()
-        markup = await channels_in(channels, bot)
+        markup = InlineKeyboardBuilder()
+
+        for channel_id, _ in channels:
+            try:
+                chat = await bot.get_chat(channel_id)
+                invite_link = chat.invite_link or await bot.create_chat_invite_link(channel_id)
+                markup.button(text=chat.title, url=invite_link)
+            except Exception as e:
+                continue
+
+        markup.button(text="✅ Проверить подписку", callback_data="check_chan")
+        markup.adjust(1)
+
+        await callback.answer("Пожалуйста, подпишитесь на все каналы.")
         await callback.message.edit_text(
             "Для использования бота подпишитесь на наших спонсоров",
-            reply_markup=markup
+            reply_markup=markup.as_markup()  # InlineKeyboardMarkup qaytaradi
         )
         return
 
-    # 2. User and referral verification
-    user_exists = await check_user(callback.from_user.id)
+    # Qolgan kodlar o'zgarmaydi
     data = await state.get_data()
     referral = data.get('referral')
+    if referral:
+        await process_referral(callback.message, int(referral))
+        await state.clear()
 
+    user_exists = await check_user(user_id)
     if not user_exists:
-        new_link = await create_start_link(bot, str(callback.from_user.id))
-        link_for_db = new_link[new_link.index("=") + 1:]
-        await add_user(callback.from_user, link_for_db)
+        await process_new_user(callback.message, state, bot)
+    else:
+        await process_existing_user(callback.message, bot)
 
-        if referral:
-            await process_referral(callback.message, int(referral))
-            await state.clear()
-
-    # 3. For anonymous message (if the start parameter contains user_id)
-    if referral and len(referral) > 10:
-        await state.set_state(Links.send_st)
-        await state.update_data({"link_user": int(referral)})
-        await callback.message.answer(
-            "🚀 Здесь можно отправить анонимное сообщение.\n"
-            "Напишите сообщение которое хотите отправить анонимно.",
-            reply_markup=await main_menu_bt()
-        )
-        return
-
-    # Main menu
     await callback.answer("Вы успешно подписались на все каналы!")
-    me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start={callback.from_user.id}"
-    await callback.message.edit_text(
-        f"🚀 Начни получать анонимные сообщения прямо сейчас!\n\n"
-        f"Твоя личная ссылка:\n👉{link}\n\n"
-        f"Размести эту ссылку ☝️ в своём профиле",
-        reply_markup=await main_menu_bt()
-    )
+    await show_main_menu(callback.message, bot)
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
