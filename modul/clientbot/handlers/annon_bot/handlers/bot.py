@@ -578,7 +578,7 @@ async def change_link(message: Message, state: FSMContext):
 def anon_bot_handlers():
     @client_bot_router.message(AnonBotFilter())
     async def any_or_answer(message: Message, state: FSMContext, bot: Bot):
-        channels_checker = await check_channels(message)
+        channels_checker = await check_channels(message.from_user.id,bot)
         checker = await check_user(message.from_user.id)
         check = None
 
