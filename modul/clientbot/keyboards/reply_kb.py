@@ -97,7 +97,7 @@ async def gen_buttons(current_bot: Bot, uid: int):
     try:
         btns = []
 
-        if getattr(current_bot, "enable_leo", False):
+        if getattr(current_bot, "leo", False):
             btns.append("🫰 Знакомства")
 
         bot_instance = await get_bot_by_token(current_bot.token)
