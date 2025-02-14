@@ -263,9 +263,8 @@ async def show_main_menu(message: types.Message, bot: Bot):
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
+    logger.info(f"Start command received from user {message.from_user.id}")
     args = command.args
-    if args:
-        await state.update_data(referral=args)
 
     subscribed = await check_channels(message.from_user.id, bot)
     if not subscribed:
@@ -276,38 +275,30 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         )
         return
 
+    if args:
+        try:
+            target_id = int(args)
+            if len(args) > 10:
+                await state.set_state(Links.send_st)
+                await state.update_data({"link_user": target_id})
+                await message.answer(
+                    "🚀 Здесь можно отправить анонимное сообщение.\n"
+                    "Напишите сообщение которое хотите отправить анонимно.",
+                    reply_markup=await main_menu_bt()
+                )
+                return
+            # Aks holda bu referal
+            else:
+                await state.update_data(referral=args)
+        except ValueError:
+            logger.error(f"Invalid start parameter: {args}")
+
+    # 3. Foydalanuvchini tekshirish
     user_exists = await check_user(message.from_user.id)
-
     if not user_exists:
-        new_link = await create_start_link(bot, str(message.from_user.id))
-        link_for_db = new_link[new_link.index("=") + 1:]
-        await add_user(message.from_user, link_for_db)
-
-        data = await state.get_data()
-        referral = data.get('referral')
-        if referral and len(referral) < 10:
-            await process_referral(message, int(referral))
-            await state.clear()
-
-    if args and len(args) > 10:
-        await state.set_state(Links.send_st)
-        await state.update_data({"link_user": int(args)})
-        await message.answer(
-            "🚀 Здесь можно отправить анонимное сообщение.\n"
-            "Напишите сообщение которое хотите отправить анонимно.",
-            reply_markup=await main_menu_bt()
-        )
-        return
-
-    # Asosiy menu
-    me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start={message.from_user.id}"
-    await message.answer(
-        f"🚀 Начни получать анонимные сообщения прямо сейчас!\n\n"
-        f"Твоя личная ссылка:\n👉{link}\n\n"
-        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или других соц сетях, чтобы начать получать сообщения 💬",
-        reply_markup=await main_menu_bt()
-    )
+        await process_new_user(message, state, bot)
+    else:
+        await process_existing_user(message, bot)
 
 async def process_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
