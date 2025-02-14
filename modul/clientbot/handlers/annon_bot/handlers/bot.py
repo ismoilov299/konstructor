@@ -102,11 +102,10 @@ async def process_referral(message: Message, referral_id: int):
     try:
         inviter = await get_user_by_id(referral_id)
         if inviter:
-            user_link = f'tg://user?id={message.from_user.id}'
+            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
             await message.bot.send_message(
-                chat_id=referral_id,
-                text=f"У вас новый {user_link}!",
-                parse_mode="html"
+                chat_id=message.from_user.id,
+                text=f"У вас новый {user_link}!"
             )
 
             await update_referral_stats(referral_id)
@@ -388,19 +387,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
     target_id = data.get('link_user')
 
     if target_id:
-        me = await bot.get_me()
-        link = f"https://t.me/{me.username}?start={callback.from_user.id}"
-        await callback.message.edit_text(
-            f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-            f"Твоя личная ссылка:\n👉{link}\n\n"
-            f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-            f"других соц сетях, чтобы начать получать сообщения 💬",
-            parse_mode="html",
-            reply_markup=await main_menu_bt()
-        )
         # Anonim xabar uchun - yangi xabar yuboramiz
-
-    else:
         await callback.message.delete()  # Eski xabarni o'chiramiz
         await callback.message.answer(
             "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
@@ -412,6 +399,17 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             reply_markup=await cancel_in()
         )
         await state.set_state(Links.send_st)
+    else:
+        me = await bot.get_me()
+        link = f"https://t.me/{me.username}?start={callback.from_user.id}"
+        await callback.message.edit_text(
+            f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+            f"Твоя личная ссылка:\n👉{link}\n\n"
+            f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+            f"других соц сетях, чтобы начать получать сообщения 💬",
+            parse_mode="html",
+            reply_markup=await main_menu_bt()
+        )
 
 
 @client_bot_router.callback_query(F.data.in_(["check_chan", "cancel",
