@@ -967,6 +967,91 @@ class NonChatGptFilter(Filter):
         return not shortcuts.have_one_module(bot_db, "chatgpt")
 
 
+@client_bot_router.callback_query(lambda c: c.data == 'check_chan', NonChatGptFilter())
+async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    user_id = callback.from_user.id
+    bot_db = await shortcuts.get_bot(bot)
+
+    # 1. Kanallarni tekshirish
+    subscribed = True
+    channels = await get_channels_for_check()
+    if channels:
+        for channel_id, _ in channels:
+            try:
+                member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+                print(f"Channel {channel_id} status: {member.status}")
+                if member.status == "left":
+                    subscribed = False
+                    break
+            except Exception as e:
+                logger.error(f"Error checking channel {channel_id}: {e}")
+                subscribed = False
+                break
+
+    if not subscribed:
+        await callback.answer("Пожалуйста, подпишитесь на все каналы.")
+        channels = await get_channels_for_check()
+        markup = InlineKeyboardBuilder()
+
+        for channel_id, _ in channels:
+            try:
+                chat = await bot.get_chat(channel_id)
+                invite_link = chat.invite_link or await bot.create_chat_invite_link(channel_id)
+                markup.button(text=chat.title, url=invite_link)
+            except Exception as e:
+                continue
+
+        markup.button(text="✅ Проверить подписку", callback_data="check_chan")
+        markup.adjust(1)
+
+        await callback.message.edit_text(
+            "Для использования бота подпишитесь на наших спонсоров",
+            reply_markup=markup.as_markup()
+        )
+        return
+
+    await callback.answer("Вы успешно подписались на все каналы!")
+
+    # 2. Referalni tekshirish
+    data = await state.get_data()
+    referral = data.get('referral')
+    if referral and referral.isdigit():
+        await process_referral(callback.message, int(referral))
+
+    # 3. Bot turini tekshirib, tegishli start funksiyani chaqirish
+    if shortcuts.have_one_module(bot_db, "download"):
+        builder = ReplyKeyboardBuilder()
+        builder.button(text='💸Заработать')
+        text = ("🤖 Привет, {full_name}! Я бот-загрузчик.\r\n\r\n"
+                "Я могу скачать фото/видео/аудио/файлы/архивы с *Youtube, Instagram, TikTok, Facebook, SoundCloud, Vimeo, Вконтакте, Twitter и 1000+ аудио/видео/файловых хостингов*. Просто пришли мне URL на публикацию с медиа или прямую ссылку на файл.").format(
+            full_name=callback.from_user.full_name)
+        await state.set_state(Download.download)
+        await callback.message.answer(text, parse_mode="Markdown",
+                                      reply_markup=builder.as_markup(resize_keyboard=True))
+
+    elif shortcuts.have_one_module(bot_db, "kino"):
+        await callback.message.delete()
+        await start_kino_bot(callback.message, state, bot)
+
+    elif shortcuts.have_one_module(bot_db, "chatgpt"):
+        builder = InlineKeyboardBuilder()
+        builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
+        builder.button(text='☁ Чат с GPT-3.5', callback_data='chat_3')
+        builder.button(text='🆘 Помощь', callback_data='helper')
+        builder.button(text='⚙️ Настройки', callback_data='settings')
+        builder.button(text='💸Заработать', callback_data='ref')
+        builder.adjust(2, 1, 1, 1, 1, 1, 2)
+        result = await get_info_db(user_id)
+        text = f'Привет {callback.from_user.username}\nВаш баланс - {result[0][2]}'
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+
+    else:
+        await callback.message.delete()
+        text = "Добро пожаловать, {hello}".format(
+            hello=html.quote(callback.from_user.full_name))
+        await callback.message.answer(text,
+                                      reply_markup=await reply_kb.main_menu(user_id, bot))
+
 
 async def start(message: Message, state: FSMContext, bot: Bot):
     bot_db = await shortcuts.get_bot(bot)

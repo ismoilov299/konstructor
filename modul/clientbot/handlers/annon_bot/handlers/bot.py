@@ -334,7 +334,7 @@ async def process_start(message: types.Message, state: FSMContext, bot: Bot):
     logger.info(f"Main menu sent to user {message.from_user.id}")
 
 
-@client_bot_router.callback_query(lambda c: c.data == 'check_chan')
+@client_bot_router.callback_query(lambda c: c.data == 'check_chan',AnonBotFilter())
 async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: Bot):
     user_id = callback.from_user.id
     subscribed = await check_channels(user_id, bot)
