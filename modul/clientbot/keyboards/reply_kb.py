@@ -107,19 +107,23 @@ async def gen_buttons(current_bot: Bot, uid: int):
 
     if current_bot.enable_anon:
         btns = [
-            ["🚀Начать", "👋Изменить приветствие"],
-            ["⭐️Ваша статистика"],
-            ["💸Заработать"]
+            "🚀Начать", "👋Изменить приветствие",
+            "⭐️Ваша статистика",
+            "💸Заработать"
         ]
         return btns
 
     return []
 
-async def main_menu(uid: int, bot: CBot):
+
+async def main_menu(uid: int, bot: Bot):
     builder = ReplyKeyboardBuilder()
-    current_bot = await get_current_bot(bot)
-    btns = await gen_buttons(current_bot, uid)
-    builder.row(*[KeyboardButton(text=i) for i in btns], width=2)
+    btns = await gen_buttons(bot, uid)
+
+    for btn in btns:
+        builder.add(KeyboardButton(text=btn))
+
+    builder.adjust(2, 1, 1)
     return builder.as_markup(resize_keyboard=True)
 
 
