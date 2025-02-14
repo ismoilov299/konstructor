@@ -290,7 +290,7 @@ async def start_command(message: types.Message, state: FSMContext, bot: Bot, com
         await state.update_data(referral=args)
         logger.info(f"Referral {args} saved for user {message.from_user.id}")
 
-    subscribed = await check_channels(message, bot)
+    subscribed = await check_channels(message.from_user.id, bot)
     if not subscribed:
         logger.info(f"User {message.from_user.id} is not subscribed to all channels")
         markup = await channels_in(await get_channels_for_check(), bot)
