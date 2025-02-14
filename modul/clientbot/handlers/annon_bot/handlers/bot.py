@@ -401,11 +401,6 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         )
         await state.set_state(Links.send_st)
     else:
-        # Oddiy start uchun inline keyboard yaratamiz
-        kb = InlineKeyboardBuilder()
-        kb.button(text="📝 Написать сообщение", callback_data="write_message")
-        kb.adjust(1)
-
         me = await bot.get_me()
         link = f"https://t.me/{me.username}?start={callback.from_user.id}"
         await callback.message.edit_text(
@@ -414,7 +409,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
             f"других соц сетях, чтобы начать получать сообщения 💬",
             parse_mode="html",
-            reply_markup=kb.as_markup()
+            reply_markup=await main_menu_bt()
         )
 
 
