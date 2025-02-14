@@ -264,6 +264,7 @@ async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
 
 async def process_existing_user(message: types.Message, bot: Bot):
     logger.info(f"Processing existing user {message.from_user.id}")
+    await show_main_menu(message, bot)
 
 
 async def show_main_menu(message: types.Message, bot: Bot):
