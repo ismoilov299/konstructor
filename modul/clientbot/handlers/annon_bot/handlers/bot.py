@@ -104,7 +104,7 @@ async def process_referral(message: Message, referral_id: int):
         if inviter:
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
             await message.bot.send_message(
-                chat_id=message.from_user.id,
+                chat_id=referral_id,
                 text=f"У вас новый {user_link}!"
             )
 
