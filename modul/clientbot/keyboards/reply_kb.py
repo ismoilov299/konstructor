@@ -131,8 +131,9 @@ async def gen_buttons(current_bot: Bot, uid: int):
     if current_bot.enable_promotion:
         btns.append(("ℹ️ Информация"))
     if current_bot.enable_anon:
-        btns.append(("🥂 Анонимный чат"))
-    # if current_bot.enable_refs:
+        btns.append(("🚀Начать"))
+        btns.append(("👋Изменить приветствие"))
+        btns.append(("⭐️Ваша статистика"))
     btns.append(("💸Заработать"))
     return btns
 
