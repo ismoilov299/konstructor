@@ -385,6 +385,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         link_for_db = new_link[new_link.index("=") + 1:]
         await add_user(callback.from_user, link_for_db)
 
+        # State dan referal ID ni olamiz
         data = await state.get_data()
         referral = data.get('referral')
         if referral:
@@ -394,12 +395,14 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             except ValueError:
                 logger.error(f"Invalid referral ID: {referral}")
 
+    # State dan target ID ni tekshiramiz
     data = await state.get_data()
     target_id = data.get('link_user')
 
     if target_id:
-        await state.set_state(Links.send_st)
-        await callback.message.edit_text(
+        # Anonim xabar uchun - yangi xabar yuboramiz
+        await callback.message.delete()  # Eski xabarni o'chiramiz
+        await callback.message.answer(
             "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
             "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
             "получит ваше сообщение, но не будет знать от кого.\n\n"
@@ -408,7 +411,13 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             "⚠️ Это полностью анонимно!",
             reply_markup=await cancel_in()
         )
+        await state.set_state(Links.send_st)
     else:
+        # Oddiy start uchun inline keyboard yaratamiz
+        kb = InlineKeyboardBuilder()
+        kb.button(text="📝 Написать сообщение", callback_data="write_message")
+        kb.adjust(1)
+
         me = await bot.get_me()
         link = f"https://t.me/{me.username}?start={callback.from_user.id}"
         await callback.message.edit_text(
@@ -417,7 +426,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
             f"других соц сетях, чтобы начать получать сообщения 💬",
             parse_mode="html",
-            reply_markup=await main_menu_bt()
+            reply_markup=kb.as_markup()
         )
 
 
