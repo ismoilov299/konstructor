@@ -1066,6 +1066,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     bot_db = await shortcuts.get_bot(bot)
     uid = message.from_user.id
     print(uid,'kino start 974')
+    await message.delete()
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
     if shortcuts.have_one_module(bot_db, "download"):
