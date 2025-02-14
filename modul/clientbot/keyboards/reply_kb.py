@@ -103,40 +103,17 @@ def owner_bots_filter(owner):
 
 
 async def gen_buttons(current_bot: Bot, uid: int):
-    btns = []
     owner = await get_bot_owner(current_bot)
-    if current_bot.enable_promotion:
-        btns.append(("⭐️ Социальные сети"))
-        btns.append(("📋 Мои заказы"))
-        btns.append(("💰 Баланс"))
-        btns.append(("👤 Реферальная система"))
-        btns.append(("🌍 Поменять язык"))
-    if current_bot.enable_music:
-        if have_one_module(current_bot, "music"):
-            [btns.append(i) for i in MUSIC_MENU_BUTTONS_TEXT]
-        else:
-            btns.append(("🎧 Музыка"))
-    if current_bot.enable_download:
-        if not have_one_module(current_bot, "download"):
-            btns.append(("🎥 Скачать видео"))
-    if current_bot.enable_chatgpt:
-        pass
-    if current_bot.enable_leo:
-        btns.append(("🫰 Знакомства"))
-    if current_bot.enable_horoscope:
-        if have_one_module(current_bot, "horoscope"):
-            [btns.append(i) for i in HOROSCOPE_BUTTONS_TEXT]
-        else:
-            btns.append(("♈️ Гороскоп"))
-    if current_bot.enable_promotion:
-        btns.append(("ℹ️ Информация"))
-    if current_bot.enable_anon:
-        btns.append(("🚀Начать"))
-        btns.append(("👋Изменить приветствие"))
-        btns.append(("⭐️Ваша статистика"))
-    btns.append(("💸Заработать"))
-    return btns
 
+    if current_bot.enable_anon:
+        btns = [
+            ["🚀Начать", "👋Изменить приветствие"],
+            ["⭐️Ваша статистика"],
+            ["💸Заработать"]
+        ]
+        return btns
+
+    return []
 
 async def main_menu(uid: int, bot: CBot):
     builder = ReplyKeyboardBuilder()
