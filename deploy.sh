@@ -14,11 +14,10 @@ NGINX_CONF=/etc/nginx/sites-available/$PROJECT_NAME.conf
 # Create the project root directory
 
 # Install required packages
-sudo apt-get update
-sudo apt-get install -y python3-dev python3-venv nginx
+
 
 # Create a virtual environment
-python3.$PYTHON_VERSION -m venv $VENV_PATH
+python3.$PYTHON_VERSION -m venv venv
 
 # Activate the virtual environment and install Django and Gunicorn
 source $VENV_PATH/bin/activate
