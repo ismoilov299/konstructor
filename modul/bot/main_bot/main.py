@@ -11,7 +11,7 @@ from modul.loader import main_bot_router, client_bot_router
 import requests
 
 
-webhook_url = 'https://51fe-84-54-90-236.ngrok-free.app/login/'
+webhook_url = 'https://68cf-159-255-37-235.ngrok-free.app/login/'
 
 
 def init_bot_handlers():
