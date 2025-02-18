@@ -72,6 +72,16 @@ TEMPLATES = [
 WSGI_APPLICATION = 'constructor.wsgi.application'
 CSRF_TRUSTED_ORIGINS = ['https://test.telier.uz']
 
+# DATABASES = {
+#       'default': {
+#           'ENGINE': 'django.db.backends.postgresql_psycopg2',
+#           'NAME': 'konstructor_db',
+#           'USER': 'user',
+#           'PASSWORD': 'password',
+#           'HOST': 'konstructor_db',
+#           'PORT': 5432,
+#       }
+# }
 
 DATABASES = {
       'default': {

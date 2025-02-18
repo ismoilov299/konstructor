@@ -1,6 +1,7 @@
 Django~=5.0.7
 pytz~=2024.1
 aiogram~=3.10.0
+psycopg2-binary
 fastapi~=0.111.0
 requests~=2.32.3
 APScheduler~=3.10.4
@@ -17,3 +18,4 @@ sqlalchemy
 pandas~=2.2.2
 yt_dlp
 fasteners~=0.19
+openai

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: konstructor_app
+    ports:
+      - "8000:8000"
+    env_file:
+      - prod.env
+    depends_on:
+      - db
+    restart: unless-stopped  # avtomatik qayta ishga tushirish
+    healthcheck:  # health check qo'shish
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: postgres:15
+    container_name: konstructor_db
+    environment:
+      POSTGRES_DB: konstructor_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:  # PostgreSQL uchun health check
+      test: ["CMD-SHELL", "pg_isready -U user -d konstructor_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
