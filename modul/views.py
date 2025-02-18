@@ -377,7 +377,7 @@ def send_message_to_restart(bot_token, owner_id):
         return True
     return False
 
-
+@csrf_exempt
 @login_required
 @require_POST
 def update_bot_settings(request):
