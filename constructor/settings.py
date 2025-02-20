@@ -70,7 +70,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'constructor.wsgi.application'
-CSRF_TRUSTED_ORIGINS = ['https://44fa-134-209-240-131.ngrok-free.app']
+CSRF_TRUSTED_ORIGINS = ['https://d229-134-209-240-131.ngrok-free.app']
 
 # DATABASES = {
 #       'default': {
