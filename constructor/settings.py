@@ -70,7 +70,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'constructor.wsgi.application'
-CSRF_TRUSTED_ORIGINS = ['https://403f-34-57-22-152.ngrok-free.app']
+CSRF_TRUSTED_ORIGINS = ['https://44fa-134-209-240-131.ngrok-free.app']
 
 # DATABASES = {
 #       'default': {
@@ -86,9 +86,9 @@ CSRF_TRUSTED_ORIGINS = ['https://403f-34-57-22-152.ngrok-free.app']
 DATABASES = {
       'default': {
           'ENGINE': 'django.db.backends.postgresql_psycopg2',
-          'NAME': 'giper_db1',
-          'USER': 'giper_us1',
-          'PASSWORD': 'giper_pass1',
+          'NAME': 'giper_db2',
+          'USER': 'giper_us2',
+          'PASSWORD': 'giper_pass2',
           'HOST': 'localhost',
           'PORT': 5432,
       }
