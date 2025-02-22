@@ -478,7 +478,7 @@ async def again(query: CallbackQuery, state: FSMContext):
         )
 
         # Set state for the next message
-        await state.set_state(Links.send_st)
+        # await state.set_state(Links.send_st)
         await state.set_data({"link_user": link_user})
 
         # Optional: Update the original message after sending the prompt
