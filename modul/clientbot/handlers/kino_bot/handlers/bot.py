@@ -1824,7 +1824,7 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMConte
                         return
                     except Exception:
 
-                        await download_and_send_video(message, url, ydl_opts, me, bot, "TikTok")
+                        await download_and_send_video(message, url, ydl_opts, me, bot, "TikTok",state)
                 else:
                     await message.answer("❌ Не удалось получить ссылку на видео")
 
