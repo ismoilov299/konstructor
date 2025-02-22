@@ -1610,7 +1610,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             # Download in separate thread
             file_path, info = await asyncio.get_event_loop().run_in_executor(
                 executor,
-                lambda: download_video(url, selected_format['format_id'])
+                lambda: download_video(url, selected_format['format_id'],state)
             )
 
             if not os.path.exists(file_path):
