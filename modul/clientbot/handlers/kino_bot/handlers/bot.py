@@ -1327,21 +1327,50 @@ def get_best_formats(formats):
     video_formats = []
     audio_format = None
 
+    # Debug uchun
+    print("Barcha formatlar soni:", len(formats))
+
     for fmt in formats:
         if not isinstance(fmt, dict):
             continue
 
-        format_id = fmt.get('format_id')
-        if not format_id:
-            continue
+        # Debug information
+        print("\nFormat Details:")
+        print(f"Format ID: {fmt.get('format_id')}")
+        print(f"Extension: {fmt.get('ext')}")
+        print(f"Resolution: {fmt.get('resolution')}")
+        print(f"Height: {fmt.get('height')}")
+        print(f"Video Codec: {fmt.get('vcodec')}")
+        print(f"Audio Codec: {fmt.get('acodec')}")
+        print(f"Format Note: {fmt.get('format_note')}")
+        print("-" * 50)
 
-        if fmt.get('vcodec', 'none') != 'none' and fmt.get('acodec', 'none') != 'none':
-            height = fmt.get('height', 0)
-            if height:
-                video_formats.append(fmt)
-        elif fmt.get('acodec', 'none') != 'none' and fmt.get('vcodec', 'none') == 'none':
+        # Video formatlarni ajratish
+        vcodec = fmt.get('vcodec', 'none')
+        acodec = fmt.get('acodec', 'none')
+
+        if vcodec != 'none':  # Video format
+            # Barcha video formatlarni qo'shamiz (height bo'lmasa ham)
+            video_formats.append(fmt)
+            print(f"Video format qo'shildi: {fmt.get('format_note')} - {fmt.get('height')}p")
+
+        elif acodec != 'none' and vcodec == 'none':  # Faqat audio
             if audio_format is None or fmt.get('abr', 0) > audio_format.get('abr', 0):
                 audio_format = fmt
+                print(f"Yangi audio format topildi: {fmt.get('format_id')}")
+
+    # Video formatlarni saralash
+    video_formats.sort(
+        key=lambda x: (
+            x.get('height', 0) or 0,  # height bo'lmasa 0
+            x.get('tbr', 0) or 0,  # bit rate bo'lmasa 0
+        ),
+        reverse=True
+    )
+
+    print(f"\nTopilgan video formatlar soni: {len(video_formats)}")
+    for v in video_formats:
+        print(f"Format: {v.get('format_note')} - {v.get('height')}p")
 
     return video_formats, audio_format
 
@@ -1411,74 +1440,34 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
-            def safe_int(value, default=0):
-                if value is None:
-                    return default
-                try:
-                    return int(value)
-                except (ValueError, TypeError):
-                    return default
-
-            def get_format_resolution(fmt):
-                if not fmt or not isinstance(fmt, dict):
-                    return 0
-
-                # First try to get height directly
-                height = safe_int(fmt.get('height'), 0)
-                if height > 0:
-                    return height
-
-                # Try to get resolution from format note
-                format_note = fmt.get('format_note', '')
-                if isinstance(format_note, str) and 'p' in format_note:
-                    try:
-                        height = safe_int(format_note.split('p')[0], 0)
-                        if height > 0:
-                            return height
-                    except (ValueError, IndexError):
-                        pass
-
-                # Try format name
-                format_name = fmt.get('format', '')
-                if isinstance(format_name, str):
-                    for quality in ['2160', '1440', '1080', '720', '480', '360', '240', '144']:
-                        if quality in format_name:
-                            return int(quality)
-
-                return 360  # Default resolution
-
-            # Filter and sort video formats
-            valid_video_formats = []
+            # Video formatlarni buttonlarga qo'shish
             for fmt in video_formats:
-                if fmt and isinstance(fmt, dict) and fmt.get('format_id'):
-                    resolution = get_format_resolution(fmt)
-                    valid_video_formats.append((resolution, fmt))
+                if not fmt.get('format_id'):
+                    continue
 
-            # Sort by resolution, handling possible None values
-            valid_video_formats.sort(key=lambda x: x[0] if x[0] is not None else 0, reverse=True)
+                # Formatni aniqroq ko'rsatish
+                height = fmt.get('height', 0)
+                quality_text = f"{height}p" if height else fmt.get('format_note', 'Medium')
 
-            # Add buttons for video formats
-            for resolution, fmt in valid_video_formats:
-                valid_formats.append(fmt)
-                filesize = safe_int(fmt.get('filesize'), 0)
+                # Fayl hajmini hisoblash
+                filesize = fmt.get('filesize', 0)
                 filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
 
-                quality_text = f"{resolution}p" if resolution else "Medium"
-
+                valid_formats.append(fmt)
                 builder.button(
                     text=f"🎥 {quality_text}{filesize_text}",
                     callback_data=FormatCallback(
                         format_id=fmt['format_id'],
                         type='video',
-                        quality=str(resolution),
+                        quality=str(quality_text),
                         index=len(valid_formats) - 1
                     ).pack()
                 )
 
-            # Add audio format if available
-            if audio_format and isinstance(audio_format, dict) and audio_format.get('format_id'):
+            # Audio formatni qo'shish
+            if audio_format and audio_format.get('format_id'):
                 valid_formats.append(audio_format)
-                audio_size = safe_int(audio_format.get('filesize'), 0)
+                audio_size = audio_format.get('filesize', 0)
                 audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
 
                 builder.button(
