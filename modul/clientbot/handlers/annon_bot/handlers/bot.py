@@ -450,20 +450,46 @@ async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
                                      reply_markup=await main_menu_bt())
 
 
-@client_bot_router.callback_query(lambda call: "again_" in call.data)
+@client_bot_router.callback_query(F.data.startswith("again_"))  # More precise filter
 async def again(query: CallbackQuery, state: FSMContext):
-    link_user = int(query.data.replace("again_", ""))
-    await query.bot.send_message(chat_id=query.from_user.id,
-                                 text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>, который опубликовал "
-                                      "эту ссылку.\n\n"
-                                      "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-                                      "получит ваше сообщение, но не будет знать от кого.\n\n"
-                                      "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-                                      "(кружки), а также стикеры.\n\n"
-                                      "⚠️<b> Это полностью анонимно!</b>", reply_markup=await cancel_in(),
-                                 parse_mode="html")
-    await state.set_state(Links.send_st)
-    await state.set_data({"link_user": link_user})
+    try:
+        # Acknowledge the callback to stop loading
+        await query.answer()
+
+        # Extract link_user from callback data
+        link_user = int(query.data.replace("again_", ""))
+        logger.info(f"Preparing to resend to user: {link_user}")
+
+        # Optional: Edit the original message to show progress
+        await query.message.edit_text("⏳ Готовлю повторную отправку...")
+
+        # Send the prompt for a new message
+        await query.bot.send_message(
+            chat_id=query.from_user.id,
+            text="🚀 Здесь можно <b>отправить анонимное сообщение человеку</b>, который опубликовал "
+                 "эту ссылку.\n\n"
+                 "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+                 "получит ваше сообщение, но не будет знать от кого.\n\n"
+                 "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+                 "(кружки), а также стикеры.\n\n"
+                 "⚠️<b> Это полностью анонимно!</b>",
+            reply_markup=await cancel_in(),
+            parse_mode="html"
+        )
+
+        # Set state for the next message
+        await state.set_state(Links.send_st)
+        await state.set_data({"link_user": link_user})
+
+        # Optional: Update the original message after sending the prompt
+        await query.message.edit_text(
+            "✅ Введите новое сообщение для отправки!",
+            reply_markup=await again_in(link_user)
+        )
+
+    except Exception as e:
+        logger.error(f"Error in again handler: {str(e)}", exc_info=True)
+        await query.message.edit_text("❗ Ошибка при подготовке повторной отправки")
 
 
 @client_bot_router.message(Links.send_st)
