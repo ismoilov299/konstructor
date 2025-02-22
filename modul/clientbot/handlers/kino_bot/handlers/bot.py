@@ -1384,7 +1384,7 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
     me = await bot.get_me()
 
     if 'tiktok.com' in url:
-        await handle_tiktok(message, url, me, bot)
+        await handle_tiktok(message, url, me, bot,state)
     elif 'instagram.com' in url or 'instagr.am' in url or 'inst.ae' in url:
         await handle_instagram(message, url, me, bot)
     elif 'youtube.com' in url or 'youtu.be' in url:
