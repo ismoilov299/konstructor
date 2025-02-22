@@ -86,9 +86,9 @@ CSRF_TRUSTED_ORIGINS = ['https://d229-134-209-240-131.ngrok-free.app']
 DATABASES = {
       'default': {
           'ENGINE': 'django.db.backends.postgresql_psycopg2',
-          'NAME': 'giper_db2',
-          'USER': 'giper_us2',
-          'PASSWORD': 'giper_pass2',
+          'NAME': 'giper_db1',
+          'USER': 'giper_us1',
+          'PASSWORD': 'giper_pass1',
           'HOST': 'localhost',
           'PORT': 5432,
       }
