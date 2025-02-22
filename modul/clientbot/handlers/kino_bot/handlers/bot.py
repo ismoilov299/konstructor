@@ -1420,11 +1420,24 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             def get_quality_value(fmt):
                 quality = fmt.get('quality')
                 if quality is None:
-                    return 0
+                    # Fallback to a default "medium" quality assumption
+                    logger.debug(f"None quality detected for format: {fmt}, assuming medium quality")
+                    return 720  # Default to 720p as "medium"
                 if isinstance(quality, str):
-                    return int(''.join(filter(str.isdigit, quality)) or '0')
-                return int(quality) if quality else 0
+                    digits = ''.join(filter(str.isdigit, quality))
+                    return int(digits) if digits else 720  # Fallback to 720p if no digits
+                return int(quality) if quality else 720  # Convert to int or default to 720p
 
+            # Find a medium format (e.g., 720p) as a fallback
+            medium_format = None
+            for fmt in video_formats:
+                if fmt and isinstance(fmt, dict):
+                    quality = fmt.get('quality')
+                    if quality == '720p' or (isinstance(quality, (int, str)) and '720' in str(quality)):
+                        medium_format = fmt
+                        break
+
+            # Sorting with guaranteed integer key
             sorted_video_formats = sorted(
                 [fmt for fmt in video_formats if fmt and isinstance(fmt, dict)],
                 key=lambda fmt: get_quality_value(fmt),
@@ -1432,6 +1445,12 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             )
 
             for fmt in sorted_video_formats:
+                quality_value = get_quality_value(fmt)
+                if quality_value == 720 and fmt.get('quality') is None and medium_format:
+                    # Replace None-quality format with medium format
+                    fmt = medium_format
+                    logger.debug(f"Replaced None-quality format with medium format: {fmt}")
+
                 valid_formats.append(fmt)
                 filesize_mb = ""
                 if fmt.get('filesize'):
@@ -1442,11 +1461,11 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                         filesize_mb = ""
 
                 builder.button(
-                    text=f"🎥 {fmt.get('quality', 'Unknown')}{filesize_mb}",
+                    text=f"🎥 {fmt.get('quality', 'Medium')}{filesize_mb}",
                     callback_data=FormatCallback(
                         format_id=fmt['format_id'],
                         type='video',
-                        quality=fmt.get('quality', 'Unknown'),
+                        quality=fmt.get('quality', 'Medium'),
                         index=len(valid_formats) - 1
                     ).pack()
                 )
