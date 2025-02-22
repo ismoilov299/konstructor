@@ -1432,18 +1432,34 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
+        # Verify ffmpeg is available
+        try:
+            subprocess.run(['ffmpeg', '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            logger.debug("ffmpeg is installed and available")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            logger.error("ffmpeg is not installed or not found in PATH")
+            raise Exception("ffmpeg is required for merging audio and video")
+
         ydl_opts = {
-            'format': format_id,
-            'quiet': True,
-            'no_warnings': True,
-            'outtmpl': '%(title)s.%(ext)s',
+            'format': f"{format_id}+bestaudio/best",  # Combine video format with best audio
+            'quiet': False,  # Allow output for debugging
+            'no_warnings': False,
+            'outtmpl': '%(title)s-%(id)s.%(ext)s',  # Include ID for uniqueness
             'retries': 3,
             'fragment_retries': 3,
             'continuedl': True,
             'buffersize': 1024 * 1024,  # 1MB buffer size
+            'merge_output_format': 'mp4',  # Merge into MP4
+            'postprocessors': [{  # Force merging with ffmpeg
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',
+            }],
         }
 
         with YoutubeDL(ydl_opts) as ydl:
+            # Route yt-dlp logs to your logger
+            ydl.params['logger'] = logger
+
             info = await asyncio.get_event_loop().run_in_executor(
                 executor,
                 lambda: ydl.extract_info(url, download=True)
@@ -1460,7 +1476,11 @@ async def download_video(url: str, format_id: str, state: FSMContext):
             if os.path.getsize(output_file) == 0:
                 raise Exception(f"Downloaded file is empty: {output_file}")
 
-            return output_file, info  # Return both file path and info
+            # Debug: Log downloaded formats
+            downloaded_formats = info.get('requested_formats', [info])
+            logger.debug(f"Downloaded formats: {downloaded_formats}")
+
+            return output_file, info
 
     except Exception as e:
         logger.error(f"Download error: {str(e)}")
