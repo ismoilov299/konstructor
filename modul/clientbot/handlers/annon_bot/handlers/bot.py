@@ -253,26 +253,27 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
     logger.info(f"Start command received from user {message.from_user.id}")
     args = command.args
 
-    # 1. Majburiy obunani tekshirish
     subscribed = await check_channels(message.from_user.id, bot)
     if not subscribed:
-        markup = await channels_in(await get_channels_for_check(), bot)
-        await message.answer(
-            "Для использования бота подпишитесь на наших спонсоров",
-            reply_markup=markup
-        )
-        return
+        channels = await get_channels_for_check()
 
-    # 2. Foydalanuvchini tekshirish
+        if channels:
+            markup = await channels_in(channels, bot)
+            await message.answer(
+                "Для использования бота подпишитесь на наших спонсоров",
+                reply_markup=markup
+            )
+            return
+        else:
+            logger.warning("No channels found for subscription check")
+
     user_exists = await check_user(message.from_user.id)
 
-    # 3. Yangi foydalanuvchi bo'lsa qo'shamiz
     if not user_exists:
         new_link = await create_start_link(bot, str(message.from_user.id))
         link_for_db = new_link[new_link.index("=") + 1:]
         await add_user(message.from_user, link_for_db)
 
-        # Agar args bo'lsa va raqam bo'lsa referal sifatida hisoblaymiz
         if args:
             try:
                 referral_id = int(args)
@@ -280,11 +281,9 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             except ValueError:
                 logger.error(f"Invalid referral ID: {args}")
 
-    # 4. Anonim xabar yoki asosiy menu
     if args:
         try:
             target_id = int(args)
-            # Anonim xabar uchun state o'rnatish
             await state.set_state(Links.send_st)
             await state.update_data({"link_user": target_id})
             await message.answer(
@@ -300,7 +299,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         except ValueError:
             logger.error(f"Invalid target ID: {args}")
 
-    # 5. Oddiy start uchun
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={message.from_user.id}"
     await message.answer(
