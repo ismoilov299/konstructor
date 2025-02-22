@@ -1414,15 +1414,40 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             valid_formats = []
 
             # Add video formats (sorted by quality)
-            for fmt in sorted(video_formats, key=lambda x: int(x['quality'].rstrip('p')), reverse=True):
+            # Fix: Handle cases where quality might be None or non-numeric
+            def get_quality_value(fmt):
+                try:
+                    # Extract numeric value from quality string (e.g., "720p" -> 720)
+                    quality = fmt.get('quality', '0')
+                    if isinstance(quality, str):
+                        return int(''.join(filter(str.isdigit, quality)) or 0)
+                    return int(quality or 0)
+                except (ValueError, TypeError):
+                    return 0
+
+            sorted_video_formats = sorted(
+                [fmt for fmt in video_formats if fmt],  # Filter out None values
+                key=get_quality_value,
+                reverse=True
+            )
+
+            for fmt in sorted_video_formats:
                 valid_formats.append(fmt)
+                # Fix: Safe handling of filesize
+                filesize_mb = ""
+                if fmt.get('filesize'):
+                    try:
+                        size_mb = fmt['filesize'] // (1024 * 1024)
+                        filesize_mb = f" ({size_mb}MB)"
+                    except (TypeError, ValueError):
+                        filesize_mb = ""
+
                 builder.button(
-                    text=f"🎥 {fmt['quality']}" + (
-                        f" ({fmt['filesize'] // 1024 // 1024}MB)" if fmt.get('filesize') else ""),
+                    text=f"🎥 {fmt.get('quality', 'Unknown')}{filesize_mb}",
                     callback_data=FormatCallback(
                         format_id=fmt['format_id'],
                         type='video',
-                        quality=fmt['quality'],
+                        quality=fmt.get('quality', 'Unknown'),
                         index=len(valid_formats) - 1
                     ).pack()
                 )
@@ -1430,9 +1455,17 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             # Add audio format
             if audio_format:
                 valid_formats.append(audio_format)
+                # Fix: Safe handling of audio filesize
+                audio_filesize_mb = ""
+                if audio_format.get('filesize'):
+                    try:
+                        audio_size_mb = audio_format['filesize'] // (1024 * 1024)
+                        audio_filesize_mb = f" ({audio_size_mb}MB)"
+                    except (TypeError, ValueError):
+                        audio_filesize_mb = ""
+
                 builder.button(
-                    text=f"🎵 Аудио" + (
-                        f" ({audio_format['filesize'] // 1024 // 1024}MB)" if audio_format.get('filesize') else ""),
+                    text=f"🎵 Аудио{audio_filesize_mb}",
                     callback_data=FormatCallback(
                         format_id=audio_format['format_id'],
                         type='audio',

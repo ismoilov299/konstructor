@@ -646,16 +646,12 @@ def anon_bot_handlers():
 
         if message.reply_to_message:
             check = await check_reply(message.reply_to_message.message_id)
-
         # if not channels_checker:
-
         if not checker:
             new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
             link_for_db = new_link[new_link.index("=") + 1:]
             await add_user(message.from_user, link_for_db)
             await message.bot.send_message(chat_id=message.from_user.id, text="", reply_markup=await main_menu_bt())
-
-
         elif not checker:
             new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
             link_for_db = new_link[new_link.index("=") + 1:]
