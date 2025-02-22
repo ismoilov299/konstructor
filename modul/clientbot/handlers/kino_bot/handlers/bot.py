@@ -1324,33 +1324,26 @@ def update_download_analytics(bot_username, domain):
 
 
 def get_best_formats(formats):
-    video_formats = {}
+    video_formats = []
     audio_format = None
-    for f in formats:
-        if f.get('ext') == 'mp4' and f.get('height', 0) <= 720:
-            height = f.get('height', 0)
-            if height <= 0:  # Skip invalid heights
-                continue
 
-            filesize = f.get('filesize', float('inf'))
+    for fmt in formats:
+        if not isinstance(fmt, dict):
+            continue
 
-            # Only keep formats with better quality or smaller size
-            if height not in video_formats or filesize < video_formats[height]['filesize']:
-                video_formats[height] = {
-                    'format_id': f['format_id'],
-                    'filesize': filesize,
-                    'type': 'video',
-                    'quality': f'{height}p'
-                }
-        elif f.get('ext') == 'm4a' and (not audio_format or f.get('filesize', float('inf')) < audio_format['filesize']):
-            audio_format = {
-                'format_id': f['format_id'],
-                'filesize': f.get('filesize', float('inf')),
-                'type': 'audio',
-                'quality': 'audio'
-            }
+        format_id = fmt.get('format_id')
+        if not format_id:
+            continue
 
-    return list(video_formats.values()), audio_format
+        if fmt.get('vcodec', 'none') != 'none' and fmt.get('acodec', 'none') != 'none':
+            height = fmt.get('height', 0)
+            if height:
+                video_formats.append(fmt)
+        elif fmt.get('acodec', 'none') != 'none' and fmt.get('vcodec', 'none') == 'none':
+            if audio_format is None or fmt.get('abr', 0) > audio_format.get('abr', 0):
+                audio_format = fmt
+
+    return video_formats, audio_format
 
 
 def download_video(url, format_id):
