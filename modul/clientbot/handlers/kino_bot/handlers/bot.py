@@ -1444,7 +1444,6 @@ async def download_video(url: str, format_id: str, state: FSMContext):
         }
 
         with YoutubeDL(ydl_opts) as ydl:
-            # Run the download and info extraction in a thread
             info = await asyncio.get_event_loop().run_in_executor(
                 executor,
                 lambda: ydl.extract_info(url, download=True)
@@ -1453,21 +1452,39 @@ async def download_video(url: str, format_id: str, state: FSMContext):
             if not info:
                 raise Exception("Could not get video info")
 
-            # Generate the expected filename before download completes
             output_file = ydl.prepare_filename(info)
             logger.debug(f"Expected output file: {output_file}")
 
-            # Verify the file exists and is not empty
             if not os.path.exists(output_file):
                 raise Exception(f"Downloaded file does not exist: {output_file}")
             if os.path.getsize(output_file) == 0:
                 raise Exception(f"Downloaded file is empty: {output_file}")
 
-            return output_file  # Return the actual file path
+            return output_file, info  # Return both file path and info
 
     except Exception as e:
         logger.error(f"Download error: {str(e)}")
         raise
+
+async def handle_format_selection(callback_query: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    url = data.get('url')
+    formats = data.get('formats')
+    # Parse callback data (e.g., "format:232:video:720p:3")
+    callback_parts = callback_query.data.split(':')
+    selected_index = int(callback_parts[-1])  # Last part is the index
+    selected_format = formats[selected_index]
+
+    status_message = await callback_query.message.edit_text("⏳ Скачиваю видео...")
+
+    try:
+        file_path, info = await download_video(url, selected_format['format_id'], state)
+        await status_message.edit_text(f"✅ Видео скачано: {file_path}")
+        with open(file_path, 'rb') as video:
+            await callback_query.message.answer_document(video)
+    except Exception as e:
+        logger.error(f"Download error: {str(e)}")
+        await status_message.edit_text("❗ Ошибка при скачивании")
 
 class DownloaderBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
