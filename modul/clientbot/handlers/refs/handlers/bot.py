@@ -373,6 +373,7 @@ async def profile(message: Message):
             return
 
         user_info = await get_user_info_db(message.from_user.id)
+        print(user_info)
         if not user_info:
             await message.answer(
                 "Ошибка получения данных профиля",
