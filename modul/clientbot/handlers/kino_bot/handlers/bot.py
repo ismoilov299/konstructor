@@ -1402,7 +1402,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             'no_warnings': True,
             'noplaylist': True,
             'encoding': 'utf-8',
-            'extract_flat': False,  # Changed to False to get full video info
+            'extract_flat': False,
         }
 
         with yt_dlp.YoutubeDL(base_opts) as ydl:
@@ -1418,60 +1418,47 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
-            def get_quality_value(fmt):
-                if not fmt:
+            def get_format_quality(fmt):
+                if not fmt or not isinstance(fmt, dict):
                     return 0
 
-                quality = fmt.get('quality', 0)
-                if quality is None:
-                    height = fmt.get('height', 0)
-                    if height:
-                        return height
-                    return 720  # Default to 720p as "medium"
-
-                if isinstance(quality, str):
-                    digits = ''.join(filter(str.isdigit, quality))
-                    return int(digits) if digits else 720
-                return int(quality) if quality else 720
-
-            # Find a medium format (e.g., 720p)
-            medium_format = None
-            for fmt in video_formats:
-                if not fmt or not isinstance(fmt, dict):
-                    continue
-
+                # Try to get height first
                 height = fmt.get('height', 0)
-                if height and (height == 720 or (isinstance(height, str) and '720' in str(height))):
-                    medium_format = fmt
-                    break
+                if height:
+                    return int(height)
 
-            # Filter out None or invalid formats and sort
-            valid_video_formats = [fmt for fmt in video_formats if fmt and isinstance(fmt, dict)]
-            sorted_video_formats = sorted(
-                valid_video_formats,
-                key=get_quality_value,
-                reverse=True
-            )
-
-            for fmt in sorted_video_formats:
-                if not fmt.get('format_id'):
-                    continue
-
-                quality = fmt.get('height', fmt.get('quality', 'Medium'))
-                if quality == 720 and fmt.get('quality') is None and medium_format:
-                    fmt = medium_format
-
-                valid_formats.append(fmt)
-                filesize_mb = ""
-                if fmt.get('filesize'):
+                # Try to get resolution from format note
+                format_note = fmt.get('format_note', '')
+                if format_note:
                     try:
-                        size_mb = fmt['filesize'] // (1024 * 1024)
-                        filesize_mb = f" ({size_mb}MB)"
-                    except (TypeError, ValueError):
-                        filesize_mb = ""
+                        if 'p' in format_note:
+                            return int(format_note.split('p')[0])
+                    except (ValueError, IndexError):
+                        pass
+
+                # Default quality for valid formats
+                return 360
+
+            # Sort formats by quality
+            sorted_formats = []
+            for fmt in video_formats:
+                if fmt and isinstance(fmt, dict) and fmt.get('format_id'):
+                    quality = get_format_quality(fmt)
+                    sorted_formats.append((quality, fmt))
+
+            # Sort by quality in descending order
+            sorted_formats.sort(key=lambda x: x[0], reverse=True)
+
+            # Add buttons for video formats
+            for quality, fmt in sorted_formats:
+                valid_formats.append(fmt)
+                filesize = fmt.get('filesize', 0)
+                filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize else ""
+
+                quality_text = f"{quality}p" if quality else "Medium"
 
                 builder.button(
-                    text=f"🎥 {quality}{filesize_mb}",
+                    text=f"🎥 {quality_text}{filesize_text}",
                     callback_data=FormatCallback(
                         format_id=fmt['format_id'],
                         type='video',
@@ -1480,18 +1467,14 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     ).pack()
                 )
 
+            # Add audio format if available
             if audio_format and audio_format.get('format_id'):
                 valid_formats.append(audio_format)
-                audio_filesize_mb = ""
-                if audio_format.get('filesize'):
-                    try:
-                        audio_size_mb = audio_format['filesize'] // (1024 * 1024)
-                        audio_filesize_mb = f" ({audio_size_mb}MB)"
-                    except (TypeError, ValueError):
-                        audio_filesize_mb = ""
+                audio_size = audio_format.get('filesize', 0)
+                audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size else ""
 
                 builder.button(
-                    text=f"🎵 Аудио{audio_filesize_mb}",
+                    text=f"🎵 Аудио{audio_size_text}",
                     callback_data=FormatCallback(
                         format_id=audio_format['format_id'],
                         type='audio',
