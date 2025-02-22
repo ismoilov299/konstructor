@@ -19,6 +19,8 @@ from django.db import transaction
 from django.utils import timezone
 import re
 
+from yt_dlp import YoutubeDL
+
 from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
