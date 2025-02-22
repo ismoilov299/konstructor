@@ -1326,57 +1326,109 @@ def update_download_analytics(bot_username, domain):
 def get_best_formats(formats):
     video_formats = []
     audio_format = None
-
-    # Debug uchun
-    print("Barcha formatlar soni:", len(formats))
+    seen_qualities = set()
 
     for fmt in formats:
         if not isinstance(fmt, dict):
             continue
 
-        # Debug information
-        print("\nFormat Details:")
-        print(f"Format ID: {fmt.get('format_id')}")
-        print(f"Extension: {fmt.get('ext')}")
-        print(f"Resolution: {fmt.get('resolution')}")
-        print(f"Height: {fmt.get('height')}")
-        print(f"Video Codec: {fmt.get('vcodec')}")
-        print(f"Audio Codec: {fmt.get('acodec')}")
-        print(f"Format Note: {fmt.get('format_note')}")
-        print("-" * 50)
-
-        # Video formatlarni ajratish
         vcodec = fmt.get('vcodec', 'none')
         acodec = fmt.get('acodec', 'none')
 
-        if vcodec != 'none':  # Video format
-            # Barcha video formatlarni qo'shamiz (height bo'lmasa ham)
-            video_formats.append(fmt)
-            print(f"Video format qo'shildi: {fmt.get('format_note')} - {fmt.get('height')}p")
+        if vcodec != 'none':
+            height = fmt.get('height', 0)
+            if height and height not in seen_qualities:
+                seen_qualities.add(height)
+                video_formats.append(fmt)
 
-        elif acodec != 'none' and vcodec == 'none':  # Faqat audio
-            if audio_format is None or fmt.get('abr', 0) > audio_format.get('abr', 0):
+        elif acodec != 'none' and vcodec == 'none':
+            if not audio_format or (fmt.get('abr', 0) > audio_format.get('abr', 0)):
                 audio_format = fmt
-                print(f"Yangi audio format topildi: {fmt.get('format_id')}")
 
-    # Video formatlarni saralash
-    video_formats.sort(
-        key=lambda x: (
-            x.get('height', 0) or 0,  # height bo'lmasa 0
-            x.get('tbr', 0) or 0,  # bit rate bo'lmasa 0
-        ),
-        reverse=True
-    )
-
-    print(f"\nTopilgan video formatlar soni: {len(video_formats)}")
-    for v in video_formats:
-        print(f"Format: {v.get('format_note')} - {v.get('height')}p")
+    video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
 
     return video_formats, audio_format
 
 
+async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
+    status_message = await message.answer("⏳ Получаю информацию о видео...")
+
+    try:
+        base_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'encoding': 'utf-8',
+            'extract_flat': False,
+        }
+
+        with yt_dlp.YoutubeDL(base_opts) as ydl:
+            info = await asyncio.get_event_loop().run_in_executor(
+                executor,
+                lambda: ydl.extract_info(url, download=False)
+            )
+
+            formats = info.get('formats', [])
+            title = info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')
+
+            video_formats, audio_format = get_best_formats(formats)
+            builder = InlineKeyboardBuilder()
+            valid_formats = []
+
+            for fmt in video_formats:
+                if not fmt.get('format_id'):
+                    continue
+
+                height = fmt.get('height', 0)
+                quality_text = f"{height}p" if height else "Medium"
+
+                filesize = fmt.get('filesize', 0)
+                filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
+
+                valid_formats.append(fmt)
+                builder.button(
+                    text=f"🎥 {quality_text}{filesize_text}",
+                    callback_data=FormatCallback(
+                        format_id=fmt['format_id'],
+                        type='video',
+                        quality=str(height),
+                        index=len(valid_formats) - 1
+                    ).pack()
+                )
+
+            if audio_format and audio_format.get('format_id'):
+                valid_formats.append(audio_format)
+                audio_size = audio_format.get('filesize', 0)
+                audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
+
+                builder.button(
+                    text=f"🎵 Аудио{audio_size_text}",
+                    callback_data=FormatCallback(
+                        format_id=audio_format['format_id'],
+                        type='audio',
+                        quality='audio',
+                        index=len(valid_formats) - 1
+                    ).pack()
+                )
+
+            builder.adjust(2)
+
+            if valid_formats:
+                await state.update_data(url=url, formats=valid_formats, title=title)
+                await status_message.edit_text(
+                    f"🎥 {title}\n\n"
+                    f"Выберите формат:",
+                    reply_markup=builder.as_markup()
+                )
+            else:
+                await status_message.edit_text("❗ Не найдены подходящие форматы")
+
+    except Exception as e:
+        logger.error(f"YouTube handler error: {str(e)}")
+        await status_message.edit_text("❗ Ошибка при получении форматов")
+
+
 def download_video(url, format_id):
-    """Download video in a separate thread"""
     ydl_opts = {
         'format': format_id,
         'quiet': True,
