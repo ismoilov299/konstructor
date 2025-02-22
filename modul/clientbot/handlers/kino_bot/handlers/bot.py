@@ -1437,41 +1437,31 @@ async def download_video(url: str, format_id: str, state: FSMContext):
             'outtmpl': '%(title)s.%(ext)s',
             'retries': 3,
             'fragment_retries': 3,
-            'continuedl': True,  #
+            'continuedl': True,
             'buffersize': 1024 * 1024,  # 1MB buffer size
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with YoutubeDL(ydl_opts) as ydl:
+            # Run the download and info extraction in a thread
             info = await asyncio.get_event_loop().run_in_executor(
                 executor,
-                lambda: ydl.extract_info(url, download=False)
+                lambda: ydl.extract_info(url, download=True)
             )
 
             if not info:
                 raise Exception("Could not get video info")
 
-            requested_format = None
-            for f in info['formats']:
-                if f['format_id'] == format_id:
-                    requested_format = f
-                    break
-
-            if not requested_format:
-                raise Exception(f"Format {format_id} not found")
-
-            filename = await asyncio.get_event_loop().run_in_executor(
-                executor,
-                lambda: ydl.download([url])
-            )
-
-            if not filename:
-                raise Exception("Download failed - empty filename")
-
+            # Generate the expected filename before download completes
             output_file = ydl.prepare_filename(info)
-            if not os.path.exists(output_file) or os.path.getsize(output_file) == 0:
-                raise Exception("Downloaded file is empty or does not exist")
+            logger.debug(f"Expected output file: {output_file}")
 
-            return output_file
+            # Verify the file exists and is not empty
+            if not os.path.exists(output_file):
+                raise Exception(f"Downloaded file does not exist: {output_file}")
+            if os.path.getsize(output_file) == 0:
+                raise Exception(f"Downloaded file is empty: {output_file}")
+
+            return output_file  # Return the actual file path
 
     except Exception as e:
         logger.error(f"Download error: {str(e)}")
