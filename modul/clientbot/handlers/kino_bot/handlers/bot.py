@@ -1428,18 +1428,54 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
         await status_message.edit_text("❗ Ошибка при получении форматов")
 
 
-def download_video(url, format_id):
-    ydl_opts = {
-        'format': format_id,
-        'quiet': True,
-        'no_warnings': True,
-        'noplaylist': True,
-        'encoding': 'utf-8',
-    }
+async def download_video(url: str, format_id: str, state: FSMContext):
+    try:
+        ydl_opts = {
+            'format': format_id,
+            'quiet': True,
+            'no_warnings': True,
+            'outtmpl': '%(title)s.%(ext)s',
+            'retries': 3,
+            'fragment_retries': 3,
+            'continuedl': True,  #
+            'buffersize': 1024 * 1024,  # 1MB buffer size
+        }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info), info
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = await asyncio.get_event_loop().run_in_executor(
+                executor,
+                lambda: ydl.extract_info(url, download=False)
+            )
+
+            if not info:
+                raise Exception("Could not get video info")
+
+            requested_format = None
+            for f in info['formats']:
+                if f['format_id'] == format_id:
+                    requested_format = f
+                    break
+
+            if not requested_format:
+                raise Exception(f"Format {format_id} not found")
+
+            filename = await asyncio.get_event_loop().run_in_executor(
+                executor,
+                lambda: ydl.download([url])
+            )
+
+            if not filename:
+                raise Exception("Download failed - empty filename")
+
+            output_file = ydl.prepare_filename(info)
+            if not os.path.exists(output_file) or os.path.getsize(output_file) == 0:
+                raise Exception("Downloaded file is empty or does not exist")
+
+            return output_file
+
+    except Exception as e:
+        logger.error(f"Download error: {str(e)}")
+        raise
 
 class DownloaderBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
