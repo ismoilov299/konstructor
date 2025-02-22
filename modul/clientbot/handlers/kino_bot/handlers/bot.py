@@ -1420,12 +1420,13 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             # Add video formats (sorted by quality)
             # Fix: Handle cases where quality might be None or non-numeric
             def get_quality_value(fmt):
+                quality = fmt.get('quality', '0')
+                if quality is None:
+                    return 0
                 try:
-                    # Extract numeric value from quality string (e.g., "720p" -> 720)
-                    quality = fmt.get('quality', '0')
                     if isinstance(quality, str):
                         return int(''.join(filter(str.isdigit, quality)) or 0)
-                    return int(quality or 0)
+                    return int(quality)
                 except (ValueError, TypeError):
                     return 0
 
