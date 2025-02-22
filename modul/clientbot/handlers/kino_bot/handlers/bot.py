@@ -1607,11 +1607,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         )
 
         try:
-            # Download in separate thread
-            file_path, info = await asyncio.get_event_loop().run_in_executor(
-                executor,
-                lambda: download_video(url, selected_format['format_id'],state)
-            )
+            # Assuming download_video is async def download_video(url, format_id, state):
+            file_path, info = await download_video(url, selected_format['format_id'], state)
 
             if not os.path.exists(file_path):
                 raise FileNotFoundError("Файл не найден после загрузки")
