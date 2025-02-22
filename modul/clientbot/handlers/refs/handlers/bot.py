@@ -386,7 +386,7 @@ async def profile(message: Message):
             f"📝 Ваше имя: {message.from_user.full_name}\n"
             f"🆔 Ваш ID: <code>{user_info[1]}</code>\n"
             f"==========================\n"
-            f"💳 Баланс: {user_info[2]}\n"
+            f"💳 Баланс: {user_info[2]}₽\n"
             f"👥 Всего друзей: {user_info[3]}\n"
 
             f"==========================\n"

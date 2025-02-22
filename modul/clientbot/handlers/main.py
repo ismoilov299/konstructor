@@ -91,7 +91,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             builder.button(text='💸Заработать', callback_data='ref')
             builder.adjust(2, 1, 1, 1, 1)
             result = await get_info_db(uid)
-            text = f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}'
+            text = f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}₽'
             kwargs['reply_markup'] = builder.as_markup()
         else:
             kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
