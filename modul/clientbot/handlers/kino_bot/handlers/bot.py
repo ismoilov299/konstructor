@@ -987,6 +987,9 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             except Exception as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
                 subscribed = False
+                await remove_invalid_channel(channel_id)
+
+
                 break
 
     if not subscribed:
@@ -1146,6 +1149,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         return False
                 except Exception as e:
                     logger.error(f"Error checking channel {channel_id}: {e}")
+                    await remove_invalid_channel(channel_id)
                     continue
 
         referral = command.args if command and command.args else None
