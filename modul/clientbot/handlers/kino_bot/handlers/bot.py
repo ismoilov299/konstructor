@@ -1418,60 +1418,75 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
-            def get_format_quality(fmt):
+            def safe_int(value, default=0):
+                if value is None:
+                    return default
+                try:
+                    return int(value)
+                except (ValueError, TypeError):
+                    return default
+
+            def get_format_resolution(fmt):
                 if not fmt or not isinstance(fmt, dict):
                     return 0
 
-                # Try to get height first
-                height = fmt.get('height', 0)
-                if height:
-                    return int(height)
+                # First try to get height directly
+                height = safe_int(fmt.get('height'), 0)
+                if height > 0:
+                    return height
 
                 # Try to get resolution from format note
                 format_note = fmt.get('format_note', '')
-                if format_note:
+                if isinstance(format_note, str) and 'p' in format_note:
                     try:
-                        if 'p' in format_note:
-                            return int(format_note.split('p')[0])
+                        height = safe_int(format_note.split('p')[0], 0)
+                        if height > 0:
+                            return height
                     except (ValueError, IndexError):
                         pass
 
-                # Default quality for valid formats
-                return 360
+                # Try format name
+                format_name = fmt.get('format', '')
+                if isinstance(format_name, str):
+                    for quality in ['2160', '1440', '1080', '720', '480', '360', '240', '144']:
+                        if quality in format_name:
+                            return int(quality)
 
-            # Sort formats by quality
-            sorted_formats = []
+                return 360  # Default resolution
+
+            # Filter and sort video formats
+            valid_video_formats = []
             for fmt in video_formats:
                 if fmt and isinstance(fmt, dict) and fmt.get('format_id'):
-                    quality = get_format_quality(fmt)
-                    sorted_formats.append((quality, fmt))
+                    resolution = get_format_resolution(fmt)
+                    valid_video_formats.append((resolution, fmt))
 
-            # Sort by quality in descending order
-            sorted_formats.sort(key=lambda x: x[0], reverse=True)
+            # Sort by resolution, handling possible None values
+            valid_video_formats.sort(key=lambda x: x[0] if x[0] is not None else 0, reverse=True)
 
             # Add buttons for video formats
-            for quality, fmt in sorted_formats:
+            for resolution, fmt in valid_video_formats:
                 valid_formats.append(fmt)
-                filesize = fmt.get('filesize', 0)
-                filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize else ""
+                filesize = safe_int(fmt.get('filesize'), 0)
+                filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
 
-                quality_text = f"{quality}p" if quality else "Medium"
+                quality_text = f"{resolution}p" if resolution else "Medium"
 
                 builder.button(
                     text=f"🎥 {quality_text}{filesize_text}",
                     callback_data=FormatCallback(
                         format_id=fmt['format_id'],
                         type='video',
-                        quality=str(quality),
+                        quality=str(resolution),
                         index=len(valid_formats) - 1
                     ).pack()
                 )
 
             # Add audio format if available
-            if audio_format and audio_format.get('format_id'):
+            if audio_format and isinstance(audio_format, dict) and audio_format.get('format_id'):
                 valid_formats.append(audio_format)
-                audio_size = audio_format.get('filesize', 0)
-                audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size else ""
+                audio_size = safe_int(audio_format.get('filesize'), 0)
+                audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
 
                 builder.button(
                     text=f"🎵 Аудио{audio_size_text}",
