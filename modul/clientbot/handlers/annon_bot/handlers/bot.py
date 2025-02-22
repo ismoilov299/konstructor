@@ -253,19 +253,27 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
     logger.info(f"Start command received from user {message.from_user.id}")
     args = command.args
 
-    subscribed = await check_channels(message.from_user.id, bot)
-    if not subscribed:
-        channels = await get_channels_for_check()
+    channels = await get_channels_for_check()
+    valid_channels = []
 
-        if channels:
-            markup = await channels_in(channels, bot)
+    for channel in channels:
+        try:
+            chat = await bot.get_chat(channel)
+            valid_channels.append(channel)
+        except Exception as e:
+            logger.error(f"Channel {channel} not accessible: {e}")
+
+    subscribed = True
+    if valid_channels:
+        subscribed = await check_channels(message.from_user.id, bot, valid_channels)
+
+        if not subscribed:
+            markup = await channels_in(valid_channels, bot)
             await message.answer(
                 "Для использования бота подпишитесь на наших спонсоров",
                 reply_markup=markup
             )
             return
-        else:
-            logger.warning("No channels found for subscription check")
 
     user_exists = await check_user(message.from_user.id)
 
