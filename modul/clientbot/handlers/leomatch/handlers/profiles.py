@@ -97,6 +97,19 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                 print(f"User not found or invalid: {to_user}")
                 await message.answer("❌ Не удалось найти пользователя")
         else:
+            # Just send a like notification without a message
+            to_user = await get_leo(to_uid)
+            if to_user and to_user.user:
+                try:
+                    # Get the from_user info if needed to show who liked them
+                    from_user = await get_leo(from_uid)
+                    await message.bot.send_message(
+                        chat_id=to_user.user.uid,
+                        text=f"❤️ Вам поставили лайк!"
+                    )
+                except Exception as e:
+                    print(f"Error sending like notification to user {to_uid}: {e}")
+
             await message.answer("Лайк отправлен")
 
         # Keyingi profilga o'tish
