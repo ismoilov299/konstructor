@@ -22,7 +22,7 @@ MEDIA_ROOT = BASE_DIR / "downloads"
 
 class Settings(BaseSettings):
     WEBHOOK_PATH: str = "bot/webhook/{token}"
-    WEBHOOK_URL = 'https://403f-34-57-22-152.ngrok-free.app/bot/webhook/{token}'
+    WEBHOOK_URL = 'https://ismoilov299.uz/bot/webhook/{token}'
     BOT_TOKEN: str = '6746881064:AAFeVCH1odRrxqqHLkBKvW39wABT3PO37-w'
     ADMIN: int = 889121031
     # ADMIN_LIST = [ADMIN, 302942780]
