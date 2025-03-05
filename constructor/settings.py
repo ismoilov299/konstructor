@@ -25,9 +25,9 @@ SECRET_KEY = 'django-insecure-ar$$pdw25+#px0g++38=*+$u8yk!++v0uzplya3ribl432fol2
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'constructor.settings')
-
-application = get_asgi_application()
+# os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'constructor.settings')
+#
+# application = get_asgi_application()
 
 ALLOWED_HOSTS = ['*']
 APPEND_SLASH = False
