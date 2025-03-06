@@ -1433,10 +1433,16 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
-        # Specify the full path to ffmpeg
-        ffmpeg_path = "/usr/bin/ffmpeg"
+        # Create download directory with proper permissions
+        download_dir = "/var/www/downloads"
+        cache_dir = "/var/www/cache"
 
-        # Verify ffmpeg is available with full path
+        # Make sure these directories exist
+        os.makedirs(download_dir, exist_ok=True)
+        os.makedirs(cache_dir, exist_ok=True)
+
+        # Verify ffmpeg is available
+        ffmpeg_path = "/usr/bin/ffmpeg"
         try:
             subprocess.run([ffmpeg_path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             logger.debug("ffmpeg is installed and available")
@@ -1448,20 +1454,19 @@ async def download_video(url: str, format_id: str, state: FSMContext):
             'format': f"{format_id}+bestaudio/best",
             'quiet': False,
             'no_warnings': False,
-            'outtmpl': '%(title)s-%(id)s.%(ext)s',
+            'outtmpl': os.path.join(download_dir, '%(title)s-%(id)s.%(ext)s'),  # Specify download directory
             'retries': 3,
             'fragment_retries': 3,
             'continuedl': True,
             'buffersize': 1024 * 1024,
             'merge_output_format': 'mp4',
-            # Tell yt-dlp where to find ffmpeg
             'ffmpeg_location': os.path.dirname(ffmpeg_path),
+            'cachedir': cache_dir,  # Specify cache directory
             'postprocessors': [{
                 'key': 'FFmpegVideoConvertor',
                 'preferedformat': 'mp4',
             }],
         }
-
         with YoutubeDL(ydl_opts) as ydl:
             # Route yt-dlp logs to your logger
             ydl.params['logger'] = logger
