@@ -1433,25 +1433,30 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
-        # Verify ffmpeg is available
+        # Specify the full path to ffmpeg
+        ffmpeg_path = "/usr/bin/ffmpeg"
+
+        # Verify ffmpeg is available with full path
         try:
-            subprocess.run(['ffmpeg', '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run([ffmpeg_path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             logger.debug("ffmpeg is installed and available")
         except (subprocess.CalledProcessError, FileNotFoundError):
-            logger.error("ffmpeg is not installed or not found in PATH")
+            logger.error(f"ffmpeg not found at {ffmpeg_path}")
             raise Exception("ffmpeg is required for merging audio and video")
 
         ydl_opts = {
-            'format': f"{format_id}+bestaudio/best",  # Combine video format with best audio
-            'quiet': False,  # Allow output for debugging
+            'format': f"{format_id}+bestaudio/best",
+            'quiet': False,
             'no_warnings': False,
-            'outtmpl': '%(title)s-%(id)s.%(ext)s',  # Include ID for uniqueness
+            'outtmpl': '%(title)s-%(id)s.%(ext)s',
             'retries': 3,
             'fragment_retries': 3,
             'continuedl': True,
-            'buffersize': 1024 * 1024,  # 1MB buffer size
-            'merge_output_format': 'mp4',  # Merge into MP4
-            'postprocessors': [{  # Force merging with ffmpeg
+            'buffersize': 1024 * 1024,
+            'merge_output_format': 'mp4',
+            # Tell yt-dlp where to find ffmpeg
+            'ffmpeg_location': os.path.dirname(ffmpeg_path),
+            'postprocessors': [{
                 'key': 'FFmpegVideoConvertor',
                 'preferedformat': 'mp4',
             }],
