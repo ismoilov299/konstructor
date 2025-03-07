@@ -1,3 +1,5 @@
+import traceback
+
 import aiogram
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import BaseFilter
@@ -229,6 +231,8 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
         print('ishladi')
         logger.info(f"Checking channels for user {message.from_user.id}")
         channels_checker = await check_channels(message)
+        # print(f"Found channels in DB: {await get_channels_from_db()}")
+        # print(f"Checking channels: {await get_channels_from_db()}")
         print(channels_checker)
         logger.info(f"Channels check result: {channels_checker}")
 
@@ -248,9 +252,10 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
             try:
                 referrer_id = int(referral)
                 logger.info(f"Processing referral ID: {referrer_id} for user {message.from_user.id}")
-                # O'zini o'zi refer qilishni tekshirish
-                if referrer_id == message.from_user.id:
-                    logger.warning(f"User {referrer_id} tried to refer themselves")
+
+                # O'zini o'zi refer qilishni tekshirish - qattiq tekshirish
+                if str(referrer_id) == str(message.from_user.id):
+                    logger.warning(f"SELF-REFERRAL DETECTED: User {message.from_user.id} tried to refer themselves!")
                     await add_user(
                         tg_id=message.from_user.id,
                         user_name=message.from_user.first_name
@@ -279,6 +284,11 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                         @transaction.atomic
                         def update_referral():
                             try:
+                                # Qo'shimcha himoya - o'zini o'zi referral qilishni oldini olish
+                                if str(referrer_id) == str(message.from_user.id):
+                                    logger.error(f"Prevented self-referral in update_referral for user {referrer_id}")
+                                    return False
+
                                 user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
                                 admin_info = AdminInfo.objects.first()
 
@@ -289,8 +299,12 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                                 user_tg.refs += 1
                                 user_tg.balance += float(admin_info.price or 10.0)
                                 user_tg.save()
-                                logger.info(f"Referral stats updated for {referrer_id}: refs={user_tg.refs}, balance={user_tg.balance}")
+                                logger.info(
+                                    f"Referral stats updated for {referrer_id}: refs={user_tg.refs}, balance={user_tg.balance}")
                                 return True
+                            except UserTG.DoesNotExist:
+                                logger.error(f"User with ID {referrer_id} not found in database")
+                                return False
                             except Exception as ex:
                                 logger.error(f"Error in referral update: {ex}")
                                 return False
@@ -307,6 +321,8 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                                 logger.info(f"Referral notification sent to {referrer_id}")
                             except TelegramForbiddenError:
                                 logger.error(f"Cannot send message to user {referrer_id}")
+                            except Exception as e:
+                                logger.error(f"Error sending notification to referrer: {e}")
 
                         logger.info(f"Successfully processed referral for {referrer_id}")
                     else:
@@ -338,6 +354,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
 
     except Exception as e:
         logger.error(f"Error in start_ref: {e}")
+        traceback.print_exc()  # Xato stack trace'ni ham chiqarish
         await message.answer(
             "Произошла ошибка. Попробуйте позже.",
             reply_markup=await main_menu_bt()
