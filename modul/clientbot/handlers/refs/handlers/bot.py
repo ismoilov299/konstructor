@@ -227,40 +227,46 @@ async def check_referral_status(user_id: int) -> dict:
 async def start_ref(message: Message, bot: Bot, referral: str = None):
     try:
         print('ishladi')
+        logger.info(f"Checking channels for user {message.from_user.id}")
         channels_checker = await check_channels(message)
         print(channels_checker)
+        logger.info(f"Channels check result: {channels_checker}")
 
         if not channels_checker:
+            logger.info("Channels check failed, exiting")
             return
 
         is_registered = await check_user(message.from_user.id)
         is_banned = await check_ban(message.from_user.id)
 
         if is_banned:
+            logger.info(f"User {message.from_user.id} is banned, exiting")
             return
 
-        # Faqat yangi foydalanuvchi va kanalga obuna bo'lgan bo'lsagina referral hisoblaymiz
+        # Referral jarayoni
         if referral and not is_registered and channels_checker:
             try:
                 referrer_id = int(referral)
-                # O'zini o'zi refer qilishni oldini olish
+                logger.info(f"Processing referral ID: {referrer_id} for user {message.from_user.id}")
+                # O'zini o'zi refer qilishni tekshirish
                 if referrer_id == message.from_user.id:
                     logger.warning(f"User {referrer_id} tried to refer themselves")
                     await add_user(
                         tg_id=message.from_user.id,
                         user_name=message.from_user.first_name
                     )
-                    # Foydalanuvchiga xabar yuborish
                     await message.answer(
                         "❌ Siz o'zingizni taklif qila olmaysiz!",
                         reply_markup=await main_menu_bt()
                     )
-                    return  # Jarayonni to'xtatamiz
+                    logger.info(f"Self-referral blocked for user {message.from_user.id}")
+                    return  # Referral jarayoni to'xtatiladi
                 else:
                     # Referrerni tekshirish
                     referrer_name = await get_user_name(referrer_id)
                     if referrer_name:
-                        # Avval userni saqlaymiz
+                        logger.info(f"Referrer found: {referrer_name} (ID: {referrer_id})")
+                        # Yangi foydalanuvchini qo'shamiz
                         await add_user(
                             tg_id=message.from_user.id,
                             user_name=message.from_user.first_name,
@@ -268,7 +274,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                             invited_id=referrer_id
                         )
 
-                        # Keyin referral statni yangilaymiz
+                        # Referral statistikasini yangilash
                         @sync_to_async
                         @transaction.atomic
                         def update_referral():
@@ -277,11 +283,13 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                                 admin_info = AdminInfo.objects.first()
 
                                 if not admin_info:
+                                    logger.error("Admin info not found")
                                     return False
 
                                 user_tg.refs += 1
                                 user_tg.balance += float(admin_info.price or 10.0)
                                 user_tg.save()
+                                logger.info(f"Referral stats updated for {referrer_id}: refs={user_tg.refs}, balance={user_tg.balance}")
                                 return True
                             except Exception as ex:
                                 logger.error(f"Error in referral update: {ex}")
@@ -296,7 +304,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                                     chat_id=referrer_id,
                                     text=f"У вас новый {user_link}!"
                                 )
-                                print('refs start')
+                                logger.info(f"Referral notification sent to {referrer_id}")
                             except TelegramForbiddenError:
                                 logger.error(f"Cannot send message to user {referrer_id}")
 
@@ -315,16 +323,18 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                     user_name=message.from_user.first_name
                 )
         elif not is_registered:
-            # Add new user without referral
+            logger.info(f"Adding new user {message.from_user.id} without referral")
             await add_user(
                 tg_id=message.from_user.id,
                 user_name=message.from_user.first_name
             )
 
+        logger.info(f"Sending welcome message to {message.from_user.id}")
         await message.answer(
             f"🎉 Привет, {message.from_user.first_name}",
             reply_markup=await main_menu_bt()
         )
+        logger.info(f"Welcome message sent to {message.from_user.id}")
 
     except Exception as e:
         logger.error(f"Error in start_ref: {e}")

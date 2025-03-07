@@ -107,6 +107,7 @@ async def process_referral(message: Message, referral_id: int):
                 chat_id=referral_id,
                 text=f"У вас новый {user_link}!"
             )
+            print("110 annon")
 
             await update_referral_stats(referral_id)
             logger.info(f"Referral processed for user {referral_id}")
