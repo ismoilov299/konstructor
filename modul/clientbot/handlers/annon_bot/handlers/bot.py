@@ -100,6 +100,11 @@ def update_referral_stats(referral_id: int):
 
 async def process_referral(message: Message, referral_id: int):
     try:
+        # O'zini o'zi referral qilishni tekshirish
+        if str(referral_id) == str(message.from_user.id):
+            logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
+            return False  # O'zini o'zi referral qilish to'xtatildi
+
         inviter = await get_user_by_id(referral_id)
         if inviter:
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
@@ -107,13 +112,16 @@ async def process_referral(message: Message, referral_id: int):
                 chat_id=referral_id,
                 text=f"У вас новый {user_link}!"
             )
-            print("110 annon")
+            print("115 annon")
 
             await update_referral_stats(referral_id)
             logger.info(f"Referral processed for user {referral_id}")
+            return True  # Referral muvaffaqiyatli qayta ishlandi
 
+        return False  # Inviter topilmadi
     except Exception as e:
         logger.error(f"Error processing referral: {e}")
+        return False  # Xatolik yuz berdi
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
