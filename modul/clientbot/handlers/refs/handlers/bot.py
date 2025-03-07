@@ -250,6 +250,12 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                         tg_id=message.from_user.id,
                         user_name=message.from_user.first_name
                     )
+                    # Foydalanuvchiga xabar yuborish
+                    await message.answer(
+                        "❌ Вы не можете пригласить себя!",
+                        reply_markup=await main_menu_bt()
+                    )
+                    return  # Funksiyani shu yerda to'xtatamiz
                 else:
                     # Referrerni tekshirish
                     referrer_name = await get_user_name(referrer_id)
@@ -283,7 +289,6 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
 
                         referral_success = await update_referral()
 
-                        # Faqat muvaffaqiyatli bo'lganda xabar yuboramiz
                         if referral_success:
                             try:
                                 user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
