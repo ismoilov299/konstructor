@@ -252,10 +252,10 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                     )
                     # Foydalanuvchiga xabar yuborish
                     await message.answer(
-                        "❌ Вы не можете пригласить себя!",
+                        "❌ Siz o'zingizni taklif qila olmaysiz!",
                         reply_markup=await main_menu_bt()
                     )
-                    return  # Funksiyani shu yerda to'xtatamiz
+                    return  # Jarayonni to'xtatamiz
                 else:
                     # Referrerni tekshirish
                     referrer_name = await get_user_name(referrer_id)

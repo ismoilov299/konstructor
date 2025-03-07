@@ -1072,7 +1072,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 async def start(message: Message, state: FSMContext, bot: Bot):
     bot_db = await shortcuts.get_bot(bot)
     uid = message.from_user.id
-    print(uid,'kino start 974')
+    print(uid,'kino start 1075')
 
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
