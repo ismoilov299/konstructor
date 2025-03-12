@@ -231,8 +231,6 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
         print('ishladi')
         logger.info(f"Checking channels for user {message.from_user.id}")
         channels_checker = await check_channels(message)
-        # print(f"Found channels in DB: {await get_channels_from_db()}")
-        # print(f"Checking channels: {await get_channels_from_db()}")
         print(channels_checker)
         logger.info(f"Channels check result: {channels_checker}")
 
@@ -261,34 +259,31 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                         user_name=message.from_user.first_name
                     )
                     await message.answer(
-                        "❌ Siz o'zingizni taklif qila olmaysiz!",
+                        "❌ Вы не можете пригласить себя!",
                         reply_markup=await main_menu_bt()
                     )
                     logger.info(f"Self-referral blocked for user {message.from_user.id}")
                     return  # Referral jarayoni to'xtatiladi
                 else:
-                    # Referrerni tekshirish
-                    referrer_name = await get_user_name(referrer_id)
-                    if referrer_name:
-                        logger.info(f"Referrer found: {referrer_name} (ID: {referrer_id})")
-                        # Yangi foydalanuvchini qo'shamiz
-                        await add_user(
-                            tg_id=message.from_user.id,
-                            user_name=message.from_user.first_name,
-                            invited=referrer_name,
-                            invited_id=referrer_id
-                        )
+                    # To'g'ridan-to'g'ri referral bilan foydalanuvchini qo'shamiz (tekshirishsiz)
+                    await add_user(
+                        tg_id=message.from_user.id,
+                        user_name=message.from_user.first_name,
+                        invited="Unknown",  # Yoki bo'sh string "" qo'yish mumkin
+                        invited_id=referrer_id
+                    )
 
-                        # Referral statistikasini yangilash
-                        @sync_to_async
-                        @transaction.atomic
-                        def update_referral():
+                    # Referral statistikasini yangilash
+                    @sync_to_async
+                    @transaction.atomic
+                    def update_referral():
+                        try:
+                            # Qo'shimcha himoya - o'zini o'zi referral qilishni oldini olish
+                            if str(referrer_id) == str(message.from_user.id):
+                                logger.error(f"Prevented self-referral in update_referral for user {referrer_id}")
+                                return False
+
                             try:
-                                # Qo'shimcha himoya - o'zini o'zi referral qilishni oldini olish
-                                if str(referrer_id) == str(message.from_user.id):
-                                    logger.error(f"Prevented self-referral in update_referral for user {referrer_id}")
-                                    return False
-
                                 user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
                                 admin_info = AdminInfo.objects.first()
 
@@ -303,34 +298,32 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                                     f"Referral stats updated for {referrer_id}: refs={user_tg.refs}, balance={user_tg.balance}")
                                 return True
                             except UserTG.DoesNotExist:
-                                logger.error(f"User with ID {referrer_id} not found in database")
-                                return False
+                                # Xatolik log qilish, lekin davom etish
+                                logger.info(f"User with ID {referrer_id} not found in database, but continuing")
+                                return True  # True qaytaramiz chunki jarayon davom etishi kerak
                             except Exception as ex:
                                 logger.error(f"Error in referral update: {ex}")
                                 return False
+                        except Exception as e:
+                            logger.error(f"General error in update_referral: {e}")
+                            return False
 
-                        referral_success = await update_referral()
+                    referral_success = await update_referral()
 
-                        if referral_success:
-                            try:
-                                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                                await message.bot.send_message(
-                                    chat_id=referrer_id,
-                                    text=f"У вас новый {user_link}!"
-                                )
-                                logger.info(f"Referral notification sent to {referrer_id}")
-                            except TelegramForbiddenError:
-                                logger.error(f"Cannot send message to user {referrer_id}")
-                            except Exception as e:
-                                logger.error(f"Error sending notification to referrer: {e}")
+                    if referral_success:
+                        try:
+                            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                            await message.bot.send_message(
+                                chat_id=referrer_id,
+                                text=f"У вас новый {user_link}!"
+                            )
+                            logger.info(f"Referral notification sent to {referrer_id}")
+                        except TelegramForbiddenError:
+                            logger.error(f"Cannot send message to user {referrer_id}")
+                        except Exception as e:
+                            logger.error(f"Error sending notification to referrer: {e}")
 
-                        logger.info(f"Successfully processed referral for {referrer_id}")
-                    else:
-                        logger.error(f"Referrer {referrer_id} not found")
-                        await add_user(
-                            tg_id=message.from_user.id,
-                            user_name=message.from_user.first_name
-                        )
+                    logger.info(f"Successfully processed referral for {referrer_id}")
 
             except ValueError:
                 logger.error(f"Invalid referral ID: {referral}")
