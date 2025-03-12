@@ -8,13 +8,20 @@ from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot,
 logger = logging.getLogger(__name__)
 @sync_to_async
 def add_user(tg_id, user_name, invited="Никто", invited_id=None):
-    UserTG.objects.create(
-        uid=tg_id,
-        username=user_name,
-        invited=invited,
-        invited_id=invited_id,
-        created_at=timezone.now()
-    )
+    try:
+        UserTG.objects.create(
+            uid=tg_id,
+            username=user_name,
+            first_name=user_name,  # Bu qatorni qo'shing
+            invited=invited,
+            invited_id=invited_id,
+            created_at=timezone.now()
+        )
+        print(f"User {tg_id} successfully added to database")
+    except Exception as e:
+        print(f"Error adding user {tg_id} to database: {e}")
+        # Xatoni qayta tashlash yoki boshqa jarayonni qilish mumkin
+        raise  # Xatoni qayta tashlash
 
 
 @sync_to_async
