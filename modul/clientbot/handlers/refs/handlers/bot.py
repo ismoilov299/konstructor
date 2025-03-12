@@ -238,6 +238,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
             logger.info("Channels check failed, exiting")
             return
 
+        # Foydalanuvchi ro'yxatdan o'tganligini tekshirish
         is_registered = await check_user(message.from_user.id)
         is_banned = await check_ban(message.from_user.id)
 
@@ -245,7 +246,18 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
             logger.info(f"User {message.from_user.id} is banned, exiting")
             return
 
-        # Referral jarayoni
+        # MUHIM: Agar foydalanuvchi allaqachon ro'yxatdan o'tgan bo'lsa
+        if is_registered:
+            logger.info(f"User {message.from_user.id} is already registered, skipping referral processing")
+            # Faqat xabar yuborish kerak
+            await message.answer(
+                f"🎉 Привет, {message.from_user.first_name}",
+                reply_markup=await main_menu_bt()
+            )
+            logger.info(f"Welcome message sent to registered user {message.from_user.id}")
+            return  # Bu yerda qaytarish kerak, boshqa ishlar qilmaslik uchun
+
+        # Referral jarayoni - faqat yangi foydalanuvchilar uchun
         if referral and not is_registered and channels_checker:
             try:
                 referrer_id = int(referral)
@@ -259,17 +271,21 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                         user_name=message.from_user.first_name
                     )
                     await message.answer(
-                        "❌ Вы не можете пригласить себя!",
+                        "❌ Siz o'zingizni taklif qila olmaysiz!",
                         reply_markup=await main_menu_bt()
                     )
                     logger.info(f"Self-referral blocked for user {message.from_user.id}")
                     return  # Referral jarayoni to'xtatiladi
                 else:
-                    # To'g'ridan-to'g'ri referral bilan foydalanuvchini qo'shamiz (tekshirishsiz)
+                    # Foydalanuvchini referral bilan qo'shamiz
+                    # Lekin avval bu foydalanuvchining o'zi referal sifatida bazada borligini tekshiramiz
+                    # Bu qism 'add_user' funksiyasining o'zida bo'lishi ham mumkin
+
+                    # Foydalanuvchini qo'shamiz (tekshirish 'add_user' ichida bo'lishi kerak)
                     await add_user(
                         tg_id=message.from_user.id,
                         user_name=message.from_user.first_name,
-                        invited="Unknown",  # Yoki bo'sh string "" qo'yish mumkin
+                        invited="Unknown",  # Yoki referrerning haqiqiy nomi
                         invited_id=referrer_id
                     )
 
@@ -284,6 +300,19 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                                 return False
 
                             try:
+                                # Bazada shu foydalanuvchi taklif qilinganini tekshirish
+                                # Bu referrer-referee munosabatini tekshirish, ikkala foydalanuvchi ham bazada bo'lishi kerak
+                                # Buni UserTG modelidagi maydonlar orqali tekshirish kerak
+
+                                # Tekshirish qismi qo'shish kerak - bazada bor-yo'qligini tekshirish
+                                # Bu yerda bog'liqlik modelingizga qarab o'zgartirilishi kerak
+
+                                # Misol uchun, agar 'referred_by' yoki shunga o'xshash maydon UserTG modelida bo'lsa:
+                                # already_referred = UserTG.objects.filter(uid=message.from_user.id, referred_by=referrer_id).exists()
+                                # if already_referred:
+                                #     logger.info(f"User {message.from_user.id} already referred by {referrer_id}, skipping bonus")
+                                #     return True
+
                                 user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
                                 admin_info = AdminInfo.objects.first()
 
@@ -338,12 +367,14 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                 user_name=message.from_user.first_name
             )
 
-        logger.info(f"Sending welcome message to {message.from_user.id}")
-        await message.answer(
-            f"🎉 Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
-        logger.info(f"Welcome message sent to {message.from_user.id}")
+        # Ko'rsatma berish muqaddam ro'yxatga olingan foydalanuvchilar uchun tekshirilgan!
+        if not is_registered:  # Faqat yangi foydalanuvchilarga ko'rsatma berish
+            logger.info(f"Sending welcome message to {message.from_user.id}")
+            await message.answer(
+                f"🎉 Привет, {message.from_user.first_name}",
+                reply_markup=await main_menu_bt()
+            )
+            logger.info(f"Welcome message sent to {message.from_user.id}")
 
     except Exception as e:
         logger.error(f"Error in start_ref: {e}")
