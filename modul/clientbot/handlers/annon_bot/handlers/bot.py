@@ -100,6 +100,12 @@ def update_referral_stats(referral_id: int):
 
 async def process_referral(message: Message, referral_id: int):
     try:
+        # Foydalanuvchi allaqachon ro'yxatdan o'tganligini tekshirish
+        is_user_registered = await check_user(message.from_user.id)
+        if is_user_registered:
+            logger.info(f"User {message.from_user.id} already registered, skipping referral in annon_bot")
+            return False
+
         if str(referral_id) == str(message.from_user.id):
             logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
             return False
