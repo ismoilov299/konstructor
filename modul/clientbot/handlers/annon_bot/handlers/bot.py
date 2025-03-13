@@ -97,6 +97,18 @@ def update_referral_stats(referral_id: int):
     except Exception as e:
         logger.error(f"Error updating referral stats: {e}")
 
+@sync_to_async
+def check_if_already_referred(user_id: int, referrer_id: int):
+    """
+    Foydalanuvchi oldin shu referral ID bilan referral bo'lganligini tekshirish
+    """
+    try:
+        # UserTG modeli ma'lumotlariga qarab tekshirish
+        user = UserTG.objects.filter(uid=user_id, invited_id=referrer_id).exists()
+        return user
+    except Exception as e:
+        logger.error(f"Error checking if user {user_id} was already referred by {referrer_id}: {e}")
+        return False
 
 async def process_referral(message: Message, referral_id: int):
     try:
@@ -112,6 +124,15 @@ async def process_referral(message: Message, referral_id: int):
 
         inviter = await get_user_by_id(referral_id)
         if inviter:
+            # Tekshirish: bu foydalanuvchi oldin shu referral ID bilan referral bo'lganmi?
+            # Bu yerda tekshirish uchun yangi funksiya zarur
+
+            # Variant 1: UserTG modelida invited_id maydonini tekshirish
+            was_already_referred = await check_if_already_referred(message.from_user.id, referral_id)
+            if was_already_referred:
+                logger.info(f"User {message.from_user.id} was already referred by {referral_id}, skipping")
+                return False
+
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
             await message.bot.send_message(
                 chat_id=referral_id,
@@ -127,7 +148,6 @@ async def process_referral(message: Message, referral_id: int):
     except Exception as e:
         logger.error(f"Error processing referral: {e}")
         return False
-
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
     bot_db = await shortcuts.get_bot(bot)
