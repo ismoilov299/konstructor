@@ -121,34 +121,52 @@ async def process_referral(message: Message, referral_id: int):
             logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
             return False
 
-        # Foydalanuvchi allaqachon shu referrer tomonidan referral qilinganligini tekshirish
-        already_referred = await check_if_already_referred(message.from_user.id, referral_id)
-        if already_referred:
-            logger.info(f"User {message.from_user.id} already referred by {referral_id}, skipping")
+        # Avval yangi foydalanuvchini bazaga qo'shish
+        new_user_added = False
+        try:
+            # Yangi foydalanuvchini qo'shish
+            new_link = await create_start_link(message.bot, str(message.from_user.id))
+            link_for_db = new_link[new_link.index("=") + 1:]
+            await add_user(
+                tg_id=message.from_user.id,
+                user_name=message.from_user.first_name,
+                invited=referral_id,  # Invite qilgan foydalanuvchi ID'si
+                invited_id=referral_id
+            )
+            logger.info(f"New user {message.from_user.id} added to database with referrer {referral_id}")
+            new_user_added = True
+        except Exception as e:
+            logger.error(f"Error adding new user to database: {e}")
             return False
 
+        # Referral beruvchini tekshirish
         inviter = await get_user_by_id(referral_id)
-        if inviter:
+        if inviter and new_user_added:
             try:
-                # Avval statistikani yangilash
-                stats_updated = await update_referral_stats(referral_id)
+                # Referral statistikasini yangilash
+                with transaction.atomic():
+                    user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
+                    user_tg.refs += 1
+                    user_tg.balance += 10.0  # yoki admin_info.price
+                    user_tg.save()
+                    logger.info(f"Referral stats updated for user {referral_id}")
 
-                if stats_updated:
-                    # Faqat muvaffaqiyatli yangilangandan keyingina xabar yuborish
-                    user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                    await message.bot.send_message(
-                        chat_id=referral_id,
-                        text=f"У вас новый {user_link}!"
-                    )
-                    print("115 annon")
-                    logger.info(f"Referral processed for user {referral_id}")
-                    return True
-                else:
-                    logger.warning(f"Failed to update referral stats for {referral_id}")
-                    return False
+                # Referral beruvchiga xabar yuborish
+                # To'g'ri link yaratish - yangi foydalanuvchiga
+                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                await message.bot.send_message(
+                    chat_id=referral_id,
+                    text=f"У вас новый {user_link}!"
+                )
+                print("115 annon")
+                logger.info(f"Referral processed for user {referral_id}")
+                return True
             except Exception as e:
-                logger.error(f"Error during referral processing: {e}")
+                logger.error(f"Error processing referral after adding user: {e}")
                 return False
+        else:
+            logger.warning(f"Inviter {referral_id} not found or user not added")
+            return False
 
         return False
     except Exception as e:
