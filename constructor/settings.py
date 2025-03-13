@@ -75,7 +75,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'constructor.wsgi.application'
-CSRF_TRUSTED_ORIGINS = ['https://ismoilov299.uz/']
+CSRF_TRUSTED_ORIGINS = ['https://ismoilov299.uz']
 
 # DATABASES = {
 #       'default': {
