@@ -132,21 +132,23 @@ async def process_referral(message: Message, referral_id: int):
 
         inviter = await get_user_by_id(referral_id)
         if inviter:
-            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+            try:
+                # Avval referral statistikasini yangilash
+                await update_referral_stats(referral_id)
+                logger.info(f"Referral stats updated for user {referral_id}")
 
-            # update_referral_stats ichida ham tekshirish bajarilyapti
-            referral_updated = await update_referral_stats(referral_id)
-
-            if referral_updated:
+                # Keyin xabarni yuborish
+                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
                 await message.bot.send_message(
                     chat_id=referral_id,
                     text=f"У вас новый {user_link}!"
                 )
                 print("115 annon")
+
                 logger.info(f"Referral processed for user {referral_id}")
                 return True
-            else:
-                logger.info(f"Referral was not processed: already exists or error occurred")
+            except Exception as e:
+                logger.error(f"Error during referral processing: {e}")
                 return False
 
         return False
