@@ -135,7 +135,7 @@ async def process_referral(message: Message, referral_id: int):
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
 
             # update_referral_stats ichida ham tekshirish bajarilyapti
-            referral_updated = await update_referral_stats(referral_id, message.from_user.id)
+            referral_updated = await update_referral_stats(referral_id)
 
             if referral_updated:
                 await message.bot.send_message(
