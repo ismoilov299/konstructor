@@ -85,17 +85,26 @@ def save_user(u, bot: Bot, link=None, inviter=None):
 
 
 @sync_to_async
-def update_referral_stats(referral_id: int):
+def update_referral_stats(referral_id: int, referred_user_id: int):
     try:
+        # Tekshirish: bu foydalanuvchi oldin shu referral ID bilan referral bo'lganmi?
+        already_referred = UserTG.objects.filter(uid=referred_user_id, invited_id=referral_id).exists()
+        if already_referred:
+            logger.info(f"User {referred_user_id} was already referred by {referral_id}, skipping update")
+            return False
+
         user_tg = UserTG.objects.get(uid=referral_id)
         user_tg.refs += 1
         user_tg.balance += 10.0  # yoki admin_info.price
         user_tg.save()
         logger.info(f"Referral stats updated for user {referral_id}")
+        return True
     except UserTG.DoesNotExist:
         logger.error(f"UserTG with uid {referral_id} does not exist")
+        return False
     except Exception as e:
         logger.error(f"Error updating referral stats: {e}")
+        return False
 
 @sync_to_async
 def check_if_already_referred(user_id: int, referrer_id: int):
@@ -109,6 +118,7 @@ def check_if_already_referred(user_id: int, referrer_id: int):
     except Exception as e:
         logger.error(f"Error checking if user {user_id} was already referred by {referrer_id}: {e}")
         return False
+
 
 async def process_referral(message: Message, referral_id: int):
     try:
@@ -124,25 +134,22 @@ async def process_referral(message: Message, referral_id: int):
 
         inviter = await get_user_by_id(referral_id)
         if inviter:
-            # Tekshirish: bu foydalanuvchi oldin shu referral ID bilan referral bo'lganmi?
-            # Bu yerda tekshirish uchun yangi funksiya zarur
-
-            # Variant 1: UserTG modelida invited_id maydonini tekshirish
-            was_already_referred = await check_if_already_referred(message.from_user.id, referral_id)
-            if was_already_referred:
-                logger.info(f"User {message.from_user.id} was already referred by {referral_id}, skipping")
-                return False
-
             user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-            await message.bot.send_message(
-                chat_id=referral_id,
-                text=f"У вас новый {user_link}!"
-            )
-            print("115 annon")
 
-            await update_referral_stats(referral_id)
-            logger.info(f"Referral processed for user {referral_id}")
-            return True
+            # update_referral_stats ichida ham tekshirish bajarilyapti
+            referral_updated = await update_referral_stats(referral_id, message.from_user.id)
+
+            if referral_updated:
+                await message.bot.send_message(
+                    chat_id=referral_id,
+                    text=f"У вас новый {user_link}!"
+                )
+                print("115 annon")
+                logger.info(f"Referral processed for user {referral_id}")
+                return True
+            else:
+                logger.info(f"Referral was not processed: already exists or error occurred")
+                return False
 
         return False
     except Exception as e:
