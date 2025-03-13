@@ -127,11 +127,19 @@ async def gen_buttons(current_bot: Bot, uid: int):
             btns.append(("♈️ Гороскоп"))
     if bot_db.enable_promotion:
         btns.append(("ℹ️ Информация"))
+    if bot_db.enable_refs:
+        btns.append(("💸Заработать"))
+        btns.append(("📱Профиль"))
+        btns.append(("ℹ️Инфо"))
     if bot_db.enable_anon:
         btns.append(("🚀Начать"))
         btns.append(("👋Изменить приветствие"))
         btns.append(("⭐️Ваша статистика"))
-    btns.append(("💸Заработать"))
+
+    # enable_refs bo'lganida "💸Заработать" tugmasini ikki marta qo'shmaslik uchun
+    if not bot_db.enable_refs:
+        btns.append(("💸Заработать"))
+
     return btns
 
 # have_one_module funksiyasini ham o'zgartiramiz

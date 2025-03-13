@@ -403,7 +403,7 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
             price = await get_actual_price()
             await message.bot.send_message(message.from_user.id,
                                         f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-                                        f"🔗 Ваша ссылка для приглашений:\n {link}")
+                                        f"🔗 Ваша ссылка для приглашений:\n {link}",reply_markup=await main_menu_bt())
     else:
         channels_checker = await check_channels(message)
         checker_banned = await banned(message)
