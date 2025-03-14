@@ -27,7 +27,7 @@ from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
 from modul.clientbot.handlers.annon_bot.handlers.bot import check_channels, process_referral
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in
-from modul.clientbot.handlers.annon_bot.userservice import get_channels_for_check
+from modul.clientbot.handlers.annon_bot.userservice import get_channels_for_check, check_user, add_user
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.shortcuts import *
 from modul.clientbot.handlers.kino_bot.keyboards.kb import *
