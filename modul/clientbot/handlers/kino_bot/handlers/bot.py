@@ -991,8 +991,6 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
                 logger.error(f"Error checking channel {channel_id}: {e}")
                 subscribed = False
                 await remove_invalid_channel(channel_id)
-
-
                 break
 
     if not subscribed:
@@ -1019,11 +1017,63 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 
     await callback.answer("Вы успешно подписались на все каналы!")
 
+    # Foydalanuvchi bazada mavjud yoki yo'qligini tekshirish
+    user_exists = await check_user(user_id)
+
+    # Referral ID olish
+    referral_id = None
+
+    # State dan olish
     data = await state.get_data()
     referral = data.get('referral')
-    if referral and referral.isdigit():
-        await process_referral(callback.message, int(referral))
+    if referral and str(referral).isdigit():
+        referral_id = int(referral)
 
+    # Yangi foydalanuvchi va referral ID bor bo'lsa, referral jarayonini bajarish
+    if not user_exists and referral_id:
+        try:
+            # Foydalanuvchini bazaga qo'shish
+            new_link = await create_start_link(bot, str(callback.from_user.id))
+            link_for_db = new_link[new_link.index("=") + 1:]
+
+            # O'zini o'zi referral qilishni tekshirish
+            if str(referral_id) == str(user_id):
+                logger.warning(f"SELF-REFERRAL DETECTED: User {user_id} tried to refer themselves")
+                await add_user(
+                    tg_id=callback.from_user.id,
+                    user_name=callback.from_user.first_name
+                )
+            else:
+                # Referral bilan qo'shish
+                await add_user(
+                    tg_id=callback.from_user.id,
+                    user_name=callback.from_user.first_name,
+                    invited="Referral",
+                    invited_id=referral_id
+                )
+
+                # Referral jarayonini ishga tushirish
+                await process_referral(callback.message, referral_id)
+
+        except Exception as e:
+            logger.error(f"Error processing referral: {e}")
+
+    elif not user_exists:
+        # Referral ID yo'q, lekin yangi foydalanuvchi
+        try:
+            new_link = await create_start_link(bot, str(callback.from_user.id))
+            link_for_db = new_link[new_link.index("=") + 1:]
+            await add_user(
+                tg_id=callback.from_user.id,
+                user_name=callback.from_user.first_name
+            )
+            logger.info(f"New user {callback.from_user.id} added to database without referrer")
+        except Exception as e:
+            logger.error(f"Error adding new user: {e}")
+    else:
+        logger.info(f"User {callback.from_user.id} already exists, skipping referral")
+
+    # Bot moduliga qarab o'tish
     if shortcuts.have_one_module(bot_db, "leo"):
         # await callback.message.delete()
         builder = ReplyKeyboardBuilder()
@@ -1035,7 +1085,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             reply_markup=builder.as_markup(resize_keyboard=True)
         )
 
-    if shortcuts.have_one_module(bot_db, "download"):
+    elif shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
         text = ("🤖 Привет, {full_name}! Я бот-загрузчик.\r\n\r\n"

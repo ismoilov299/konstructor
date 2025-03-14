@@ -110,65 +110,47 @@ def check_if_already_referred(user_id: int, referrer_id: int):
 
 async def process_referral(message: Message, referral_id: int):
     try:
-        # Foydalanuvchi allaqachon ro'yxatdan o'tganligini tekshirish
-        is_user_registered = await check_user(message.from_user.id)
-        if is_user_registered:
-            logger.info(f"User {message.from_user.id} already registered, skipping referral in annon_bot")
-            return False
-
         # O'zini o'zi referral qilishni tekshirish
         if str(referral_id) == str(message.from_user.id):
             logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
             return False
 
-        # Avval yangi foydalanuvchini bazaga qo'shish
-        new_user_added = False
-        try:
-            # Yangi foydalanuvchini qo'shish
-            new_link = await create_start_link(message.bot, str(message.from_user.id))
-            link_for_db = new_link[new_link.index("=") + 1:]
-            await add_user(
-                tg_id=message.from_user.id,
-                user_name=message.from_user.first_name,
-                invited=referral_id,  # Invite qilgan foydalanuvchi ID'si
-                invited_id=referral_id
-            )
-            logger.info(f"New user {message.from_user.id} added to database with referrer {referral_id}")
-            new_user_added = True
-        except Exception as e:
-            logger.error(f"Error adding new user to database: {e}")
-            return False
-
         # Referral beruvchini tekshirish
         inviter = await get_user_by_id(referral_id)
-        if inviter and new_user_added:
+        if inviter:
             try:
                 # Referral statistikasini yangilash
-                with transaction.atomic():
-                    user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
-                    user_tg.refs += 1
-                    user_tg.balance += 10.0  # yoki admin_info.price
-                    user_tg.save()
-                    logger.info(f"Referral stats updated for user {referral_id}")
+                stats_updated = False
+                try:
+                    with transaction.atomic():
+                        user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
+                        user_tg.refs += 1
+                        user_tg.balance += 10.0  # yoki admin_info.price
+                        user_tg.save()
+                        logger.info(f"Referral stats updated for user {referral_id}")
+                        stats_updated = True
+                except Exception as e:
+                    logger.error(f"Error updating referral stats: {e}")
 
-                # Referral beruvchiga xabar yuborish
-                # To'g'ri link yaratish - yangi foydalanuvchiga
-                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                await message.bot.send_message(
-                    chat_id=referral_id,
-                    text=f"У вас новый {user_link}!"
-                )
-                print("115 annon")
-                logger.info(f"Referral processed for user {referral_id}")
-                return True
+                if stats_updated:
+                    # Referral beruvchiga xabar yuborish
+                    user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                    await message.bot.send_message(
+                        chat_id=referral_id,
+                        text=f"У вас новый {user_link}!"
+                    )
+                    print("115 annon")
+                    logger.info(f"Referral processed for user {referral_id}")
+                    return True
+
+                return False
             except Exception as e:
                 logger.error(f"Error processing referral after adding user: {e}")
                 return False
         else:
-            logger.warning(f"Inviter {referral_id} not found or user not added")
+            logger.warning(f"Inviter {referral_id} not found")
             return False
 
-        return False
     except Exception as e:
         logger.error(f"Error processing referral: {e}")
         return False
