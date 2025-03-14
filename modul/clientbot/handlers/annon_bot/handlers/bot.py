@@ -94,6 +94,8 @@ def check_if_already_referred(user_id: int, referrer_id: int):
 
 async def process_referral(message: Message, referral_id: int):
     try:
+        logger.info(f"Processing referral: user {message.from_user.id}, referrer {referral_id}")
+
         # O'zini o'zi referral qilishni tekshirish
         if str(referral_id) == str(message.from_user.id):
             logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
@@ -101,28 +103,30 @@ async def process_referral(message: Message, referral_id: int):
 
         # Referral beruvchini tekshirish
         inviter = await get_user_by_id(referral_id)
-        if inviter:
-            try:
-                # Referral statistikasini yangilash
-                stats_updated = await update_referral_stats(referral_id)
-
-                if stats_updated:
-                    # Referral beruvchiga xabar yuborish
-                    user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                    await message.bot.send_message(
-                        chat_id=referral_id,
-                        text=f"У вас новый {user_link}!"
-                    )
-                    print("115 annon")
-                    logger.info(f"Referral processed for user {referral_id}")
-                    return True
-
-                return False
-            except Exception as e:
-                logger.error(f"Error processing referral after adding user: {e}")
-                return False
-        else:
+        if not inviter:
             logger.warning(f"Inviter {referral_id} not found")
+            return False
+
+        try:
+            # Referral statistikasini yangilash
+            stats_updated = await update_referral_stats(referral_id)
+
+            if stats_updated:
+                # Referral beruvchiga xabar yuborish
+                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                await message.bot.send_message(
+                    chat_id=referral_id,
+                    text=f"У вас новый {user_link}!"
+                )
+                print("115 annon")
+                logger.info(f"Referral notification sent to user {referral_id}")
+                logger.info(f"Referral processed for user {referral_id}")
+                return True
+            else:
+                logger.warning(f"Failed to update referral stats for {referral_id}")
+                return False
+        except Exception as e:
+            logger.error(f"Error in referral process: {e}")
             return False
 
     except Exception as e:
