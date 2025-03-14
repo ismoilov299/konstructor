@@ -27,7 +27,7 @@ from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
 from modul.clientbot.handlers.annon_bot.handlers.bot import check_channels, process_referral
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in
-from modul.clientbot.handlers.annon_bot.userservice import get_channels_for_check, check_user, add_user
+from modul.clientbot.handlers.annon_bot.userservice import get_channels_for_check, check_user, add_user, get_user_by_id
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.shortcuts import *
 from modul.clientbot.handlers.kino_bot.keyboards.kb import *
@@ -1061,7 +1061,19 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         except Exception as e:
             logger.error(f"Error processing user or referral: {e}")
     else:
-        logger.info(f"User {user_id} already exists, skipping referral")
+        # Mavjud foydalanuvchi uchun ham referral operatsiyasini tekshirish
+        if referral_id and str(referral_id) != str(user_id):
+            try:
+                # Foydalanuvchi oldin shu referral ID ni ishlatganmi?
+                user_tg = await get_user_by_id(user_id)
+                if user_tg and user_tg.invited_id != referral_id:
+                    # Referral jarayonini ishga tushirish
+                    success = await process_referral(callback.message, referral_id)
+                    logger.info(f"Existing user, new referral process result: {success}")
+            except Exception as e:
+                logger.error(f"Error processing referral for existing user: {e}")
+        else:
+            logger.info(f"User {user_id} already exists, skipping referral")
 
     # Bot moduliga qarab o'tish
     if shortcuts.have_one_module(bot_db, "leo"):
@@ -1103,6 +1115,20 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 
     else:
         await callback.message.delete()
+
+        # Qo'shimcha referral operatsiyalari - Dobro pojalovatdan oldin
+        data = await state.get_data()
+        referral = data.get('referral')
+        if referral and referral.isdigit():
+            try:
+                referral_id = int(referral)
+                if str(referral_id) != str(user_id):
+                    await process_referral(callback.message, referral_id)
+            except ValueError:
+                logger.error(f"Invalid referral ID at final check: {referral}")
+            except Exception as e:
+                logger.error(f"Error processing referral at final check: {e}")
+
         text = "Добро пожаловать, {hello}".format(
             hello=html.quote(callback.from_user.full_name))
         await callback.message.answer(text,
