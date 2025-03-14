@@ -84,23 +84,7 @@ def save_user(u, bot: Bot, link=None, inviter=None):
         raise
 
 
-@sync_to_async
-def update_referral_stats(referral_id: int):
-    try:
-        with transaction.atomic():
-            try:
-                user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
-                user_tg.refs += 1
-                user_tg.balance += 10.0  # yoki admin_info.price
-                user_tg.save()
-                logger.info(f"Referral stats updated for user {referral_id}")
-                return True
-            except UserTG.DoesNotExist:
-                logger.error(f"UserTG with uid {referral_id} does not exist")
-                return False
-    except Exception as e:
-        logger.error(f"Error updating referral stats: {e}")
-        return False
+
 
 @sync_to_async
 def check_if_already_referred(user_id: int, referrer_id: int):
@@ -120,17 +104,7 @@ async def process_referral(message: Message, referral_id: int):
         if inviter:
             try:
                 # Referral statistikasini yangilash
-                stats_updated = False
-                try:
-                    with transaction.atomic():
-                        user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
-                        user_tg.refs += 1
-                        user_tg.balance += 10.0  # yoki admin_info.price
-                        user_tg.save()
-                        logger.info(f"Referral stats updated for user {referral_id}")
-                        stats_updated = True
-                except Exception as e:
-                    logger.error(f"Error updating referral stats: {e}")
+                stats_updated = await update_referral_stats(referral_id)
 
                 if stats_updated:
                     # Referral beruvchiga xabar yuborish
@@ -153,6 +127,24 @@ async def process_referral(message: Message, referral_id: int):
 
     except Exception as e:
         logger.error(f"Error processing referral: {e}")
+        return False
+
+
+@sync_to_async
+def update_referral_stats(referral_id: int):
+    try:
+        with transaction.atomic():
+            user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
+            user_tg.refs += 1
+            user_tg.balance += 10.0  # yoki admin_info.price
+            user_tg.save()
+            logger.info(f"Referral stats updated for user {referral_id}")
+            return True
+    except UserTG.DoesNotExist:
+        logger.error(f"UserTG with uid {referral_id} does not exist")
+        return False
+    except Exception as e:
+        logger.error(f"Error updating referral stats: {e}")
         return False
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
