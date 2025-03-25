@@ -20,7 +20,9 @@ from modul.clientbot.handlers.refs.shortcuts import (
     add_user, add_ref, check_user, check_ban, get_user_name, plus_ref, plus_money
 )
 from aiogram import F, Bot
+
 logger = logging.getLogger(__name__)
+
 
 # TODO изменить метод получения айди админа
 async def admin_id_func(user_id, bot):
@@ -76,19 +78,12 @@ async def check_channels(message) -> bool:
                 logger.error(f"Error checking subscription: {e}")
                 continue
 
-        # Only process referral if all channels are subscribed
-        if is_subscribed and hasattr(message, 'command') and message.command.args:
-            try:
-                referrer_id = int(message.command.args)
-                await process_referral(message, referrer_id)
-            except ValueError:
-                logger.error(f"Invalid referral ID: {message.command.args}")
-
-        return True
+        return is_subscribed
 
     except Exception as e:
         logger.error(f"General error in check_channels: {e}")
         return False
+
 
 @sync_to_async
 @transaction.atomic
@@ -179,10 +174,12 @@ async def process_referral(message: Message, referrer_id: int):
 
             # Then send notification
             try:
-                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                user_link = html.escape(message.from_user.first_name)
+                user_profile_link = f'tg://user?id={message.from_user.id}'
                 await message.bot.send_message(
                     chat_id=referrer_id,
-                    text=f"У вас новый {user_link}!"
+                    text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_link}</a>",
+                    parse_mode="HTML"
                 )
                 print('progress ')
             except TelegramForbiddenError:
@@ -193,6 +190,7 @@ async def process_referral(message: Message, referrer_id: int):
     except Exception as e:
         logger.error(f"Error in process_referral: {e}")
         return False
+
 
 async def banned(message):
     check = await check_ban(message.from_user.id)
@@ -228,10 +226,8 @@ async def check_referral_status(user_id: int) -> dict:
 
 async def start_ref(message: Message, bot: Bot, referral: str = None):
     try:
-        print('ishladi')
         logger.info(f"Checking channels for user {message.from_user.id}")
         channels_checker = await check_channels(message)
-        print(channels_checker)
         logger.info(f"Channels check result: {channels_checker}")
 
         if not channels_checker:
@@ -258,7 +254,7 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
             return  # Bu yerda qaytarish kerak, boshqa ishlar qilmaslik uchun
 
         # Referral jarayoni - faqat yangi foydalanuvchilar uchun
-        if referral and not is_registered and channels_checker:
+        if referral and not is_registered:
             try:
                 referrer_id = int(referral)
                 logger.info(f"Processing referral ID: {referrer_id} for user {message.from_user.id}")
@@ -276,84 +272,71 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                     )
                     logger.info(f"Self-referral blocked for user {message.from_user.id}")
                     return  # Referral jarayoni to'xtatiladi
-                else:
-                    # Foydalanuvchini referral bilan qo'shamiz
-                    # Lekin avval bu foydalanuvchining o'zi referal sifatida bazada borligini tekshiramiz
-                    # Bu qism 'add_user' funksiyasining o'zida bo'lishi ham mumkin
 
-                    # Foydalanuvchini qo'shamiz (tekshirish 'add_user' ichida bo'lishi kerak)
+                # Referrer haqiqatan ham mavjudligini tekshirish
+                referrer_exists = await check_user(referrer_id)
+                if not referrer_exists:
+                    logger.warning(f"Referrer {referrer_id} does not exist in database")
                     await add_user(
                         tg_id=message.from_user.id,
-                        user_name=message.from_user.first_name,
-                        invited="Unknown",  # Yoki referrerning haqiqiy nomi
-                        invited_id=referrer_id
+                        user_name=message.from_user.first_name
                     )
+                    await message.answer(
+                        f"🎉 Привет, {message.from_user.first_name}",
+                        reply_markup=await main_menu_bt()
+                    )
+                    return
 
+                # Foydalanuvchini qo'shamiz
+                new_user = await add_user(
+                    tg_id=message.from_user.id,
+                    user_name=message.from_user.first_name,
+                    invited="Unknown",  # Yoki referrerning haqiqiy nomi
+                    invited_id=referrer_id
+                )
+
+                if new_user:
                     # Referral statistikasini yangilash
                     @sync_to_async
                     @transaction.atomic
                     def update_referral():
                         try:
-                            # Qo'shimcha himoya - o'zini o'zi referral qilishni oldini olish
-                            if str(referrer_id) == str(message.from_user.id):
-                                logger.error(f"Prevented self-referral in update_referral for user {referrer_id}")
+                            user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
+                            admin_info = AdminInfo.objects.first()
+
+                            if not admin_info:
+                                logger.error("Admin info not found")
                                 return False
 
-                            try:
-                                # Bazada shu foydalanuvchi taklif qilinganini tekshirish
-                                # Bu referrer-referee munosabatini tekshirish, ikkala foydalanuvchi ham bazada bo'lishi kerak
-                                # Buni UserTG modelidagi maydonlar orqali tekshirish kerak
-
-                                # Tekshirish qismi qo'shish kerak - bazada bor-yo'qligini tekshirish
-                                # Bu yerda bog'liqlik modelingizga qarab o'zgartirilishi kerak
-
-                                # Misol uchun, agar 'referred_by' yoki shunga o'xshash maydon UserTG modelida bo'lsa:
-                                # already_referred = UserTG.objects.filter(uid=message.from_user.id, referred_by=referrer_id).exists()
-                                # if already_referred:
-                                #     logger.info(f"User {message.from_user.id} already referred by {referrer_id}, skipping bonus")
-                                #     return True
-
-                                user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
-                                admin_info = AdminInfo.objects.first()
-
-                                if not admin_info:
-                                    logger.error("Admin info not found")
-                                    return False
-
-                                user_tg.refs += 1
-                                user_tg.balance += float(admin_info.price or 10.0)
-                                user_tg.save()
-                                logger.info(
-                                    f"Referral stats updated for {referrer_id}: refs={user_tg.refs}, balance={user_tg.balance}")
-                                return True
-                            except UserTG.DoesNotExist:
-                                # Xatolik log qilish, lekin davom etish
-                                logger.info(f"User with ID {referrer_id} not found in database, but continuing")
-                                return True  # True qaytaramiz chunki jarayon davom etishi kerak
-                            except Exception as ex:
-                                logger.error(f"Error in referral update: {ex}")
-                                return False
-                        except Exception as e:
-                            logger.error(f"General error in update_referral: {e}")
+                            user_tg.refs += 1
+                            user_tg.balance += float(admin_info.price or 10.0)
+                            user_tg.save()
+                            logger.info(
+                                f"Referral stats updated for {referrer_id}: refs={user_tg.refs}, balance={user_tg.balance}")
+                            return True
+                        except UserTG.DoesNotExist:
+                            logger.error(f"User with ID {referrer_id} not found in database")
+                            return False
+                        except Exception as ex:
+                            logger.error(f"Error in referral update: {ex}")
                             return False
 
                     referral_success = await update_referral()
 
                     if referral_success:
                         try:
-                            user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+                            user_name = html.escape(message.from_user.first_name)
+                            user_profile_link = f'tg://user?id={message.from_user.id}'
                             await message.bot.send_message(
                                 chat_id=referrer_id,
-                                text=f"У вас новый {user_link}!"
+                                text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
+                                parse_mode="HTML"
                             )
                             logger.info(f"Referral notification sent to {referrer_id}")
                         except TelegramForbiddenError:
                             logger.error(f"Cannot send message to user {referrer_id}")
                         except Exception as e:
                             logger.error(f"Error sending notification to referrer: {e}")
-
-                    logger.info(f"Successfully processed referral for {referrer_id}")
-
             except ValueError:
                 logger.error(f"Invalid referral ID: {referral}")
                 await add_user(
@@ -367,8 +350,8 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
                 user_name=message.from_user.first_name
             )
 
-        # Ko'rsatma berish muqaddam ro'yxatga olingan foydalanuvchilar uchun tekshirilgan!
-        if not is_registered:  # Faqat yangi foydalanuvchilarga ko'rsatma berish
+        # Yangi foydalanuvchilarga xabar yuborish
+        if not is_registered:
             logger.info(f"Sending welcome message to {message.from_user.id}")
             await message.answer(
                 f"🎉 Привет, {message.from_user.first_name}",
@@ -384,13 +367,14 @@ async def start_ref(message: Message, bot: Bot, referral: str = None):
             reply_markup=await main_menu_bt()
         )
 
+
 class RefsBotFilter(BaseFilter):
     async def __call__(self, message: Message, bot: Bot) -> bool:
         bot_db = await shortcuts.get_bot(bot)
         return shortcuts.have_one_module(bot_db, "refs")
 
 
-@client_bot_router.message(F.text == "💸Заработать",RefsBotFilter())
+@client_bot_router.message(F.text == "💸Заработать", RefsBotFilter())
 async def gain(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
     await state.clear()
@@ -402,8 +386,9 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
             link = f"https://t.me/{me.username}?start={message.from_user.id}"
             price = await get_actual_price()
             await message.bot.send_message(message.from_user.id,
-                                        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-                                        f"🔗 Ваша ссылка для приглашений:\n {link}",reply_markup=await main_menu_bt())
+                                           f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
+                                           f"🔗 Ваша ссылка для приглашений:\n {link}",
+                                           reply_markup=await main_menu_bt())
     else:
         channels_checker = await check_channels(message)
         checker_banned = await banned(message)
@@ -412,10 +397,10 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
             link = f"https://t.me/{me.username}?start={message.from_user.id}"
             price = await get_actual_price()
             await message.bot.send_message(message.from_user.id,
-                                        f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
-                                        f"🔗 Ваша ссылка для приглашений:\n {link}"
-                                        "\n Что бы вернуть функционал основного бота напишите /start",
-                                        reply_markup=await main_menu_bt())
+                                           f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
+                                           f"🔗 Ваша ссылка для приглашений:\n {link}"
+                                           "\n Что бы вернуть функционал основного бота напишите /start",
+                                           reply_markup=await main_menu_bt())
 
 
 @client_bot_router.message(F.text == "📱Профиль")
@@ -461,6 +446,7 @@ async def profile(message: Message):
             reply_markup=await main_menu_bt()
         )
 
+
 @client_bot_router.message(F.text == "ℹ️Инфо")
 async def info(message: Message):
     channels_checker = await check_channels(message)
@@ -482,14 +468,11 @@ async def info(message: Message):
         await message.bot.send_message(
             message.from_user.id,
             f"👥 Всего пользователей: {user_info[3]}\n",
-            # f"📤 Выплачено всего: {all_info[1]}",
             reply_markup=await admin_in(admin_user)
         )
 
 
-
-
-@client_bot_router.callback_query(F.data.in_(["payment",]))
+@client_bot_router.callback_query(F.data.in_(["payment", "check_chan"]))
 async def call_backs(query: CallbackQuery, state: FSMContext):
     await state.clear()
     if query.data == "payment":
@@ -510,10 +493,82 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
             await state.set_state(PaymentState.get_card)
     elif query.data == "check_chan":
         checking = await check_channels(query)
-        await query.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
+
         if checking:
-            await query.bot.send_message(query.from_user.id, f"🎉Привет, {query.from_user.first_name}",
-                                         reply_markup=await main_menu_bt())
+            # Foydalanuvchi mavjudligini tekshiramiz
+            is_registered = await check_user(query.from_user.id)
+
+            # Xabarni o'chiramiz
+            await query.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
+
+            # Foydalanuvchiga salomlashamiz
+            await query.bot.send_message(
+                query.from_user.id,
+                f"🎉Привет, {query.from_user.first_name}",
+                reply_markup=await main_menu_bt()
+            )
+
+            # Agar bu yangi foydalanuvchi bo'lsa va start commandda referral bo'lsa, bu yerda ishlov beramiz
+            if not is_registered and hasattr(query, 'state'):
+                state_data = await state.get_data()
+                referral = state_data.get('referral')
+                if referral:
+                    try:
+                        referrer_id = int(referral)
+                        if referrer_id != query.from_user.id:  # O'zini o'zi refer qilmaslik uchun
+                            await process_new_user_referral(query, referrer_id)
+                    except (ValueError, TypeError):
+                        logger.error(f"Invalid referral ID in state: {referral}")
+
+
+async def process_new_user_referral(query, referrer_id):
+    """Process referral for a new user after channel check"""
+    try:
+        # Foydalanuvchini qo'shamiz
+        await add_user(
+            tg_id=query.from_user.id,
+            user_name=query.from_user.first_name,
+            invited="Unknown",
+            invited_id=referrer_id
+        )
+
+        # Referrer balansini yangilaymiz
+        @sync_to_async
+        @transaction.atomic
+        def update_referrer():
+            try:
+                user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
+                admin_info = AdminInfo.objects.first()
+
+                if not admin_info:
+                    return False
+
+                price = admin_info.price or 10.0
+                user_tg.refs += 1
+                user_tg.balance += float(price)
+                user_tg.save()
+                return True
+            except Exception as e:
+                logger.error(f"Error updating referrer: {e}")
+                return False
+
+        success = await update_referrer()
+
+        if success:
+            # Referrerga xabar yuboramiz
+            try:
+                user_name = html.escape(query.from_user.first_name)
+                user_profile_link = f'tg://user?id={query.from_user.id}'
+
+                await query.bot.send_message(
+                    chat_id=referrer_id,
+                    text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Error sending notification to referrer: {e}")
+    except Exception as e:
+        logger.error(f"Error in process_new_user_referral: {e}")
 
 
 @client_bot_router.message(PaymentState.get_card)
@@ -590,6 +645,3 @@ async def get_bank(message: Message, state: FSMContext, bot: Bot):
 
     await message.answer("✅ Заявка на выплату принята. Ожидайте ответ.", reply_markup=await main_menu_bt())
     await state.clear()
-
-
-
