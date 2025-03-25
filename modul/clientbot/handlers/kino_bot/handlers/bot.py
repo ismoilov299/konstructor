@@ -1139,10 +1139,22 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 async def start(message: Message, state: FSMContext, bot: Bot):
     bot_db = await shortcuts.get_bot(bot)
     uid = message.from_user.id
-    print(uid,'kino start 1075')
+    print(uid, 'kino start 1075')
+
+    # Referralni olish
+    referral = message.text[7:] if message.text and len(message.text) > 7 else None
+
+    # Agar referral mavjud bo'lsa va raqam bo'lsa, uni state'ga saqlash
+    if referral and referral.isdigit():
+        referrer_id = int(referral)
+        # State'ga saqlash
+        await state.update_data(referrer_id=referrer_id)
+        print(f"Saved referrer_id {referrer_id} to state for user {message.from_user.id}")
+        logger.info(f"Processing start command with referral: {referral}")
 
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
+
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
@@ -1154,21 +1166,17 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
     if shortcuts.have_one_module(bot_db, "refs"):
+        # Kanallar tekshiruvi
+        channels_checker = await check_channels(message)
 
-
-        channels_checker = await check_channels(message.from_user.id,bot)
-
+        # Agar kanallar tekshiruvi o'tmasa, lekin referral mavjud bo'lsa,
+        # state'ga ma'lumotni saqlab qo'ygan bo'lamiz va qaytamiz
         if not channels_checker:
+            print(f"Channel check failed for user {message.from_user.id}, but referrer_id saved to state")
             return
 
-        referral = message.text[7:] if message.text and len(message.text) > 7 else None
-        logger.info(f"Processing start command with referral: {referral}")
-        if referral and referral.isdigit():
-            await process_referral(message, int(referral))
-        me = await bot.get_me()
-        link = f"https://t.me/{me.username}?start={message.from_user.id}"
-        await start_ref(message, bot, referral)
-
+        # Referral bilan start_ref funksiyasini chaqirish
+        await start_ref(message, bot, state, referral)
         return
 
     elif shortcuts.have_one_module(bot_db, "kino"):
