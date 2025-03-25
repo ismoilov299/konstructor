@@ -225,7 +225,7 @@ async def check_referral_status(user_id: int) -> dict:
     }
 
 
-async def start_ref(message: Message, bot: Bot, state: FSMContext, referral: str = None):
+async def start_ref(message: Message, bot: Bot, state: FSMContext = None, referral: str = None):
     try:
         logger.info(f"Checking channels for user {message.from_user.id}")
         channels_checker = await check_channels(message)
@@ -243,12 +243,12 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext, referral: str
         if not channels_checker and referral:
             try:
                 referrer_id = int(referral)
-                # Faqat agar state berilgan bo'lsa saqlaymiz
-                if state:
+                # Faqat agar state FSMContext bo'lsa saqlaymiz
+                if state and isinstance(state, FSMContext):
                     await state.update_data(referrer_id=referrer_id)
                     logger.info(f"Stored referrer_id {referrer_id} in state for user {message.from_user.id}")
-            except (ValueError, TypeError):
-                logger.error(f"Invalid referral ID: {referral}")
+            except (ValueError, TypeError) as e:
+                logger.error(f"Invalid referral ID: {referral}, error: {e}")
             return  # Kanallar tekshiruvi o'tmadi, qaytamiz
 
         # MUHIM: Agar foydalanuvchi allaqachon ro'yxatdan o'tgan bo'lsa
@@ -260,8 +260,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext, referral: str
                 reply_markup=await main_menu_bt()
             )
             logger.info(f"Welcome message sent to registered user {message.from_user.id}")
-            # State'ni tozalash
-            if state:
+            # State'ni tozalash, faqat agar u FSMContext bo'lsa
+            if state and isinstance(state, FSMContext):
                 await state.clear()
             return
 
@@ -283,8 +283,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext, referral: str
                         reply_markup=await main_menu_bt()
                     )
                     logger.info(f"Self-referral blocked for user {message.from_user.id}")
-                    # State'ni tozalash
-                    if state:
+                    # State'ni tozalash, faqat agar u FSMContext bo'lsa
+                    if state and isinstance(state, FSMContext):
                         await state.clear()
                     return  # Referral jarayoni to'xtatiladi
 
@@ -300,8 +300,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext, referral: str
                         f"🎉 Привет, {message.from_user.first_name}",
                         reply_markup=await main_menu_bt()
                     )
-                    # State'ni tozalash
-                    if state:
+                    # State'ni tozalash, faqat agar u FSMContext bo'lsa
+                    if state and isinstance(state, FSMContext):
                         await state.clear()
                     return
 
@@ -383,8 +383,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext, referral: str
             )
             logger.info(f"Welcome message sent to {message.from_user.id}")
 
-        # State'ni tozalash
-        if state:
+        # State'ni tozalash, faqat agar u FSMContext bo'lsa
+        if state and isinstance(state, FSMContext):
             await state.clear()
 
     except Exception as e:
@@ -394,8 +394,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext, referral: str
             "Произошла ошибка. Попробуйте позже.",
             reply_markup=await main_menu_bt()
         )
-        # Xatolik yuz berganda ham state'ni tozalash
-        if state:
+        # Xatolik yuz berganda ham state'ni tozalash (faqat agar u FSMContext bo'lsa)
+        if state and isinstance(state, FSMContext):
             await state.clear()
 
 
