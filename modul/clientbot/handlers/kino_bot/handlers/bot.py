@@ -975,6 +975,7 @@ class NonChatGptFilter(Filter):
 async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: Bot):
     user_id = callback.from_user.id
     bot_db = await shortcuts.get_bot(bot)
+    print("kino 978")
 
     # 1. Kanallarni tekshirish
     subscribed = True

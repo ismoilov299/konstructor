@@ -522,6 +522,7 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
                                          reply_markup=await cancel_bt())
             await state.set_state(PaymentState.get_card)
     elif query.data == "check_chan":
+        print('525 refs')
         # State'dan referrer_id ni olishga harakat qilamiz
         state_data = await state.get_data()
         referrer_id = state_data.get('referrer_id')
