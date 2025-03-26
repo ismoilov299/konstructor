@@ -503,6 +503,7 @@ async def info(message: Message):
         )
 
 
+# 1. Check_chan callback'ni to'g'irlash - STATE'DAN REFERRAL OLISH QISMINI
 @client_bot_router.callback_query(F.data == "check_chan")
 async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
@@ -512,19 +513,10 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         # State'dan ma'lumotlarni olish
         state_data = await state.get_data()
         print(f"State data for user {user_id}: {state_data}")
-        referrer_id = state_data.get('referrer_id')
-        print(f"Referrer_id from state for user {user_id}: {referrer_id}")
 
-        # Agar state'da referrer_id yo'q bo'lsa, start argumentidan olishga harakat qilamiz
-        if not referrer_id:
-            # Bazadan tekshirish - start argumenti bazada saqlanishi mumkin
-            try:
-                user_record = await sync_to_async(lambda: UserTG.objects.filter(uid=user_id).first())()
-                if user_record and hasattr(user_record, 'invited_id') and user_record.invited_id:
-                    referrer_id = user_record.invited_id
-                    print(f"Found referrer_id {referrer_id} in database for user {user_id}")
-            except Exception as e:
-                print(f"Error checking database for referrer_id: {e}")
+        # Kalit nomlarini tekshirish - 'referral' yoki 'referrer_id' bo'lishi mumkin
+        referrer_id = state_data.get('referrer_id') or state_data.get('referral')
+        print(f"Referrer_id from state for user {user_id}: {referrer_id}")
 
         # Kanallarni tekshirish
         checking = await check_channels(query)
