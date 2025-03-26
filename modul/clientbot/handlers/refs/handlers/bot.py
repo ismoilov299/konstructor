@@ -508,125 +508,143 @@ async def info(message: Message):
 async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
         user_id = query.from_user.id
-        print(f"Check_chan callback triggered for user {user_id}")
+        print(f"🔍 NEW check_chan callback triggered for user {user_id}")
 
         # State'dan ma'lumotlarni olish
         state_data = await state.get_data()
-        print(f"State data for user {user_id}: {state_data}")
+        print(f"📊 State data for user {user_id}: {state_data}")
 
-        # Kalit nomlarini tekshirish - 'referral' yoki 'referrer_id' bo'lishi mumkin
+        # Har ikkala kalit nomini tekshirish - 'referral' yoki 'referrer_id' bo'lishi mumkin
         referrer_id = state_data.get('referrer_id') or state_data.get('referral')
-        print(f"Referrer_id from state for user {user_id}: {referrer_id}")
+        print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
 
-        # Kanallarni tekshirish
-        checking = await check_channels(query)
-        print(f"Channels check result for user {user_id}: {checking}")
+        # Kanallarni tekshirish (query parametri bilan)
+        channels = await get_channels_for_check()
+        print(f"📡 Channels for user {user_id}: {channels}")
 
-        if checking:
-            # Foydalanuvchi ro'yxatga olinganligini tekshirish
-            is_registered = await check_user(user_id)
-            print(f"User {user_id} registration status: {is_registered}")
-
-            # Xabarni o'chirish
-            try:
-                await query.bot.delete_message(
-                    chat_id=user_id,
-                    message_id=query.message.message_id
-                )
-                print(f"Deleted channel check message for user {user_id}")
-            except Exception as e:
-                print(f"Error deleting message for user {user_id}: {e}")
-                logger.error(f"Error deleting message for user {user_id}: {e}")
-
-            # Foydalanuvchiga xabar yuborish
-            await query.bot.send_message(
-                user_id,
-                f"🎉Привет, {query.from_user.first_name}",
-                reply_markup=await main_menu_bt()
-            )
-            print(f"Sent welcome message to user {user_id}")
-
-            # Yangi foydalanuvchi va referral mavjud bo'lsa, referral jarayonini bajarish
-            if not is_registered and referrer_id:
+        if not channels:
+            print(f"✅ No channels to check for user {user_id}")
+            is_subscribed = True
+        else:
+            is_subscribed = True
+            for channel_id, channel_url in channels:
                 try:
-                    ref_id = int(referrer_id)
-                    print(f"Processing referral for user {user_id} from {ref_id}")
+                    member = await query.bot.get_chat_member(
+                        chat_id=channel_id,
+                        user_id=user_id
+                    )
+                    print(f"📢 Channel {channel_id} status for user {user_id}: {member.status}")
 
-                    # O'ziga-o'zi refer qilmaslikni tekshirish
-                    if ref_id != user_id:
-                        print(f"User {user_id} referred by {ref_id}")
+                    if member.status == 'left':
+                        is_subscribed = False
+                        print(f"❌ User {user_id} not subscribed to channel {channel_id}")
+                        break
+                except Exception as e:
+                    print(f"⚠️ Error checking channel {channel_id}: {e}")
+                    continue
 
-                        # Foydalanuvchini qo'shish
-                        new_user = await add_user(
-                            tg_id=user_id,
-                            user_name=query.from_user.first_name,
-                            invited="Referral",
-                            invited_id=ref_id
-                        )
-                        print(f"Added user {user_id} to database, result: {new_user}")
+        if not is_subscribed:
+            print(f"🚫 User {user_id} not subscribed to all channels")
+            return
 
-                        # Referrer bonuslarini yangilash
-                        @sync_to_async
-                        @transaction.atomic
-                        def update_referrer():
-                            try:
-                                referrer = UserTG.objects.select_for_update().get(uid=ref_id)
-                                admin_info = AdminInfo.objects.first()
+        print(f"✅ User {user_id} subscribed to all channels")
 
-                                price = float(admin_info.price) if admin_info and admin_info.price else 10.0
+        # Foydalanuvchi ro'yxatga olinganligini tekshirish
+        is_registered = await check_user(user_id)
+        print(f"📝 User {user_id} registration status: {is_registered}")
 
-                                # Balansni va referallar sonini yangilash
-                                referrer.refs += 1
-                                referrer.balance += price
-                                referrer.save()
+        # Xabarni o'chirish
+        try:
+            await query.bot.delete_message(
+                chat_id=user_id,
+                message_id=query.message.message_id
+            )
+            print(f"🗑️ Deleted channel check message for user {user_id}")
+        except Exception as e:
+            print(f"⚠️ Error deleting message for user {user_id}: {e}")
 
-                                print(f"Updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
-                                return True
-                            except UserTG.DoesNotExist:
-                                print(f"Referrer {ref_id} not found in database")
-                                logger.error(f"Referrer {ref_id} not found in database")
-                                return False
-                            except Exception as e:
-                                print(f"Error updating referrer: {e}")
-                                logger.error(f"Error updating referrer: {e}")
-                                traceback.print_exc()
-                                return False
+        # Foydalanuvchiga xabar yuborish
+        await query.bot.send_message(
+            user_id,
+            f"🎉Привет, {query.from_user.first_name}",
+            reply_markup=await main_menu_bt()
+        )
+        print(f"💬 Sent welcome message to user {user_id}")
 
-                        success = await update_referrer()
-                        print(f"Referrer update success for user {user_id}: {success}")
+        # Yangi foydalanuvchi va referral mavjud bo'lsa, referral jarayonini bajarish
+        if not is_registered and referrer_id:
+            try:
+                ref_id = int(referrer_id)
+                print(f"🔄 Processing referral for user {user_id} from {ref_id}")
 
-                        if success:
-                            # Referrerga xabar yuborish
-                            try:
-                                user_name = html.escape(query.from_user.first_name)
-                                user_profile_link = f'tg://user?id={user_id}'
+                # O'ziga-o'zi refer qilmaslikni tekshirish
+                if ref_id != user_id:
+                    print(f"👥 User {user_id} referred by {ref_id}")
 
-                                # O'zgarishlar saqlanishini kutish
-                                await asyncio.sleep(1)
+                    # Foydalanuvchini qo'shish
+                    new_user = await add_user(
+                        tg_id=user_id,
+                        user_name=query.from_user.first_name,
+                        invited="Referral",
+                        invited_id=ref_id
+                    )
+                    print(f"➕ Added user {user_id} to database, result: {new_user}")
 
-                                await query.bot.send_message(
-                                    chat_id=ref_id,
-                                    text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
-                                    parse_mode="HTML"
-                                )
-                                print(f"Sent referral notification to {ref_id} about user {user_id}")
-                            except Exception as e:
-                                print(f"Error sending notification to referrer {ref_id}: {e}")
-                                logger.error(f"Error sending notification to referrer {ref_id}: {e}")
-                                traceback.print_exc()
-                    else:
-                        print(f"Self-referral detected: user {user_id} trying to refer themselves")
-                except ValueError:
-                    print(f"Invalid referrer_id in state: {referrer_id}")
-                    logger.error(f"Invalid referrer_id in state: {referrer_id}")
-                    traceback.print_exc()
+                    # Referrer bonuslarini yangilash
+                    @sync_to_async
+                    @transaction.atomic
+                    def update_referrer():
+                        try:
+                            referrer = UserTG.objects.select_for_update().get(uid=ref_id)
+                            admin_info = AdminInfo.objects.first()
 
-            # State'ni tozalash
-            await state.clear()
-            print(f"Cleared state for user {user_id}")
+                            price = float(admin_info.price) if admin_info and admin_info.price else 10.0
+
+                            # Balansni va referallar sonini yangilash
+                            referrer.refs += 1
+                            referrer.balance += price
+                            referrer.save()
+
+                            print(f"💰 Updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
+                            return True
+                        except UserTG.DoesNotExist:
+                            print(f"❓ Referrer {ref_id} not found in database")
+                            return False
+                        except Exception as e:
+                            print(f"⚠️ Error updating referrer: {e}")
+                            traceback.print_exc()
+                            return False
+
+                    success = await update_referrer()
+                    print(f"✅ Referrer update success for user {user_id}: {success}")
+
+                    if success:
+                        # Referrerga xabar yuborish
+                        try:
+                            user_name = html.escape(query.from_user.first_name)
+                            user_profile_link = f'tg://user?id={user_id}'
+
+                            # O'zgarishlar saqlanishini kutish
+                            await asyncio.sleep(1)
+
+                            await query.bot.send_message(
+                                chat_id=ref_id,
+                                text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
+                                parse_mode="HTML"
+                            )
+                            print(f"📨 Sent referral notification to {ref_id} about user {user_id}")
+                        except Exception as e:
+                            print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
+                else:
+                    print(f"🚫 Self-referral detected: user {user_id} trying to refer themselves")
+            except ValueError:
+                print(f"❌ Invalid referrer_id in state: {referrer_id}")
+
+        # State'ni tozalash
+        await state.clear()
+        print(f"🧹 Cleared state for user {user_id}")
     except Exception as e:
-        print(f"Error in check_chan_callback for user {query.from_user.id}: {e}")
-        logger.error(f"Error in check_chan_callback for user {query.from_user.id}: {e}")
+        print(f"⚠️ Error in check_chan_callback for user {query.from_user.id}: {e}")
         traceback.print_exc()
 
         # Har qanday xatolik yuz berganda state'ni tozalash
