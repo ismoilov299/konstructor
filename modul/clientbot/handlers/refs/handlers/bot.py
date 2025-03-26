@@ -518,7 +518,29 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         referrer_id = state_data.get('referrer_id') or state_data.get('referral')
         print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
 
-        # Kanallarni tekshirish (query parametri bilan)
+        # Agar state'da ma'lumot yo'q bo'lsa, bazadan olishga urinish
+        if not referrer_id:
+            try:
+                # Bazadan foydalanuvchi ma'lumotlarini olish
+                @sync_to_async
+                def get_referrer_from_db():
+                    try:
+                        user = UserTG.objects.filter(uid=user_id).first()
+                        if user and hasattr(user, 'invited_id') and user.invited_id:
+                            return user.invited_id
+                        return None
+                    except Exception as e:
+                        print(f"Error getting user from database: {e}")
+                        return None
+
+                db_referrer = await get_referrer_from_db()
+                if db_referrer:
+                    referrer_id = db_referrer
+                    print(f"📋 Found referrer_id from database: {referrer_id}")
+            except Exception as e:
+                print(f"⚠️ Error checking database for referrer: {e}")
+
+        # Kanallarni tekshirish
         channels = await get_channels_for_check()
         print(f"📡 Channels for user {user_id}: {channels}")
 

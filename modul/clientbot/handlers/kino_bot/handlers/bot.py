@@ -1208,6 +1208,27 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         print(f"Full start message: {message.text}")
         logger.info(f"Start command received from user {message.from_user.id}")
 
+        # Referralni olish va state'ga saqlash - bu qismni yuqoriga ko'chirdik
+        referral = command.args if command and command.args else None
+        print(f"Extracted referral from command.args: {referral}")
+
+        # Agar args bo'lmasa, message.text dan olishga urinish
+        if not referral and message.text and len(message.text) > 7:
+            text_referral = message.text[7:]
+            if text_referral.isdigit():
+                referral = text_referral
+                print(f"Extracted referral from text: {referral}")
+
+        if referral:
+            # Har ikkala kalit nomi bilan saqlash - ishonch uchun
+            await state.update_data(referral=referral, referrer_id=referral)
+            print(f"Saved referral to state with both keys: {referral}")
+
+            # Tekshirish
+            state_data = await state.get_data()
+            print(f"State after saving referral: {state_data}")
+
+        # Kanal tekshiruvi - bu qismi o'zgarmaydi
         channels = await get_channels_for_check()
         if channels:
             for channel_id, channel_url in channels:
@@ -1219,9 +1240,13 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     print(f"Channel {channel_id} status: {member.status}")
 
                     if member.status == "left":
+                        # Kanal tekshiruvi o'tmasa ham state'da ma'lumot saqlanib qoladi
+                        state_data = await state.get_data()
+                        print(f"State before channel check (user not subscribed): {state_data}")
+
                         await message.answer(
                             "Для использования бота подпишитесь на наших спонсоров",
-                            reply_markup=await channels_in(channels,bot)
+                            reply_markup=await channels_in(channels, bot)
                         )
                         return False
                 except Exception as e:
@@ -1229,14 +1254,16 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     await remove_invalid_channel(channel_id)
                     continue
 
-        referral = command.args if command and command.args else None
-        if referral:
-            await state.update_data(referral=referral)
+        # Kanal tekshiruvidan o'tgach, state'ni tekshirib ko'ramiz
+        state_data = await state.get_data()
+        print(f"State after channel check (user subscribed): {state_data}")
 
+        # Start funksiyasini chaqirish
         await start(message, state, bot)
 
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
+        traceback.print_exc()  # Bu xato stack trace'ni chiqaradi
         await message.answer(
             "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
         )
