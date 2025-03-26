@@ -1205,7 +1205,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     try:
-        print(message)
+        print(message.text)
         logger.info(f"Start command received from user {message.from_user.id}")
 
         channels = await get_channels_for_check()
