@@ -1173,7 +1173,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
     if shortcuts.have_one_module(bot_db, "refs"):
         # Kanallar tekshiruvi
-        channels_checker = await check_channels(message)
+        channels_checker = await check_channels(message.from_user.id, bot)
         print(f"Channels check result for user {uid}: {channels_checker}")
 
         # Agar kanallar tekshiruvi o'tmasa, lekin referral mavjud bo'lsa,
