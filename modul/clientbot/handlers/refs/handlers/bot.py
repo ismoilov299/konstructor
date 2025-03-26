@@ -506,59 +506,72 @@ async def info(message: Message):
 @client_bot_router.callback_query(F.data == "check_chan")
 async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
-        print('check_chan callback triggered for user', query.from_user.id)
+        user_id = query.from_user.id
+        print(f"Check_chan callback triggered for user {user_id}")
 
         # State'dan ma'lumotlarni olish
         state_data = await state.get_data()
-        print(f"State data for user {query.from_user.id}:", state_data)
+        print(f"State data for user {user_id}: {state_data}")
         referrer_id = state_data.get('referrer_id')
-        print(f"Referrer_id from state for user {query.from_user.id}:", referrer_id)
+        print(f"Referrer_id from state for user {user_id}: {referrer_id}")
+
+        # Agar state'da referrer_id yo'q bo'lsa, start argumentidan olishga harakat qilamiz
+        if not referrer_id:
+            # Bazadan tekshirish - start argumenti bazada saqlanishi mumkin
+            try:
+                user_record = await sync_to_async(lambda: UserTG.objects.filter(uid=user_id).first())()
+                if user_record and hasattr(user_record, 'invited_id') and user_record.invited_id:
+                    referrer_id = user_record.invited_id
+                    print(f"Found referrer_id {referrer_id} in database for user {user_id}")
+            except Exception as e:
+                print(f"Error checking database for referrer_id: {e}")
 
         # Kanallarni tekshirish
         checking = await check_channels(query)
-        print(f"Channels check result for user {query.from_user.id}:", checking)
+        print(f"Channels check result for user {user_id}: {checking}")
 
         if checking:
             # Foydalanuvchi ro'yxatga olinganligini tekshirish
-            is_registered = await check_user(query.from_user.id)
-            print(f"User {query.from_user.id} registration status:", is_registered)
+            is_registered = await check_user(user_id)
+            print(f"User {user_id} registration status: {is_registered}")
 
             # Xabarni o'chirish
             try:
                 await query.bot.delete_message(
-                    chat_id=query.from_user.id,
+                    chat_id=user_id,
                     message_id=query.message.message_id
                 )
-                print(f"Deleted channel check message for user {query.from_user.id}")
+                print(f"Deleted channel check message for user {user_id}")
             except Exception as e:
-                logger.error(f"Error deleting message for user {query.from_user.id}: {e}")
+                print(f"Error deleting message for user {user_id}: {e}")
+                logger.error(f"Error deleting message for user {user_id}: {e}")
 
             # Foydalanuvchiga xabar yuborish
             await query.bot.send_message(
-                query.from_user.id,
+                user_id,
                 f"🎉Привет, {query.from_user.first_name}",
                 reply_markup=await main_menu_bt()
             )
-            print(f"Sent welcome message to user {query.from_user.id}")
+            print(f"Sent welcome message to user {user_id}")
 
             # Yangi foydalanuvchi va referral mavjud bo'lsa, referral jarayonini bajarish
             if not is_registered and referrer_id:
                 try:
                     ref_id = int(referrer_id)
-                    print(f"Processing referral for user {query.from_user.id} from {ref_id}")
+                    print(f"Processing referral for user {user_id} from {ref_id}")
 
                     # O'ziga-o'zi refer qilmaslikni tekshirish
-                    if ref_id != query.from_user.id:
-                        print(f"User {query.from_user.id} referred by {ref_id}")
+                    if ref_id != user_id:
+                        print(f"User {user_id} referred by {ref_id}")
 
                         # Foydalanuvchini qo'shish
                         new_user = await add_user(
-                            tg_id=query.from_user.id,
+                            tg_id=user_id,
                             user_name=query.from_user.first_name,
                             invited="Referral",
                             invited_id=ref_id
                         )
-                        print(f"Added user {query.from_user.id} to database, result:", new_user)
+                        print(f"Added user {user_id} to database, result: {new_user}")
 
                         # Referrer bonuslarini yangilash
                         @sync_to_async
@@ -578,21 +591,23 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                                 print(f"Updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
                                 return True
                             except UserTG.DoesNotExist:
+                                print(f"Referrer {ref_id} not found in database")
                                 logger.error(f"Referrer {ref_id} not found in database")
                                 return False
                             except Exception as e:
+                                print(f"Error updating referrer: {e}")
                                 logger.error(f"Error updating referrer: {e}")
-                                traceback.print_exc()  # Stack trace chiqarish
+                                traceback.print_exc()
                                 return False
 
                         success = await update_referrer()
-                        print(f"Referrer update success for user {query.from_user.id}:", success)
+                        print(f"Referrer update success for user {user_id}: {success}")
 
                         if success:
                             # Referrerga xabar yuborish
                             try:
                                 user_name = html.escape(query.from_user.first_name)
-                                user_profile_link = f'tg://user?id={query.from_user.id}'
+                                user_profile_link = f'tg://user?id={user_id}'
 
                                 # O'zgarishlar saqlanishini kutish
                                 await asyncio.sleep(1)
@@ -602,20 +617,23 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                                     text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
                                     parse_mode="HTML"
                                 )
-                                print(f"Sent referral notification to {ref_id} about user {query.from_user.id}")
+                                print(f"Sent referral notification to {ref_id} about user {user_id}")
                             except Exception as e:
+                                print(f"Error sending notification to referrer {ref_id}: {e}")
                                 logger.error(f"Error sending notification to referrer {ref_id}: {e}")
                                 traceback.print_exc()
                     else:
-                        print(f"Self-referral detected: user {query.from_user.id} trying to refer themselves")
+                        print(f"Self-referral detected: user {user_id} trying to refer themselves")
                 except ValueError:
+                    print(f"Invalid referrer_id in state: {referrer_id}")
                     logger.error(f"Invalid referrer_id in state: {referrer_id}")
                     traceback.print_exc()
 
             # State'ni tozalash
             await state.clear()
-            print(f"Cleared state for user {query.from_user.id}")
+            print(f"Cleared state for user {user_id}")
     except Exception as e:
+        print(f"Error in check_chan_callback for user {query.from_user.id}: {e}")
         logger.error(f"Error in check_chan_callback for user {query.from_user.id}: {e}")
         traceback.print_exc()
 

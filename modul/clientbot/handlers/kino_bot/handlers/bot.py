@@ -1137,20 +1137,26 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 
 
 async def start(message: Message, state: FSMContext, bot: Bot):
+    print(f"Start function called for user {message.from_user.id}")
     bot_db = await shortcuts.get_bot(bot)
     uid = message.from_user.id
-    print(uid, 'kino start 1075')
+    print(uid, 'kino start')
 
     # Referralni olish
     referral = message.text[7:] if message.text and len(message.text) > 7 else None
+    print(f"Referral from command for user {uid}: {referral}")
 
     # Agar referral mavjud bo'lsa va raqam bo'lsa, uni state'ga saqlash
     if referral and referral.isdigit():
         referrer_id = int(referral)
         # State'ga saqlash
         await state.update_data(referrer_id=referrer_id)
-        print(f"Saved referrer_id {referrer_id} to state for user {message.from_user.id}")
+        print(f"SAVED referrer_id {referrer_id} to state for user {uid}")
         logger.info(f"Processing start command with referral: {referral}")
+
+        # Debug uchun state'ni tekshirish
+        state_data = await state.get_data()
+        print(f"State after saving for user {uid}: {state_data}")
 
     text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
     kwargs = {}
@@ -1168,21 +1174,13 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     if shortcuts.have_one_module(bot_db, "refs"):
         # Kanallar tekshiruvi
         channels_checker = await check_channels(message)
+        print(f"Channels check result for user {uid}: {channels_checker}")
 
         # Agar kanallar tekshiruvi o'tmasa, lekin referral mavjud bo'lsa,
         # state'ga ma'lumotni saqlab qo'ygan bo'lamiz va qaytamiz
         if not channels_checker:
-            print(f"Channel check failed for user {message.from_user.id}, but referrer_id saved to state")
+            print(f"Channel check failed for user {uid}, but referrer_id saved in state")
             return
-
-        # Referral bilan start_ref funksiyasini chaqirish
-        await start_ref(message, bot, state, referral)
-        return
-
-    elif shortcuts.have_one_module(bot_db, "kino"):
-        print("kino")
-        await start_kino_bot(message, state, bot)
-        return
 
     elif shortcuts.have_one_module(bot_db, "chatgpt"):
         builder = InlineKeyboardBuilder()
