@@ -5,7 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="703cb133-094c-4fbb-b47c-2aee762a8e0e" name="Changes" comment="qwe">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/kino_bot/handlers/bot.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/kino_bot/handlers/bot.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

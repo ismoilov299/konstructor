@@ -1142,15 +1142,22 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     uid = message.from_user.id
     print(uid, 'kino start')
 
-    # Referralni olish
+    # Referralni olish (message.text dan ham, state'dan ham)
     referral = message.text[7:] if message.text and len(message.text) > 7 else None
     print(f"Referral from command for user {uid}: {referral}")
 
+    # State'dan ham tekshirish
+    state_data = await state.get_data()
+    state_referral = state_data.get('referrer_id') or state_data.get('referral')
+    if not referral and state_referral:
+        referral = state_referral
+        print(f"Using referral from state for user {uid}: {referral}")
+
     # Agar referral mavjud bo'lsa va raqam bo'lsa, uni state'ga saqlash
-    if referral and referral.isdigit():
+    if referral and isinstance(referral, str) and referral.isdigit():
         referrer_id = int(referral)
         # State'ga saqlash
-        await state.update_data(referrer_id=referrer_id)
+        await state.update_data(referrer_id=referrer_id, referral=referral)
         print(f"SAVED referrer_id {referrer_id} to state for user {uid}")
         logger.info(f"Processing start command with referral: {referral}")
 
@@ -1172,16 +1179,70 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
     if shortcuts.have_one_module(bot_db, "refs"):
-        # Kanallar tekshiruvi
-        channels_checker = await check_channels(message.from_user.id, bot)
+        # Kanallar tekshiruvi - agar kanal mavjud bo'lmasa, True qaytaradi
+        channels = await get_channels_for_check()
+
+        # Kanal mavjud emas bo'lsa - tekshiruv o'tgan deb hisoblaymiz
+        if not channels:
+            print(f"No channels found for user {uid}, considering as subscribed")
+            channels_checker = True
+        else:
+            # Kanal mavjud bo'lsa - tekshiramiz
+            try:
+                # Agar check_channels(user_id, bot) interfeysi bo'lsa
+                channels_checker = await check_channels(uid, bot)
+                # Agar check_channels(message) interfeysi bo'lsa
+                # channels_checker = await check_channels(message)
+            except Exception as e:
+                print(f"Error checking channels: {e}")
+                channels_checker = False
+
         print(f"Channels check result for user {uid}: {channels_checker}")
 
-        # Agar kanallar tekshiruvi o'tmasa, lekin referral mavjud bo'lsa,
-        # state'ga ma'lumotni saqlab qo'ygan bo'lamiz va qaytamiz
+        # Foydalanuvchi ro'yxatga olinganligini tekshirish
+        is_registered = await check_user(uid)
+        is_banned = await check_ban(uid)
+
+        if is_banned:
+            logger.info(f"User {uid} is banned, exiting")
+            await message.answer("Вы были заблокированы")
+            return
+
+        # Yangi foydalanuvchi va referral mavjud bo'lsa
+        if not is_registered and referral and isinstance(referral, str) and referral.isdigit():
+            ref_id = int(referral)
+            # O'zini o'zi refer qilmaslik
+            if ref_id != uid:
+                # Kanal tekshiruvi o'tgan bo'lsa yoki kanal mavjud bo'lmasa
+                if channels_checker:
+                    print(f"Processing referral for new user {uid} from {ref_id}")
+                    # Referral jarayonini bajarish
+                    referral_success = await process_referral(message, ref_id)
+                    if referral_success:
+                        print(f"Successfully processed referral for user {uid} from {ref_id}")
+                    else:
+                        print(f"Failed to process referral for user {uid} from {ref_id}")
+            else:
+                print(f"Self-referral detected for user {uid}")
+
+        # Agar kanal tekshiruvi o'tmasa
         if not channels_checker:
             print(f"Channel check failed for user {uid}, but referrer_id saved in state")
             return
 
+        # Foydalanuvchiga xush kelibsiz xabarini yuborish
+        me = await bot.get_me()
+        link = f"https://t.me/{me.username}?start={message.from_user.id}"
+        await message.answer(
+            f"🎉 Привет, {message.from_user.first_name}",
+            reply_markup=await main_menu_bt()
+        )
+        return
+
+    elif shortcuts.have_one_module(bot_db, "kino"):
+        print("kino")
+        await start_kino_bot(message, state, bot)
+        return
     elif shortcuts.have_one_module(bot_db, "chatgpt"):
         builder = InlineKeyboardBuilder()
         builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
@@ -1194,9 +1255,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         print(result)
         text = f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}'
         kwargs['reply_markup'] = builder.as_markup()
-
     else:
-
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
 
     await message.answer(text, **kwargs)
