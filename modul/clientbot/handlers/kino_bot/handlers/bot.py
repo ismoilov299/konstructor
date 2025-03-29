@@ -1136,6 +1136,8 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
                                       reply_markup=await reply_kb.main_menu(user_id, bot))
 
 
+# Kino_bot/bot.py faylidagi start funksiyasining referral jarayonini boshqaradigan qismi
+
 async def start(message: Message, state: FSMContext, bot: Bot):
     print(f"Start function called for user {message.from_user.id}")
     bot_db = await shortcuts.get_bot(bot)
@@ -1184,80 +1186,99 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
         if not is_registered and referral and isinstance(referral, str) and referral.isdigit():
             ref_id = int(referral)
-            if ref_id != uid:
+
+            # O'zini o'zi referral qilishni tekshirish
+            if ref_id == uid:
+                print(f"Self-referral blocked: user {uid} tried to refer themselves")
+                logger.warning(f"SELF-REFERRAL BLOCKED: User {uid}")
+                # O'zini referral qilganda log chiqaradi, lekin ishlashni to'xtatmaydi
+            else:
                 print(f"Processing referral for new user {uid} from {ref_id}")
                 try:
-                    @sync_to_async
-                    def get_referrer_direct():
-                        try:
-                            referrer = UserTG.objects.filter(uid=ref_id).first()
-                            return referrer
-                        except Exception as e:
-                            print(f"Error getting referrer from database: {e}")
-                            return None
-
-                    referrer = await get_referrer_direct()
-
-                    if not referrer:
-                        print(f"Referrer {ref_id} not found in database directly")
+                    # Allaqachon referral qilinganligini tekshirish
+                    already_referred = await check_if_already_referred(uid, ref_id)
+                    if already_referred:
+                        print(f"User {uid} is already referred by {ref_id}, skipping referral process")
+                        logger.warning(f"ALREADY REFERRED: User {uid} is already referred by {ref_id}")
                     else:
-                        print(f"Found referrer {ref_id} in database")
-                        new_user = await add_user(
-                            tg_id=uid,
-                            user_name=message.from_user.first_name,
-                            invited=referrer.first_name or "Unknown",
-                            invited_id=ref_id
-                        )
-                        print(f"Added new user {uid} with referrer {ref_id}")
-
                         @sync_to_async
-                        @transaction.atomic
-                        def update_referrer_balance():
+                        def get_referrer_direct():
                             try:
-                                user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
-                                admin_info = AdminInfo.objects.first()
-
-                                if admin_info and hasattr(admin_info, 'price') and admin_info.price:
-                                    price = float(admin_info.price)
-                                else:
-                                    price = 10.0
-
-                                user_tg.refs += 1
-                                user_tg.balance += price
-                                user_tg.save()
-
-                                print(f"Updated referrer {ref_id}: refs={user_tg.refs}, balance={user_tg.balance}")
-                                return True
+                                referrer = UserTG.objects.filter(uid=ref_id).first()
+                                return referrer
                             except Exception as e:
-                                print(f"Error updating referrer balance: {e}")
-                                traceback.print_exc()
-                                return False
+                                print(f"Error getting referrer from database: {e}")
+                                logger.error(f"Error getting referrer from database: {e}")
+                                return None
 
-                        success = await update_referrer_balance()
-                        print(f"Referrer balance update success: {success}")
+                        referrer = await get_referrer_direct()
 
-                        # HTML formatlash uchun to'g'irlang
-                        if success:
-                            try:
-                                user_name = message.from_user.first_name
-                                user_profile_link = f'tg://user?id={uid}'
+                        if not referrer:
+                            print(f"Referrer {ref_id} not found in database directly")
+                            logger.warning(f"Referrer {ref_id} not found in database")
+                        else:
+                            print(f"Found referrer {ref_id} in database")
+                            new_user = await add_user(
+                                tg_id=uid,
+                                user_name=message.from_user.first_name,
+                                invited=referrer.first_name or "Unknown",
+                                invited_id=ref_id
+                            )
+                            print(f"Added new user {uid} with referrer {ref_id}")
 
-                                await asyncio.sleep(1)
+                            @sync_to_async
+                            @transaction.atomic
+                            def update_referrer_balance():
+                                try:
+                                    user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
+                                    admin_info = AdminInfo.objects.first()
 
-                                await bot.send_message(
-                                    chat_id=ref_id,
-                                    text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
-                                    parse_mode="HTML"
-                                )
-                                print(f"Sent referral notification to {ref_id} about user {uid}")
-                            except Exception as e:
-                                print(f"Error sending notification to referrer: {e}")
-                                traceback.print_exc()
+                                    if admin_info and hasattr(admin_info, 'price') and admin_info.price:
+                                        price = float(admin_info.price)
+                                    else:
+                                        price = 10.0
+
+                                    user_tg.refs += 1
+                                    user_tg.balance += price
+                                    user_tg.save()
+
+                                    print(f"Updated referrer {ref_id}: refs={user_tg.refs}, balance={user_tg.balance}")
+                                    logger.info(
+                                        f"Updated referrer {ref_id}: refs={user_tg.refs}, balance={user_tg.balance}")
+                                    return True
+                                except Exception as e:
+                                    print(f"Error updating referrer balance: {e}")
+                                    logger.error(f"Error updating referrer balance: {e}")
+                                    traceback.print_exc()
+                                    return False
+
+                            success = await update_referrer_balance()
+                            print(f"Referrer balance update success: {success}")
+
+                            # HTML formatlash uchun to'g'irlang
+                            if success:
+                                try:
+                                    print(f"Preparing to send referral notification to {ref_id}")
+                                    user_name = message.from_user.first_name
+                                    user_profile_link = f'tg://user?id={uid}'
+
+                                    await asyncio.sleep(1)
+
+                                    await bot.send_message(
+                                        chat_id=ref_id,
+                                        text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
+                                        parse_mode="HTML"
+                                    )
+                                    print(f"Sent referral notification to {ref_id} about user {uid}")
+                                    logger.info(f"Sent referral notification to {ref_id} about user {uid}")
+                                except Exception as e:
+                                    print(f"Error sending notification to referrer: {e}")
+                                    logger.error(f"Error sending notification to referrer: {e}")
+                                    traceback.print_exc()
                 except Exception as e:
                     print(f"Error in referral process: {e}")
+                    logger.error(f"Error in referral process: {e}")
                     traceback.print_exc()
-            else:
-                print(f"Self-referral detected for user {uid}")
 
         channels = await get_channels_for_check()
 
@@ -1270,6 +1291,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
             except Exception as e:
                 print(f"Error checking channels: {e}")
+                logger.error(f"Error checking channels: {e}")
                 channels_checker = False
 
             if not channels_checker:
