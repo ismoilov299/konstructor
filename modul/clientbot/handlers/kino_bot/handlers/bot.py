@@ -1196,28 +1196,35 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                 print(f"Processing referral for new user {uid} from {ref_id}")
                 # Referral jarayonini bajarish
                 try:
-                    # To'g'ridan-to'g'ri
-                    me = await bot.get_me()
-                    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                    # Referrerni bazadan to'g'ridan-to'g'ri olish
+                    @sync_to_async
+                    def get_referrer_direct():
+                        try:
+                            referrer = UserTG.objects.filter(uid=ref_id).first()
+                            return referrer
+                        except Exception as e:
+                            print(f"Error getting referrer from database: {e}")
+                            return None
 
-                    # Referrerni olish
-                    inviter = await shortcuts.get_user(ref_id, bot)
-                    if not inviter:
-                        print(f"Referrer {ref_id} not found")
+                    referrer = await get_referrer_direct()
+
+                    if not referrer:
+                        print(f"Referrer {ref_id} not found in database directly")
                     else:
+                        print(f"Found referrer {ref_id} in database")
                         # Yangi foydalanuvchini qo'shish
-                        new_user = await save_user(
-                            u=message.from_user,
-                            bot=bot,
-                            inviter=inviter,
-                            link=link
+                        new_user = await add_user(
+                            tg_id=uid,
+                            user_name=message.from_user.first_name,
+                            invited=referrer.first_name or "Unknown",
+                            invited_id=ref_id
                         )
-                        print(f"Saved new user {uid}, result: {new_user}")
+                        print(f"Added new user {uid} with referrer {ref_id}")
 
-                        # Referrer uchun bal qo'shish
+                        # Referrer balini yangilash
                         @sync_to_async
                         @transaction.atomic
-                        def update_referrer():
+                        def update_referrer_balance():
                             try:
                                 user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
                                 admin_info = AdminInfo.objects.first()
@@ -1230,12 +1237,12 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                                 print(f"Updated referrer {ref_id}: refs={user_tg.refs}, balance={user_tg.balance}")
                                 return True
                             except Exception as e:
-                                print(f"Error updating referrer: {e}")
+                                print(f"Error updating referrer balance: {e}")
                                 traceback.print_exc()
                                 return False
 
-                        success = await update_referrer()
-                        print(f"Referrer update success: {success}")
+                        success = await update_referrer_balance()
+                        print(f"Referrer balance update success: {success}")
 
                         # Referrerga xabar yuborish
                         if success:
@@ -1255,7 +1262,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                                 print(f"Error sending notification to referrer: {e}")
                                 traceback.print_exc()
                 except Exception as e:
-                    print(f"Error processing referral: {e}")
+                    print(f"Error in referral process: {e}")
                     traceback.print_exc()
             else:
                 print(f"Self-referral detected for user {uid}")
