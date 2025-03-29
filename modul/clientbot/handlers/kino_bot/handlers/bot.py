@@ -1179,6 +1179,87 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
     if shortcuts.have_one_module(bot_db, "refs"):
+        # Foydalanuvchi ro'yxatga olinganligini va ban qilinganligini tekshirish
+        is_registered = await check_user(uid)
+        is_banned = await check_ban(uid)
+
+        if is_banned:
+            logger.info(f"User {uid} is banned, exiting")
+            await message.answer("Вы были заблокированы")
+            return
+
+        # Yangi foydalanuvchi va referral mavjud bo'lsa - MUHIM: kanal tekshiruvidan OLDIN bajaramiz
+        if not is_registered and referral and isinstance(referral, str) and referral.isdigit():
+            ref_id = int(referral)
+            # O'zini o'zi refer qilmaslik
+            if ref_id != uid:
+                print(f"Processing referral for new user {uid} from {ref_id}")
+                # Referral jarayonini bajarish
+                try:
+                    # To'g'ridan-to'g'ri
+                    me = await bot.get_me()
+                    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+
+                    # Referrerni olish
+                    inviter = await shortcuts.get_user(ref_id, bot)
+                    if not inviter:
+                        print(f"Referrer {ref_id} not found")
+                    else:
+                        # Yangi foydalanuvchini qo'shish
+                        new_user = await save_user(
+                            u=message.from_user,
+                            bot=bot,
+                            inviter=inviter,
+                            link=link
+                        )
+                        print(f"Saved new user {uid}, result: {new_user}")
+
+                        # Referrer uchun bal qo'shish
+                        @sync_to_async
+                        @transaction.atomic
+                        def update_referrer():
+                            try:
+                                user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
+                                admin_info = AdminInfo.objects.first()
+
+                                price = float(admin_info.price or 10.0)
+                                user_tg.refs += 1
+                                user_tg.balance += price
+                                user_tg.save()
+
+                                print(f"Updated referrer {ref_id}: refs={user_tg.refs}, balance={user_tg.balance}")
+                                return True
+                            except Exception as e:
+                                print(f"Error updating referrer: {e}")
+                                traceback.print_exc()
+                                return False
+
+                        success = await update_referrer()
+                        print(f"Referrer update success: {success}")
+
+                        # Referrerga xabar yuborish
+                        if success:
+                            try:
+                                user_name = html.escape(message.from_user.first_name)
+                                user_profile_link = f'tg://user?id={uid}'
+
+                                await asyncio.sleep(1)
+
+                                await bot.send_message(
+                                    chat_id=ref_id,
+                                    text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
+                                    parse_mode="HTML"
+                                )
+                                print(f"Sent referral notification to {ref_id} about user {uid}")
+                            except Exception as e:
+                                print(f"Error sending notification to referrer: {e}")
+                                traceback.print_exc()
+                except Exception as e:
+                    print(f"Error processing referral: {e}")
+                    traceback.print_exc()
+            else:
+                print(f"Self-referral detected for user {uid}")
+
         # Kanallar tekshiruvi - agar kanal mavjud bo'lmasa, True qaytaradi
         channels = await get_channels_for_check()
 
@@ -1197,42 +1278,14 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                 print(f"Error checking channels: {e}")
                 channels_checker = False
 
+            # Agar kanal tekshiruvi o'tmasa
+            if not channels_checker:
+                print(f"Channel check failed for user {uid}, but referrer_id saved in state")
+                return
+
         print(f"Channels check result for user {uid}: {channels_checker}")
 
-        # Foydalanuvchi ro'yxatga olinganligini tekshirish
-        is_registered = await check_user(uid)
-        is_banned = await check_ban(uid)
-
-        if is_banned:
-            logger.info(f"User {uid} is banned, exiting")
-            await message.answer("Вы были заблокированы")
-            return
-
-        # Yangi foydalanuvchi va referral mavjud bo'lsa
-        if not is_registered and referral and isinstance(referral, str) and referral.isdigit():
-            ref_id = int(referral)
-            # O'zini o'zi refer qilmaslik
-            if ref_id != uid:
-                # Kanal tekshiruvi o'tgan bo'lsa yoki kanal mavjud bo'lmasa
-                if channels_checker:
-                    print(f"Processing referral for new user {uid} from {ref_id}")
-                    # Referral jarayonini bajarish
-                    referral_success = await process_referral(message, ref_id)
-                    if referral_success:
-                        print(f"Successfully processed referral for user {uid} from {ref_id}")
-                    else:
-                        print(f"Failed to process referral for user {uid} from {ref_id}")
-            else:
-                print(f"Self-referral detected for user {uid}")
-
-        # Agar kanal tekshiruvi o'tmasa
-        if not channels_checker:
-            print(f"Channel check failed for user {uid}, but referrer_id saved in state")
-            return
-
         # Foydalanuvchiga xush kelibsiz xabarini yuborish
-        me = await bot.get_me()
-        link = f"https://t.me/{me.username}?start={message.from_user.id}"
         await message.answer(
             f"🎉 Привет, {message.from_user.first_name}",
             reply_markup=await main_menu_bt()
