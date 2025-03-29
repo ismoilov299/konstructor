@@ -1239,10 +1239,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                         # HTML formatlash uchun to'g'irlang
                         if success:
                             try:
-
                                 user_name = message.from_user.first_name
-
-
                                 user_profile_link = f'tg://user?id={uid}'
 
                                 await asyncio.sleep(1)
