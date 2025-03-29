@@ -444,14 +444,35 @@ async def profile(message: Message):
         if not channels_checker or is_banned:
             return
 
+        # Foydalanuvchi ma'lumotlarini olish
         user_info = await get_user_info_db(message.from_user.id)
-        print(user_info)
+
+        # Agar foydalanuvchi topilmasa, uni qo'shamiz
         if not user_info:
-            await message.answer(
-                "Ошибка получения данных профиля",
-                reply_markup=await main_menu_bt()
-            )
-            return
+            try:
+                # Yangi foydalanuvchini qo'shish
+                await add_user(
+                    tg_id=message.from_user.id,
+                    user_name=message.from_user.first_name
+                )
+                print(f"Added new user {message.from_user.id} from profile")
+
+                # Ma'lumotlarni qayta olish
+                user_info = await get_user_info_db(message.from_user.id)
+
+                if not user_info:
+                    await message.answer(
+                        "Ошибка получения данных профиля. Попробуйте позже.",
+                        reply_markup=await main_menu_bt()
+                    )
+                    return
+            except Exception as e:
+                print(f"Error adding user from profile: {e}")
+                await message.answer(
+                    "Ошибка получения данных профиля",
+                    reply_markup=await main_menu_bt()
+                )
+                return
 
         profile_text = (
             f"📱Профиль\n\n"
@@ -460,7 +481,6 @@ async def profile(message: Message):
             f"==========================\n"
             f"💳 Баланс: {user_info[2]}₽\n"
             f"👥 Всего друзей: {user_info[3]}\n"
-
             f"==========================\n"
         )
 
@@ -484,12 +504,34 @@ async def info(message: Message):
     checker_banned = await banned(message)
 
     user_info = await get_user_info_db(message.from_user.id)
+
+    # Agar foydalanuvchi topilmasa, uni qo'shamiz
     if not user_info:
-        await message.answer(
-            "Ошибка получения данных профиля",
-            reply_markup=await main_menu_bt()
-        )
-        return
+        try:
+            # Yangi foydalanuvchini qo'shish
+            await add_user(
+                tg_id=message.from_user.id,
+                user_name=message.from_user.first_name
+            )
+            print(f"Added new user {message.from_user.id} from info")
+
+            # Ma'lumotlarni qayta olish
+            user_info = await get_user_info_db(message.from_user.id)
+
+            if not user_info:
+                await message.answer(
+                    "Ошибка получения данных профиля. Попробуйте позже.",
+                    reply_markup=await main_menu_bt()
+                )
+                return
+        except Exception as e:
+            print(f"Error adding user from info: {e}")
+            await message.answer(
+                "Ошибка получения данных профиля",
+                reply_markup=await main_menu_bt()
+            )
+            return
+
     if channels_checker and checker_banned:
         all_info = await count_info()
 
@@ -501,7 +543,6 @@ async def info(message: Message):
             f"👥 Всего пользователей: {user_info[3]}\n",
             reply_markup=await admin_in(admin_user)
         )
-
 
 # 1. Check_chan callback'ni to'g'irlash - STATE'DAN REFERRAL OLISH QISMINI
 @client_bot_router.callback_query(F.data == "check_chan")
