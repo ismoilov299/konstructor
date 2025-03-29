@@ -1142,26 +1142,21 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     uid = message.from_user.id
     print(uid, 'kino start')
 
-    # Referralni olish (message.text dan ham, state'dan ham)
     referral = message.text[7:] if message.text and len(message.text) > 7 else None
     print(f"Referral from command for user {uid}: {referral}")
 
-    # State'dan ham tekshirish
     state_data = await state.get_data()
     state_referral = state_data.get('referrer_id') or state_data.get('referral')
     if not referral and state_referral:
         referral = state_referral
         print(f"Using referral from state for user {uid}: {referral}")
 
-    # Agar referral mavjud bo'lsa va raqam bo'lsa, uni state'ga saqlash
     if referral and isinstance(referral, str) and referral.isdigit():
         referrer_id = int(referral)
-        # State'ga saqlash
         await state.update_data(referrer_id=referrer_id, referral=referral)
         print(f"SAVED referrer_id {referrer_id} to state for user {uid}")
         logger.info(f"Processing start command with referral: {referral}")
 
-        # Debug uchun state'ni tekshirish
         state_data = await state.get_data()
         print(f"State after saving for user {uid}: {state_data}")
 
@@ -1179,7 +1174,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
 
     if shortcuts.have_one_module(bot_db, "refs"):
-        # Foydalanuvchi ro'yxatga olinganligini va ban qilinganligini tekshirish
         is_registered = await check_user(uid)
         is_banned = await check_ban(uid)
 
@@ -1188,15 +1182,11 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             await message.answer("Вы были заблокированы")
             return
 
-        # Yangi foydalanuvchi va referral mavjud bo'lsa - MUHIM: kanal tekshiruvidan OLDIN bajaramiz
         if not is_registered and referral and isinstance(referral, str) and referral.isdigit():
             ref_id = int(referral)
-            # O'zini o'zi refer qilmaslik
             if ref_id != uid:
                 print(f"Processing referral for new user {uid} from {ref_id}")
-                # Referral jarayonini bajarish
                 try:
-                    # Referrerni bazadan to'g'ridan-to'g'ri olish
                     @sync_to_async
                     def get_referrer_direct():
                         try:
@@ -1212,7 +1202,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                         print(f"Referrer {ref_id} not found in database directly")
                     else:
                         print(f"Found referrer {ref_id} in database")
-                        # Yangi foydalanuvchini qo'shish
                         new_user = await add_user(
                             tg_id=uid,
                             user_name=message.from_user.first_name,
@@ -1221,7 +1210,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                         )
                         print(f"Added new user {uid} with referrer {ref_id}")
 
-                        # Referrer balini yangilash
                         @sync_to_async
                         @transaction.atomic
                         def update_referrer_balance():
@@ -1229,7 +1217,11 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                                 user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
                                 admin_info = AdminInfo.objects.first()
 
-                                price = float(admin_info.price or 10.0)
+                                if admin_info and hasattr(admin_info, 'price') and admin_info.price:
+                                    price = float(admin_info.price)
+                                else:
+                                    price = 10.0
+
                                 user_tg.refs += 1
                                 user_tg.balance += price
                                 user_tg.save()
@@ -1244,7 +1236,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                         success = await update_referrer_balance()
                         print(f"Referrer balance update success: {success}")
 
-                        # Referrerga xabar yuborish
                         if success:
                             try:
                                 user_name = html.escape(message.from_user.first_name)
@@ -1267,32 +1258,25 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             else:
                 print(f"Self-referral detected for user {uid}")
 
-        # Kanallar tekshiruvi - agar kanal mavjud bo'lmasa, True qaytaradi
         channels = await get_channels_for_check()
 
-        # Kanal mavjud emas bo'lsa - tekshiruv o'tgan deb hisoblaymiz
         if not channels:
             print(f"No channels found for user {uid}, considering as subscribed")
             channels_checker = True
         else:
-            # Kanal mavjud bo'lsa - tekshiramiz
             try:
-                # Agar check_channels(user_id, bot) interfeysi bo'lsa
                 channels_checker = await check_channels(uid, bot)
-                # Agar check_channels(message) interfeysi bo'lsa
-                # channels_checker = await check_channels(message)
+
             except Exception as e:
                 print(f"Error checking channels: {e}")
                 channels_checker = False
 
-            # Agar kanal tekshiruvi o'tmasa
             if not channels_checker:
                 print(f"Channel check failed for user {uid}, but referrer_id saved in state")
                 return
 
         print(f"Channels check result for user {uid}: {channels_checker}")
 
-        # Foydalanuvchiga xush kelibsiz xabarini yuborish
         await message.answer(
             f"🎉 Привет, {message.from_user.first_name}",
             reply_markup=await main_menu_bt()
