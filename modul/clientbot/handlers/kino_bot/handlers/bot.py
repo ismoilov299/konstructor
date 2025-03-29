@@ -25,7 +25,7 @@ from yt_dlp import YoutubeDL
 from modul import models
 from modul.clientbot import shortcuts
 from modul.clientbot.data.states import Download
-from modul.clientbot.handlers.annon_bot.handlers.bot import check_channels, process_referral
+from modul.clientbot.handlers.annon_bot.handlers.bot import check_channels, process_referral, check_if_already_referred
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import channels_in
 from modul.clientbot.handlers.annon_bot.userservice import get_channels_for_check, check_user, add_user, get_user_by_id
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
