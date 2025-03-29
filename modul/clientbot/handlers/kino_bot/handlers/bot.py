@@ -1236,9 +1236,13 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                         success = await update_referrer_balance()
                         print(f"Referrer balance update success: {success}")
 
+                        # HTML formatlash uchun to'g'irlang
                         if success:
                             try:
-                                user_name = html.escape(message.from_user.first_name)
+
+                                user_name = message.from_user.first_name
+
+
                                 user_profile_link = f'tg://user?id={uid}'
 
                                 await asyncio.sleep(1)
