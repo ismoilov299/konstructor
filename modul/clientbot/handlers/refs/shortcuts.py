@@ -203,7 +203,20 @@ def status_declined(id):
 
 @sync_to_async
 def change_price(new_price):
-    AdminInfo.objects.filter(id=1).update(price=new_price)
+    try:
+        admin_info, created = AdminInfo.objects.get_or_create(
+            defaults={'price': new_price, 'admin_channel': '', 'min_amount': 50.0}
+        )
+
+        if not created:
+            admin_info.price = new_price
+            admin_info.save()
+
+        print(f"Narx yangilandi: {new_price}, AdminInfo ID: {admin_info.id}")
+        return True
+    except Exception as e:
+        print(f"Narxni yangilashda xatolik: {e}")
+        return False
 
 
 @sync_to_async
