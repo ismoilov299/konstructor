@@ -1,5 +1,6 @@
 import logging
 import re
+import traceback
 from contextlib import suppress
 
 from aiogram import F, Bot, types,html
@@ -92,46 +93,46 @@ def check_if_already_referred(user_id: int, referrer_id: int):
     return UserTG.objects.filter(uid=user_id, invited_id=referrer_id).exists()
 
 
-async def process_referral(message: Message, referral_id: int):
-    try:
-        logger.info(f"Processing referral: user {message.from_user.id}, referrer {referral_id}")
-
-        # O'zini o'zi referral qilishni tekshirish
-        if str(referral_id) == str(message.from_user.id):
-            logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
-            return False
-
-        # Referral beruvchini tekshirish
-        inviter = await get_user_by_id(referral_id)
-        if not inviter:
-            logger.warning(f"Inviter {referral_id} not found")
-            return False
-
-        try:
-            # Referral statistikasini yangilash
-            stats_updated = await update_referral_stats(referral_id)
-
-            if stats_updated:
-                # Referral beruvchiga xabar yuborish
-                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-                await message.bot.send_message(
-                    chat_id=referral_id,
-                    text=f"У вас новый {user_link}!"
-                )
-                print("115 annon")
-                logger.info(f"Referral notification sent to user {referral_id}")
-                logger.info(f"Referral processed for user {referral_id}")
-                return True
-            else:
-                logger.warning(f"Failed to update referral stats for {referral_id}")
-                return False
-        except Exception as e:
-            logger.error(f"Error in referral process: {e}")
-            return False
-
-    except Exception as e:
-        logger.error(f"Error processing referral: {e}")
-        return False
+# async def process_referral(message: Message, referral_id: int):
+#     try:
+#         logger.info(f"Processing referral: user {message.from_user.id}, referrer {referral_id}")
+#
+#         # O'zini o'zi referral qilishni tekshirish
+#         if str(referral_id) == str(message.from_user.id):
+#             logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
+#             return False
+#
+#         # Referral beruvchini tekshirish
+#         inviter = await get_user_by_id(referral_id)
+#         if not inviter:
+#             logger.warning(f"Inviter {referral_id} not found")
+#             return False
+#
+#         try:
+#             # Referral statistikasini yangilash
+#             stats_updated = await update_referral_stats(referral_id)
+#
+#             if stats_updated:
+#                 # Referral beruvchiga xabar yuborish
+#                 user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+#                 await message.bot.send_message(
+#                     chat_id=referral_id,
+#                     text=f"У вас новый {user_link}!"
+#                 )
+#                 print("115 annon")
+#                 logger.info(f"Referral notification sent to user {referral_id}")
+#                 logger.info(f"Referral processed for user {referral_id}")
+#                 return True
+#             else:
+#                 logger.warning(f"Failed to update referral stats for {referral_id}")
+#                 return False
+#         except Exception as e:
+#             logger.error(f"Error in referral process: {e}")
+#             return False
+#
+#     except Exception as e:
+#         logger.error(f"Error processing referral: {e}")
+#         return False
 
 
 @sync_to_async
@@ -290,10 +291,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
     args = command.args
 
     # Debug log
-    logger.info(f"Start command arguments: {args}")
-    bot_db = await shortcuts.get_bot(bot)
-    logger.info(
-        f"Bot modules: anon={shortcuts.have_one_module(bot_db, 'annon')}, refs={shortcuts.have_one_module(bot_db, 'refs')}")
+    print(f"Annon bot start command arguments: {args}")
 
     channels = await get_channels_for_check()
     valid_channels = []
@@ -315,54 +313,49 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                 "Для использования бота подпишитесь на наших спонсоров",
                 reply_markup=markup
             )
-            logger.info(f"User {message.from_user.id} needs to subscribe to channels")
             return
 
-    logger.info(f"User {message.from_user.id} subscription check passed")
+    print(f"Annon bot: user {message.from_user.id} passed channel check")
     user_exists = await check_user(message.from_user.id)
-    logger.info(f"User {message.from_user.id} exists: {user_exists}")
+    print(f"Annon bot: user {message.from_user.id} exists: {user_exists}")
 
-    # MUHIM O'ZGARISH: foydalanuvchini bazaga qo'shishdan oldin referral ID ni olish
-    referral_id = None
-    if args:
-        try:
-            referral_id = int(args)
-            logger.info(f"Referral ID extracted: {referral_id}")
-
-            # O'zini o'zi referral qilishni tekshirish
-            if referral_id == message.from_user.id:
-                logger.warning(f"Self-referral attempt by user {message.from_user.id}")
-                referral_id = None
-        except ValueError:
-            logger.error(f"Invalid referral ID: {args}")
-            referral_id = None
-
+    # Yangi foydalanuvchi bo'lsa, bazaga qo'shamiz
     if not user_exists:
-        logger.info(f"Creating new user {message.from_user.id}")
+        print(f"Annon bot: creating new user {message.from_user.id}")
         new_link = await create_start_link(bot, str(message.from_user.id))
         link_for_db = new_link[new_link.index("=") + 1:]
         await add_user(message.from_user, link_for_db)
-        logger.info(f"User {message.from_user.id} added to database")
+        print(f"Annon bot: user {message.from_user.id} added to database")
 
-        # Yangi foydalanuvchi + to'g'ri referral ID bo'lsa, referral jarayonini boshlash
-        if referral_id is not None:
-            logger.info(f"Processing referral for new user {message.from_user.id} from {referral_id}")
+        # Referral mavjud bo'lsa, referral jarayonini boshlaymiz
+        if args:
             try:
-                # Allaqachon referral qilinganligini tekshirish
-                already_referred = await check_if_already_referred(message.from_user.id, referral_id)
-                if already_referred:
-                    logger.warning(f"User {message.from_user.id} is already referred by {referral_id}")
+                referral_id = int(args)
+                print(f"Annon bot: processing referral from {referral_id} to {message.from_user.id}")
+
+                # O'zini o'zi referral qilishni tekshirish
+                if referral_id == message.from_user.id:
+                    print(f"Annon bot: Self-referral blocked for user {message.from_user.id}")
                 else:
-                    success = await process_referral(message, referral_id)
-                    logger.info(f"Referral process result: {success}")
-            except Exception as e:
-                logger.error(f"Error in referral process: {e}", exc_info=True)
+                    # Allaqachon referral qilinganligini tekshirish
+                    already_referred = await check_if_already_referred(message.from_user.id, referral_id)
+                    print(
+                        f"Annon bot: Already referred check for {message.from_user.id} -> {referral_id}: {already_referred}")
+
+                    if not already_referred:
+                        # Referral jarayonini boshlash
+                        success = await process_referral(message, referral_id)
+                        print(f"Annon bot: Referral process result: {success}")
+                    else:
+                        print(f"Annon bot: User {message.from_user.id} is already referred by {referral_id}")
+            except ValueError:
+                logger.error(f"Annon bot: Invalid referral ID: {args}")
 
     # Anonim xabar yuborish qismi
-    if args and referral_id is not None:
+    if args:
         try:
-            target_id = referral_id
-            logger.info(f"Setting up anonymous message to user {target_id}")
+            target_id = int(args)
+            print(f"Annon bot: Setting up anonymous message to user {target_id}")
             await state.set_state(Links.send_st)
             await state.update_data({"link_user": target_id})
             await message.answer(
@@ -376,12 +369,12 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             )
             return
         except ValueError:
-            logger.error(f"Invalid target ID: {args}")
+            logger.error(f"Annon bot: Invalid target ID: {args}")
 
     # Asosiy menyu
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={message.from_user.id}"
-    logger.info(f"Showing main menu to user {message.from_user.id}")
+    print(f"Annon bot: Showing main menu to user {message.from_user.id}")
     await message.answer(
         f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
         f"Твоя личная ссылка:\n👉{link}\n\n"
@@ -394,52 +387,49 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
 async def process_referral(message: Message, referral_id: int):
     try:
-        logger.info(f"Processing referral: user {message.from_user.id}, referrer {referral_id}")
+        print(f"Annon process_referral: Processing referral from {referral_id} to {message.from_user.id}")
 
         # O'zini o'zi referral qilishni tekshirish
         if str(referral_id) == str(message.from_user.id):
-            logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
+            print(f"Annon process_referral: Self-referral blocked for user {message.from_user.id}")
             return False
 
         # Referral beruvchini tekshirish
         inviter = await get_user_by_id(referral_id)
+        print(f"Annon process_referral: Inviter check result: {inviter}")
+
         if not inviter:
-            logger.warning(f"Inviter {referral_id} not found")
+            print(f"Annon process_referral: Inviter {referral_id} not found")
             return False
 
-        try:
-            # Referral statistikasini yangilash
-            stats_updated = await update_referral_stats(referral_id)
-            logger.info(f"Referral stats update for {referral_id}: {stats_updated}")
+        # Referral statistikasini yangilash
+        stats_updated = await update_referral_stats(referral_id)
+        print(f"Annon process_referral: Stats updated: {stats_updated}")
 
-            if stats_updated:
-                # Referral beruvchiga xabar yuborish
-                try:
-                    user_name = message.from_user.first_name
-                    user_profile_link = f'tg://user?id={message.from_user.id}'
+        if stats_updated:
+            # Referral beruvchiga xabar yuborish
+            try:
+                print(f"Annon process_referral: Preparing notification for referrer {referral_id}")
+                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
 
-                    logger.info(f"Sending referral notification to {referral_id} about user {message.from_user.id}")
-
-                    await message.bot.send_message(
-                        chat_id=referral_id,
-                        text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
-                        parse_mode="HTML"
-                    )
-
-                    logger.info(f"Referral notification sent to user {referral_id}")
-                    return True
-                except Exception as e:
-                    logger.error(f"Error sending notification to referrer: {e}", exc_info=True)
-                    return False
-            else:
-                logger.warning(f"Failed to update referral stats for {referral_id}")
+                await message.bot.send_message(
+                    chat_id=referral_id,
+                    text=f"У вас новый {user_link}!",
+                    parse_mode="HTML"
+                )
+                print(f"Annon process_referral: Notification sent to {referral_id} about user {message.from_user.id}")
+                return True
+            except Exception as e:
+                print(f"Annon process_referral: Error sending notification: {e}")
+                traceback.print_exc()
                 return False
-        except Exception as e:
-            logger.error(f"Error in referral process: {e}", exc_info=True)
+        else:
+            print(f"Annon process_referral: Failed to update referral stats for {referral_id}")
             return False
 
     except Exception as e:
-        logger.error(f"Error processing referral: {e}", exc_info=True)
+        print(f"Annon process_referral: Error in process_referral: {e}")
+        traceback.print_exc()
         return False
 
 
