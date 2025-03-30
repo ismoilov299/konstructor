@@ -333,11 +333,12 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
                 # O'zini o'zi referral qilishni tekshirish
                 if referral_id != message.from_user.id:
+                    print(referral_id)
                     print(f"Annon bot: Adding user {message.from_user.id} with referrer {referral_id}")
                     await add_user(
                         tg_id=message.from_user.id,
                         user_name=message.from_user.first_name,
-                        invited_id=referral_id
+                        invited_id=str(referral_id)
                     )
                     # So'ng referral jarayonini ishga tushirish
                     success = await process_referral(message, referral_id)
