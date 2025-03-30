@@ -281,8 +281,15 @@ def add_channel(channel_url, channel_id):
 
 @sync_to_async
 def get_actual_price():
-    admin_info = AdminInfo.objects.first()
-    return admin_info.price if admin_info else 10
+    try:
+        admin_info = AdminInfo.objects.first()
+        if admin_info and admin_info.price is not None:
+            return float(admin_info.price)
+        else:
+            return 10.0
+    except Exception as e:
+        logger.error(f"Error getting actual price: {e}")
+        return 10.0
 
 
 @sync_to_async

@@ -227,34 +227,33 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
 
     return True
 
+
 @client_bot_router.message(F.text == "💸Заработать", AnonBotFilter())
 async def anon(message: Message, bot: Bot, state: FSMContext):
-   bot_db = await shortcuts.get_bot(bot)
+    bot_db = await shortcuts.get_bot(bot)
 
-   sub_status = await check_subs(message.from_user.id, bot)
-   if not sub_status:
-       kb = await get_subs_kb(bot)
-       await message.answer(
-           '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
-           reply_markup=kb,
-           parse_mode="HTML"
-       )
-       return
+    sub_status = await check_subs(message.from_user.id, bot)
+    if not sub_status:
+        kb = await get_subs_kb(bot)
+        await message.answer(
+            '**Чтобы воспользоваться ботом, необходимо подписаться на каналы**',
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+        return
 
-   me = await bot.get_me()
-   anon_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-   ref_link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    me = await bot.get_me()
+    ref_link = f"https://t.me/{me.username}?start={message.from_user.id}"
 
-   price = await get_actual_price()
-   min_withdraw = await get_actual_min_amount()
+    price = await get_actual_price()
 
-   await message.bot.send_message(
-       message.from_user.id,
-       f"👥 Приглашай друзей и зарабатывай! За \nкаждого друга ты получишь {price}₽.\n\n"
-       f"🔗 Ваша ссылка для приглашений:\n{ref_link}\n\n",
-       # f"💰 Минимальная сумма для вывода: {min_withdraw}₽",
-       reply_markup=await main_menu_bt2()
-   )
+    await message.bot.send_message(
+        message.from_user.id,
+        f"👥 Приглашай друзей и зарабатывай! За \nкаждого друга ты получишь {price:.2f}₽.\n\n"
+        f"🔗 Ваша ссылка для приглашений:\n{ref_link}\n\n",
+        # f"💰 Минимальная сумма для вывода: {min_withdraw}₽",
+        reply_markup=await main_menu_bt2()
+    )
 
 async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
     logger.info(f"Processing new user {message.from_user.id}")
