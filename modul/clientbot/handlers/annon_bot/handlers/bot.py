@@ -324,32 +324,48 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         print(f"Annon bot: creating new user {message.from_user.id}")
         new_link = await create_start_link(bot, str(message.from_user.id))
         link_for_db = new_link[new_link.index("=") + 1:]
-        await add_user(message.from_user, link_for_db)
-        print(f"Annon bot: user {message.from_user.id} added to database")
 
-        # Referral mavjud bo'lsa, referral jarayonini boshlaymiz
+        # Referral bilan yangi foydalanuvchi
         if args:
             try:
                 referral_id = int(args)
                 print(f"Annon bot: processing referral from {referral_id} to {message.from_user.id}")
 
                 # O'zini o'zi referral qilishni tekshirish
-                if referral_id == message.from_user.id:
-                    print(f"Annon bot: Self-referral blocked for user {message.from_user.id}")
+                if referral_id != message.from_user.id:
+                    print(f"Annon bot: Adding user {message.from_user.id} with referrer {referral_id}")
+                    await add_user(
+                        tg_id=message.from_user.id,
+                        user_name=message.from_user.first_name,
+                        invited_id=referral_id
+                    )
+                    # So'ng referral jarayonini ishga tushirish
+                    success = await process_referral(message, referral_id)
+                    print(f"Annon bot: Referral process result: {success}")
                 else:
-                    # Allaqachon referral qilinganligini tekshirish
-                    already_referred = await check_if_already_referred(message.from_user.id, referral_id)
-                    print(
-                        f"Annon bot: Already referred check for {message.from_user.id} -> {referral_id}: {already_referred}")
-
-                    if not already_referred:
-                        # Referral jarayonini boshlash
-                        success = await process_referral(message, referral_id)
-                        print(f"Annon bot: Referral process result: {success}")
-                    else:
-                        print(f"Annon bot: User {message.from_user.id} is already referred by {referral_id}")
+                    # O'zini o'zi referral qilolmaydi
+                    print(f"Annon bot: Self-referral blocked for user {message.from_user.id}")
+                    await add_user(
+                        tg_id=message.from_user.id,
+                        user_name=message.from_user.first_name,
+                        user_link=link_for_db
+                    )
             except ValueError:
-                logger.error(f"Annon bot: Invalid referral ID: {args}")
+                # Agar args son bo'lmasa
+                print(f"Annon bot: Invalid referral ID: {args}")
+                await add_user(
+                    tg_id=message.from_user.id,
+                    user_name=message.from_user.first_name,
+                    user_link=link_for_db
+                )
+        else:
+            # Agar args yo'q bo'lsa
+            print(f"Annon bot: No referral, adding new user {message.from_user.id}")
+            await add_user(
+                tg_id=message.from_user.id,
+                user_name=message.from_user.first_name,
+                user_link=link_for_db
+            )
 
     # Anonim xabar yuborish qismi
     if args:
