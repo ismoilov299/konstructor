@@ -128,7 +128,7 @@ class UserTG(models.Model):
     paid = models.FloatField(default=0)
     refs = models.IntegerField(default=0)
     invited = models.CharField(max_length=255, default="Никто")
-    invited_id = models.IntegerField(null=True, default=None)
+    invited_id = models.BigIntegerField(null=True, default=None)
     banned = models.BooleanField(default=False)
     last_interaction = models.DateTimeField(null=True, blank=True, default=datetime.now(tz=utc))
     interaction_count = models.IntegerField(null=True, blank=True, default=0)
