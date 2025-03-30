@@ -140,10 +140,19 @@ def update_referral_stats(referral_id: int):
     try:
         with transaction.atomic():
             user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
+
+            # AdminInfo jadvalidan mukofat miqdorini olish
+            admin_info = AdminInfo.objects.first()
+            if admin_info and admin_info.price is not None:
+                reward = float(admin_info.price)
+            else:
+                reward = 10.0  # Default qiymat
+
             user_tg.refs += 1
-            user_tg.balance += 10.0  # yoki admin_info.price
+            user_tg.balance += reward
             user_tg.save()
-            logger.info(f"Referral stats updated for user {referral_id}")
+
+            logger.info(f"Referral stats updated for user {referral_id}, reward amount: {reward}")
             return True
     except UserTG.DoesNotExist:
         logger.error(f"UserTG with uid {referral_id} does not exist")
@@ -151,7 +160,6 @@ def update_referral_stats(referral_id: int):
     except Exception as e:
         logger.error(f"Error updating referral stats: {e}")
         return False
-
 async def check_subs(user_id: int, bot: Bot) -> bool:
     bot_db = await shortcuts.get_bot(bot)
     admin_id = bot_db.owner.uid
