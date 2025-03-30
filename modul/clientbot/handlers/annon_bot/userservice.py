@@ -28,14 +28,24 @@ def check_user(uid):
 
 
 @sync_to_async
-def add_user(tg_id, user_name, invited="Никто", invited_id=None):
-    UserTG.objects.create(
-        uid=tg_id,
-        username=user_name,
-        invited=invited,
-        invited_id=invited_id,
-        created_at=timezone.now()
-    )
+def add_user(tg_id, user_name, invited="Никто", invited_id=None, user_link=None):
+    if user_link is None:
+        user_link = str(tg_id)
+
+    try:
+        UserTG.objects.create(
+            uid=tg_id,
+            username=user_name,
+            invited=invited,
+            invited_id=invited_id,
+            user_link=user_link,
+            created_at=timezone.now()
+        )
+        print(f"User {tg_id} successfully added with link {user_link}")
+        return True
+    except Exception as e:
+        print(f"Error adding user: {e}")
+        return False
 
 
 @sync_to_async
