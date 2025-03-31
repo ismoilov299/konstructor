@@ -22,6 +22,8 @@ from modul.clientbot.handlers.refs.shortcuts import (
 )
 from aiogram import F, Bot
 
+from modul.models import User
+
 logger = logging.getLogger(__name__)
 
 
@@ -658,6 +660,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                     @transaction.atomic
                     def update_referrer():
                         try:
+                            # Avval UserTG jadvalidan qidirish
                             referrer = UserTG.objects.select_for_update().get(uid=ref_id)
                             admin_info = AdminInfo.objects.first()
 
@@ -671,8 +674,38 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                             print(f"💰 Updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
                             return True
                         except UserTG.DoesNotExist:
-                            print(f"❓ Referrer {ref_id} not found in database")
-                            return False
+                            try:
+                                # UserTG topilmasa, User jadvalidan qidirish
+                                user = User.objects.get(uid=ref_id)
+
+                                # Agar User topilsa, shu User uchun yangi UserTG yaratish
+                                referrer = UserTG.objects.create(
+                                    user=user,
+                                    uid=ref_id,
+                                    username=user.username,
+                                    first_name=user.first_name or "User",
+                                    last_name=user.last_name
+                                )
+
+                                # Mukofot miqdorini olish
+                                admin_info = AdminInfo.objects.first()
+                                price = float(admin_info.price) if admin_info and admin_info.price else 10.0
+
+                                # Balansni va referallar sonini yangilash
+                                referrer.refs += 1
+                                referrer.balance += price
+                                referrer.save()
+
+                                print(
+                                    f"💰 Created and updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
+                                return True
+                            except User.DoesNotExist:
+                                print(f"❓ Referrer {ref_id} not found in both UserTG and User tables")
+                                return False
+                            except Exception as e:
+                                print(f"⚠️ Error creating UserTG from User: {e}")
+                                traceback.print_exc()
+                                return False
                         except Exception as e:
                             print(f"⚠️ Error updating referrer: {e}")
                             traceback.print_exc()
