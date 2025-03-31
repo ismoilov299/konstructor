@@ -160,6 +160,8 @@ def update_referral_stats(referral_id: int):
     except Exception as e:
         logger.error(f"Error updating referral stats: {e}")
         return False
+
+
 async def check_subs(user_id: int, bot: Bot) -> bool:
     bot_db = await shortcuts.get_bot(bot)
     admin_id = bot_db.owner.uid
@@ -176,7 +178,14 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
     check_results = []
     for channel in channels:
         try:
-            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+            # Agar channel tuple bo'lsa, faqat birinchi elementi (ID) ni olish
+            chat_id = channel[0] if isinstance(channel, tuple) else channel
+
+            # Agar chat_id string bo'lsa va raqam bilan boshlansa, integer ga aylantirish mumkin
+            if isinstance(chat_id, str) and chat_id.strip('-').isdigit():
+                chat_id = int(chat_id)
+
+            member = await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
             if member.status != 'left':
                 check_results.append(True)
             else:
