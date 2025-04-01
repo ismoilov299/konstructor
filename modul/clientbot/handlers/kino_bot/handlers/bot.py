@@ -46,7 +46,7 @@ from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_ac
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bot_by_token, get_users, users_count
 from modul.loader import client_bot_router
-from modul.models import UserTG, AdminInfo
+from modul.models import UserTG, AdminInfo, User
 from typing import Union, List
 import yt_dlp
 import logging
@@ -1014,7 +1014,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         await callback.answer("Пожалуйста, подпишитесь на все каналы.", show_alert=True)
 
         # Obuna bo'lmagan kanallarni ko'rsatish
-        channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
+        channels_text = f"📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
 
         markup = InlineKeyboardBuilder()
 
@@ -1028,11 +1028,25 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         markup.button(text="✅ Проверить подписку", callback_data="check_chan")
         markup.adjust(1)  # Har bir qatorda 1 ta tugma
 
-        await callback.message.edit_text(
-            channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
-            reply_markup=markup.as_markup(),
-            parse_mode="HTML"
-        )
+        # "message is not modified" xatosini oldini olish uchun try/except block
+        try:
+            # Xabar matniga timestamp qo'shish - har safar o'zgacha bo'ladi
+            current_time = int(time.time())
+            channels_text += f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку». [{current_time}]"
+
+            await callback.message.edit_text(
+                channels_text,
+                reply_markup=markup.as_markup(),
+                parse_mode="HTML"
+            )
+        except TelegramBadRequest as e:
+            if "message is not modified" in str(e):
+                # Xabar o'zgarmagan - bu holda hech narsa qilmaslik mumkin
+                pass
+            else:
+                # Boshqa xatolik bo'lsa, qayta ko'tarish
+                raise
+
         return
 
     await callback.answer("Вы успешно подписались на все каналы!")
