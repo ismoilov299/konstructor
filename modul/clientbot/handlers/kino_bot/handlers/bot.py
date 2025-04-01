@@ -977,42 +977,61 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
     bot_db = await shortcuts.get_bot(bot)
     print("kino 978")
 
-    # 1. Kanallarni tekshirish
+    # 1. Kanallarni tekshirish va obuna bo'lmaganlarini aniqlash
     subscribed = True
+    not_subscribed_channels = []
     channels = await get_channels_for_check()
+
     if channels:
-        for channel_id, _ in channels:
+        for channel_id, channel_url in channels:
             try:
                 member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
                 print(f"Channel {channel_id} status: {member.status}")
+
                 if member.status == "left":
                     subscribed = False
-                    break
+                    # Obuna bo'lmagan kanal ma'lumotlarini olish
+                    try:
+                        chat_info = await bot.get_chat(chat_id=channel_id)
+                        not_subscribed_channels.append({
+                            'id': channel_id,
+                            'title': chat_info.title,
+                            'invite_link': channel_url or chat_info.invite_link or f"https://t.me/{channel_id.strip('-')}"
+                        })
+                    except Exception as e:
+                        print(f"⚠️ Error getting chat info for channel {channel_id}: {e}")
+                        not_subscribed_channels.append({
+                            'id': channel_id,
+                            'title': f"Канал {channel_id}",
+                            'invite_link': channel_url or f"https://t.me/{channel_id.strip('-')}"
+                        })
             except Exception as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
-                subscribed = False
                 await remove_invalid_channel(channel_id)
-                break
-
-    if not subscribed:
-        await callback.answer("Пожалуйста, подпишитесь на все каналы.")
-        channels = await get_channels_for_check()
-        markup = InlineKeyboardBuilder()
-
-        for channel_id, _ in channels:
-            try:
-                chat = await bot.get_chat(channel_id)
-                invite_link = chat.invite_link or await bot.create_chat_invite_link(channel_id)
-                markup.button(text=chat.title, url=invite_link)
-            except Exception as e:
                 continue
 
+    if not subscribed:
+        await callback.answer("Пожалуйста, подпишитесь на все каналы.", show_alert=True)
+
+        # Obuna bo'lmagan kanallarni ko'rsatish
+        channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
+
+        markup = InlineKeyboardBuilder()
+
+        for index, channel in enumerate(not_subscribed_channels):
+            title = channel['title']
+            invite_link = channel['invite_link']
+
+            channels_text += f"{index + 1}. {title}\n"
+            markup.button(text=f"📢 {title}", url=invite_link)
+
         markup.button(text="✅ Проверить подписку", callback_data="check_chan")
-        markup.adjust(1)
+        markup.adjust(1)  # Har bir qatorda 1 ta tugma
 
         await callback.message.edit_text(
-            "Для использования бота подпишитесь на наших спонсоров",
-            reply_markup=markup.as_markup()
+            channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
+            reply_markup=markup.as_markup(),
+            parse_mode="HTML"
         )
         return
 
@@ -1134,7 +1153,6 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             hello=html.quote(callback.from_user.full_name))
         await callback.message.answer(text,
                                       reply_markup=await reply_kb.main_menu(user_id, bot))
-
 
 # Kino_bot/bot.py faylidagi start funksiyasining referral jarayonini boshqaradigan qismi
 
