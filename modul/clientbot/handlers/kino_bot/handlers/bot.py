@@ -1548,7 +1548,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 await message.bot.send_message(
                                     chat_id=ref_id,
                                     text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
-                                    parse_mode="HTML"
+                                    parse_mode="html"
                                 )
                                 print(f"📨 Sent referral notification to {ref_id} about user {message.from_user.id}")
                             except Exception as e:
