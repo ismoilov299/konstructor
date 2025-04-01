@@ -1334,7 +1334,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         print(f"Full start message: {message.text}")
         logger.info(f"Start command received from user {message.from_user.id}")
 
-        # Referralni olish va state'ga saqlash - bu qismni yuqoriga ko'chirdik
+        # Referralni olish va state'ga saqlash
         referral = command.args if command and command.args else None
         print(f"Extracted referral from command.args: {referral}")
 
@@ -1354,9 +1354,12 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             state_data = await state.get_data()
             print(f"State after saving referral: {state_data}")
 
-        # Kanal tekshiruvi - bu qismi o'zgarmaydi
+        # Kanal tekshiruvi
         channels = await get_channels_for_check()
         if channels:
+            # Obuna bo'lmagan kanallar ro'yxatini yaratish
+            not_subscribed_channels = []
+
             for channel_id, channel_url in channels:
                 try:
                     member = await message.bot.get_chat_member(
@@ -1366,26 +1369,169 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     print(f"Channel {channel_id} status: {member.status}")
 
                     if member.status == "left":
-                        # Kanal tekshiruvi o'tmasa ham state'da ma'lumot saqlanib qoladi
-                        state_data = await state.get_data()
-                        print(f"State before channel check (user not subscribed): {state_data}")
-
-                        await message.answer(
-                            "Для использования бота подпишитесь на наших спонсоров",
-                            reply_markup=await channels_in(channels, bot)
-                        )
-                        return False
+                        # Obuna bo'lmagan kanal ma'lumotlarini olish
+                        try:
+                            chat_info = await message.bot.get_chat(chat_id=channel_id)
+                            not_subscribed_channels.append({
+                                'id': channel_id,
+                                'title': chat_info.title,
+                                'invite_link': channel_url or chat_info.invite_link or f"https://t.me/{channel_id.strip('-')}"
+                            })
+                        except Exception as e:
+                            print(f"⚠️ Error getting chat info for channel {channel_id}: {e}")
+                            not_subscribed_channels.append({
+                                'id': channel_id,
+                                'title': f"Канал {channel_id}",
+                                'invite_link': channel_url or f"https://t.me/{channel_id.strip('-')}"
+                            })
                 except Exception as e:
                     logger.error(f"Error checking channel {channel_id}: {e}")
                     await remove_invalid_channel(channel_id)
                     continue
 
+            if not_subscribed_channels:
+                # Obuna bo'lmagan kanallarni ko'rsatish
+                channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
+
+                kb = InlineKeyboardBuilder()
+
+                for index, channel in enumerate(not_subscribed_channels):
+                    title = channel['title']
+                    invite_link = channel['invite_link']
+
+                    channels_text += f"{index + 1}. {title}\n"
+                    kb.button(text=f"📢 {title}", url=invite_link)
+
+                kb.button(text="✅ Проверить подписку", callback_data="check_chan")
+                kb.adjust(1)  # Har bir qatorda 1 ta tugma
+
+                await message.answer(
+                    channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
+                    reply_markup=kb.as_markup(),
+                    parse_mode="HTML"
+                )
+                # Kanal tekshiruvi o'tmasa ham state'da ma'lumot saqlanib qoladi
+                state_data = await state.get_data()
+                print(f"State before channel check (user not subscribed): {state_data}")
+                return False
+
         # Kanal tekshiruvidan o'tgach, state'ni tekshirib ko'ramiz
         state_data = await state.get_data()
         print(f"State after channel check (user subscribed): {state_data}")
 
-        # Start funksiyasini chaqirish
-        await start(message, state, bot)
+        # Start funksiyasini chaqirish o'rniga to'g'ridan-to'g'ri bazaga saqlash
+        is_registered = await check_user(message.from_user.id)
+
+        if not is_registered:
+            # Foydalanuvchini bazaga saqlash
+            new_user = await add_user(
+                tg_id=message.from_user.id,
+                user_name=message.from_user.first_name,
+                invited="Direct" if not referral else "Referral",
+                invited_id=int(referral) if referral else None
+            )
+            print(f"➕ Added user {message.from_user.id} to database, result: {new_user}")
+
+            # Agar referral mavjud bo'lsa, referral jarayonini bajarish
+            if referral:
+                try:
+                    ref_id = int(referral)
+                    print(f"🔄 Processing referral for user {message.from_user.id} from {ref_id}")
+
+                    # O'ziga-o'zi refer qilmaslikni tekshirish
+                    if ref_id != message.from_user.id:
+                        print(f"👥 User {message.from_user.id} referred by {ref_id}")
+
+                        # Referrer bonuslarini yangilash
+                        @sync_to_async
+                        @transaction.atomic
+                        def update_referrer():
+                            try:
+                                # Avval UserTG jadvalidan qidirish
+                                referrer = UserTG.objects.select_for_update().get(uid=ref_id)
+                                admin_info = AdminInfo.objects.first()
+
+                                price = float(admin_info.price) if admin_info and admin_info.price else 10.0
+
+                                # Balansni va referallar sonini yangilash
+                                referrer.refs += 1
+                                referrer.balance += price
+                                referrer.save()
+
+                                print(f"💰 Updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
+                                return True
+                            except UserTG.DoesNotExist:
+                                try:
+                                    # UserTG topilmasa, User jadvalidan qidirish
+                                    user = User.objects.get(uid=ref_id)
+
+                                    # Agar User topilsa, shu User uchun yangi UserTG yaratish
+                                    referrer = UserTG.objects.create(
+                                        user=user,
+                                        uid=ref_id,
+                                        username=user.username,
+                                        first_name=user.first_name or "User",
+                                        last_name=user.last_name
+                                    )
+
+                                    # Mukofot miqdorini olish
+                                    admin_info = AdminInfo.objects.first()
+                                    price = float(admin_info.price) if admin_info and admin_info.price else 10.0
+
+                                    # Balansni va referallar sonini yangilash
+                                    referrer.refs += 1
+                                    referrer.balance += price
+                                    referrer.save()
+
+                                    print(
+                                        f"💰 Created and updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
+                                    return True
+                                except User.DoesNotExist:
+                                    print(f"❓ Referrer {ref_id} not found in both UserTG and User tables")
+                                    return False
+                                except Exception as e:
+                                    print(f"⚠️ Error creating UserTG from User: {e}")
+                                    traceback.print_exc()
+                                    return False
+                            except Exception as e:
+                                print(f"⚠️ Error updating referrer: {e}")
+                                traceback.print_exc()
+                                return False
+
+                        success = await update_referrer()
+                        print(f"✅ Referrer update success for user {message.from_user.id}: {success}")
+
+                        if success:
+                            # Referrerga xabar yuborish
+                            try:
+                                user_name = html.escape(message.from_user.first_name)
+                                user_profile_link = f'tg://user?id={message.from_user.id}'
+
+                                # O'zgarishlar saqlanishini kutish
+                                await asyncio.sleep(1)
+
+                                await message.bot.send_message(
+                                    chat_id=ref_id,
+                                    text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
+                                    parse_mode="HTML"
+                                )
+                                print(f"📨 Sent referral notification to {ref_id} about user {message.from_user.id}")
+                            except Exception as e:
+                                print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
+                    else:
+                        print(f"🚫 Self-referral detected: user {message.from_user.id} trying to refer themselves")
+                except ValueError:
+                    print(f"❌ Invalid referrer_id: {referral}")
+
+        # Asosiy menyuni ko'rsatish
+        await message.answer(
+            f"🎉Привет, {message.from_user.first_name}",
+            reply_markup=await main_menu_bt()
+        )
+
+        # State'ni tozalash
+        await state.clear()
+        print(f"🧹 Cleared state for user {message.from_user.id}")
 
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
