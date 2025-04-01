@@ -1,3 +1,4 @@
+import time
 import traceback
 import asyncio  # Asyncio uchun import
 
@@ -626,6 +627,10 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         if not is_subscribed:
             print(f"🚫 User {user_id} not subscribed to all channels")
 
+            # Foydalanuvchiga aniq ogohlantirish berish
+            await query.answer("⚠️ Вы не подписались на все каналы! Пожалуйста, подпишитесь и нажмите кнопку снова.",
+                               show_alert=True)
+
             # Obuna bo'lmagan kanallarni ko'rsatish
             channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
 
@@ -641,13 +646,33 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             kb.button(text="✅ Проверить подписку", callback_data="check_chan")
             kb.adjust(1)  # Har bir qatorda 1 ta tugma
 
-            await query.message.edit_text(
-                channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
-                reply_markup=kb.as_markup(),
-                parse_mode="HTML"
-            )
+            # "message is not modified" xatoligini oldini olish
+            try:
+                # Har safar vaqt qo'shib, xabarni o'zgacha qilish
+                now = int(time.time())
+                await query.message.edit_text(
+                    channels_text + f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку». (ID: {now})",
+                    reply_markup=kb.as_markup(),
+                    parse_mode="HTML"
+                )
+            except aiogram.exceptions.TelegramBadRequest as e:
+                if "message is not modified" in str(e):
+                    # Xabar o'zgarmagan - bu holda yangi dialog oynasi ochilgan
+                    pass
+                else:
+                    # Boshqa xatolik bo'lsa, yangi xabar yuborish
+                    try:
+                        await query.message.delete()
+                    except:
+                        pass  # O'chirishda xatolik bo'lsa, e'tiborsiz qoldiramiz
 
-            await query.answer("Вы подписались не на все каналы", show_alert=True)
+                    await query.bot.send_message(
+                        chat_id=user_id,
+                        text=channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
+                        reply_markup=kb.as_markup(),
+                        parse_mode="HTML"
+                    )
+
             return
 
         print(f"✅ User {user_id} subscribed to all channels")
@@ -781,6 +806,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         try:
             await state.clear()
         except:
+            pass
             pass
 
 @client_bot_router.callback_query(F.data.in_(["payment"]))
