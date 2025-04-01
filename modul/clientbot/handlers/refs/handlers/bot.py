@@ -561,10 +561,8 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         referrer_id = state_data.get('referrer_id') or state_data.get('referral')
         print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
 
-        # Agar state'da ma'lumot yo'q bo'lsa, bazadan olishga urinish
         if not referrer_id:
             try:
-                # Bazadan foydalanuvchi ma'lumotlarini olish
                 @sync_to_async
                 def get_referrer_from_db():
                     try:
@@ -583,9 +581,11 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             except Exception as e:
                 print(f"⚠️ Error checking database for referrer: {e}")
 
-        # Kanallarni tekshirish
         channels = await get_channels_for_check()
         print(f"📡 Channels for user {user_id}: {channels}")
+
+        # Obuna bo'lmagan kanallar ro'yxatini yaratish
+        not_subscribed_channels = []
 
         if not channels:
             print(f"✅ No channels to check for user {user_id}")
@@ -603,22 +603,57 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                     if member.status == 'left':
                         is_subscribed = False
                         print(f"❌ User {user_id} not subscribed to channel {channel_id}")
-                        break
+
+                        # Obuna bo'lmagan kanal ma'lumotlarini olish
+                        try:
+                            chat_info = await query.bot.get_chat(chat_id=channel_id)
+                            not_subscribed_channels.append({
+                                'id': channel_id,
+                                'title': chat_info.title,
+                                'invite_link': channel_url or chat_info.invite_link or f"https://t.me/{channel_id.strip('-')}"
+                            })
+                        except Exception as e:
+                            print(f"⚠️ Error getting chat info for channel {channel_id}: {e}")
+                            not_subscribed_channels.append({
+                                'id': channel_id,
+                                'title': f"Канал {channel_id}",
+                                'invite_link': channel_url or f"https://t.me/{channel_id.strip('-')}"
+                            })
                 except Exception as e:
                     print(f"⚠️ Error checking channel {channel_id}: {e}")
                     continue
 
         if not is_subscribed:
             print(f"🚫 User {user_id} not subscribed to all channels")
+
+            # Obuna bo'lmagan kanallarni ko'rsatish
+            channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
+
+            kb = InlineKeyboardBuilder()
+
+            for index, channel in enumerate(not_subscribed_channels):
+                title = channel['title']
+                invite_link = channel['invite_link']
+
+                channels_text += f"{index + 1}. {title}\n"
+                kb.button(text=f"📢 {title}", url=invite_link)
+
+            kb.button(text="✅ Проверить подписку", callback_data="check_chan")
+            kb.adjust(1)  # Har bir qatorda 1 ta tugma
+
+            await query.message.edit_text(
+                channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
+                reply_markup=kb.as_markup(),
+                parse_mode="HTML"
+            )
+
+            await query.answer("Вы подписались не на все каналы", show_alert=True)
             return
 
         print(f"✅ User {user_id} subscribed to all channels")
-
-        # Foydalanuvchi ro'yxatga olinganligini tekshirish
         is_registered = await check_user(user_id)
         print(f"📝 User {user_id} registration status: {is_registered}")
 
-        # Xabarni o'chirish
         try:
             await query.bot.delete_message(
                 chat_id=user_id,
@@ -628,7 +663,6 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         except Exception as e:
             print(f"⚠️ Error deleting message for user {user_id}: {e}")
 
-        # Foydalanuvchiga xabar yuborish
         await query.bot.send_message(
             user_id,
             f"🎉Привет, {query.from_user.first_name}",
