@@ -1011,7 +1011,9 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
                 continue
 
     if not subscribed:
-        await callback.answer("Пожалуйста, подпишитесь на все каналы.", show_alert=True)
+        # Foydalanuvchiga aniq xabar berish
+        await callback.answer("⚠️ Вы не подписались на все каналы! Пожалуйста, подпишитесь на все указанные каналы.",
+                              show_alert=True)
 
         # Obuna bo'lmagan kanallarni ko'rsatish
         channels_text = f"📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
@@ -1028,24 +1030,26 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         markup.button(text="✅ Проверить подписку", callback_data="check_chan")
         markup.adjust(1)  # Har bir qatorda 1 ta tugma
 
-        # "message is not modified" xatosini oldini olish uchun try/except block
         try:
-            # Xabar matniga timestamp qo'shish - har safar o'zgacha bo'ladi
-            current_time = int(time.time())
-            channels_text += f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку». [{current_time}]"
-
+            # Xabarni yangilashga urinish
             await callback.message.edit_text(
-                channels_text,
+                channels_text + f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
                 reply_markup=markup.as_markup(),
                 parse_mode="HTML"
             )
-        except TelegramBadRequest as e:
-            if "message is not modified" in str(e):
-                # Xabar o'zgarmagan - bu holda hech narsa qilmaslik mumkin
-                pass
-            else:
-                # Boshqa xatolik bo'lsa, qayta ko'tarish
-                raise
+        except Exception as e:
+            # Xatolik yuz bersa, eski xabarni o'chirib, yangi xabar yuborish
+            try:
+                await callback.message.delete()
+            except:
+                pass  # Agar o'chirishda xatolik bo'lsa, e'tiborsiz qoldiramiz
+
+            # Yangi xabar yuborish
+            await callback.message.answer(
+                channels_text + f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
+                reply_markup=markup.as_markup(),
+                parse_mode="HTML"
+            )
 
         return
 
@@ -1167,7 +1171,6 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             hello=html.quote(callback.from_user.full_name))
         await callback.message.answer(text,
                                       reply_markup=await reply_kb.main_menu(user_id, bot))
-
 # Kino_bot/bot.py faylidagi start funksiyasining referral jarayonini boshqaradigan qismi
 
 async def start(message: Message, state: FSMContext, bot: Bot):
