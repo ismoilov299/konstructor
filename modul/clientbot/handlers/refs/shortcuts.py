@@ -1,27 +1,56 @@
 import logging
+import traceback
 
 from asgiref.sync import sync_to_async
 from django.db.models import F, Sum
 from django.utils import timezone
-from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot, ChannelSponsor
+from psycopg import IntegrityError
+
+from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot, ChannelSponsor, ClientBotUser
 
 logger = logging.getLogger(__name__)
+
+
 @sync_to_async
-def add_user(tg_id, user_name, invited="Никто", invited_id=None):
+def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=None):
     try:
-        UserTG.objects.create(
+        user_tg = UserTG.objects.create(
             uid=tg_id,
             username=user_name,
-            first_name=user_name,  # Bu qatorni qo'shing
+            first_name=user_name,
             invited=invited,
             invited_id=invited_id,
             created_at=timezone.now()
         )
-        print(f"User {tg_id} successfully added to database")
+        print(f"User {tg_id} successfully added with link {tg_id}")
+
+        if bot_token:
+            try:
+                current_bot = Bot.objects.get(token=bot_token)
+
+                inviter_client = None
+                if invited_id:
+                    inviter_client = ClientBotUser.objects.filter(uid=invited_id, bot=current_bot).first()
+
+                client_bot_user = ClientBotUser.objects.create(
+                    user=user_tg,
+                    bot=current_bot,
+                    uid=tg_id,
+                    inviter=inviter_client
+                )
+                print(f"ClientBotUser {tg_id} successfully added for bot {current_bot.username}")
+            except Exception as e:
+                print(f"⚠️ Error creating ClientBotUser: {e}")
+                traceback.print_exc()
+
+        return True
+    except IntegrityError:
+        print(f"User {tg_id} already exists, skipping addition")
+        return True
     except Exception as e:
         print(f"Error adding user {tg_id} to database: {e}")
-        # Xatoni qayta tashlash yoki boshqa jarayonni qilish mumkin
-        raise  # Xatoni qayta tashlash
+        traceback.print_exc()
+        return False
 
 
 @sync_to_async

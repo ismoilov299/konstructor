@@ -1,10 +1,13 @@
 import logging
+import traceback
 
 from asgiref.sync import sync_to_async
 from django.db.models import Count, F
 from django.utils import timezone
+from psycopg2 import IntegrityError
+
 from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today, \
-    ChannelSponsor
+    ChannelSponsor, ClientBotUser
 import pytz
 
 moscow_timezone = pytz.timezone('Europe/Moscow')
@@ -28,23 +31,76 @@ def check_user(uid):
 
 
 @sync_to_async
-def add_user(tg_id, user_name, invited="Никто", invited_id=None, user_link=None):
-    if user_link is None:
-        user_link = str(tg_id)
-
+def add_user(tg_id, user_name=None, invited="Никто", invited_id=None, bot_token=None, user_link=None):
     try:
-        UserTG.objects.create(
-            uid=tg_id,
-            username=user_name,
-            invited=invited,
-            invited_id=invited_id,
-            user_link=user_link,
-            created_at=timezone.now()
-        )
-        print(f"User {tg_id} successfully added with link {user_link}")
-        return True
+        if hasattr(tg_id, 'id'):
+            user_obj = tg_id
+            user_id = user_obj.id
+            username = user_obj.username or user_obj.first_name or "User"
+            first_name = user_obj.first_name or username
+        else:
+            user_id = tg_id
+            username = user_name or "User"
+            first_name = user_name or username
+
+        try:
+            user_tg, created = UserTG.objects.get_or_create(
+                uid=user_id,
+                defaults={
+                    'username': username,
+                    'first_name': first_name,
+                    'invited': invited,
+                    'invited_id': invited_id,
+                    'created_at': timezone.now(),
+                    'user_link': user_link
+                }
+            )
+
+            if not created:
+                user_tg.username = username
+                user_tg.first_name = first_name
+                if user_link:
+                    user_tg.user_link = user_link
+                user_tg.save()
+
+            print(f"User {user_id} successfully added or updated in UserTG")
+
+            if bot_token:
+                try:
+                    current_bot = Bot.objects.get(token=bot_token)
+
+                    inviter_client = None
+                    if invited_id:
+                        inviter_client = ClientBotUser.objects.filter(uid=invited_id, bot=current_bot).first()
+
+                    client_bot_user, created = ClientBotUser.objects.get_or_create(
+                        uid=user_id,
+                        bot=current_bot,
+                        defaults={
+                            'user': user_tg,
+                            'inviter': inviter_client
+                        }
+                    )
+
+                    if not created:
+                        client_bot_user.user = user_tg
+                        if inviter_client and not client_bot_user.inviter:
+                            client_bot_user.inviter = inviter_client
+                        client_bot_user.save()
+
+                    print(f"ClientBotUser {user_id} successfully added or updated for bot {current_bot.username}")
+                except Exception as e:
+                    print(f"⚠️ Error creating ClientBotUser: {e}")
+                    traceback.print_exc()
+
+            return True
+        except IntegrityError:
+            print(f"User {user_id} already exists, updating info")
+            return True
+
     except Exception as e:
-        print(f"Error adding user: {e}")
+        print(f"Error adding user {tg_id} to database: {e}")
+        traceback.print_exc()
         return False
 
 

@@ -1079,10 +1079,11 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             if referral_id and str(referral_id) != str(user_id):
                 # Referral bilan qo'shish
                 await add_user(
-                    callback.from_user.id,
-                    callback.from_user.first_name,
-                    "Referral",
-                    referral_id
+                    tg_id=callback.from_user.id,
+                    user_name=callback.from_user.first_name,
+                    invited="Referral",
+                    invited_id=referral_id,
+                    bot_token=callback.bot.token
                 )
                 logger.info(f"New user {callback.from_user.id} added to database with referrer {referral_id}")
 
@@ -1092,8 +1093,9 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             else:
                 # Referralsiz qo'shish
                 await add_user(
-                    callback.from_user.id,
-                    callback.from_user.first_name
+                    tg_id=callback.from_user.id,
+                    user_name=callback.from_user.first_name,
+                    bot_token=callback.bot.token
                 )
                 logger.info(f"New user {callback.from_user.id} added to database without referrer")
         except Exception as e:
@@ -1257,7 +1259,8 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                                 tg_id=uid,
                                 user_name=message.from_user.first_name,
                                 invited=referrer.first_name or "Unknown",
-                                invited_id=ref_id
+                                invited_id=ref_id,
+                                bot_token=message.bot.token
                             )
                             print(f"Added new user {uid} with referrer {ref_id}")
 
@@ -1463,7 +1466,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 tg_id=message.from_user.id,
                 user_name=message.from_user.first_name,
                 invited="Direct" if not referral else "Referral",
-                invited_id=int(referral) if referral else None
+                invited_id=int(referral) if referral else None,
+                bot_token=message.bot.token
             )
             print(f"➕ Added user {message.from_user.id} to database, result: {new_user}")
 

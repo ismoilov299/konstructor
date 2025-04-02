@@ -274,13 +274,20 @@ async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
 
     user_exists = await check_user(message.from_user.id)
     if not user_exists:
-        await add_user(message.from_user, link_for_db)
+        # add_user funksiyasini yangilash - ClientBotUser uchun bot tokenini ham o'tkazish
+        await add_user(
+            tg_id=message.from_user.id,
+            user_name=message.from_user.first_name,
+            invited="Referral" if referral else "Никто",
+            invited_id=int(referral) if referral else None,
+            bot_token=bot.token,  # Bot tokenini o'tkazish
+            user_link=link_for_db
+        )
 
     if referral:
         await process_referral(message, int(referral))
 
     await show_main_menu(message, bot)
-
 async def process_existing_user(message: types.Message, bot: Bot):
     logger.info(f"Processing existing user {message.from_user.id}")
     await show_main_menu(message, bot)
@@ -373,7 +380,8 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name,
-                    user_link=link_for_db
+                    user_link=link_for_db,
+                    bot_token=message.bot.token
                 )
         else:
             # Agar args yo'q bo'lsa
@@ -466,7 +474,7 @@ async def process_referral(message: Message, referral_id: int):
         return False
 
 
-@client_bot_router.callback_query(lambda c: c.data == 'check_chan',AnonBotFilter())
+@client_bot_router.callback_query(lambda c: c.data == 'check_chan', AnonBotFilter())
 async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: Bot):
     user_id = callback.from_user.id
     subscribed = await check_channels(user_id, bot)
@@ -500,9 +508,14 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
     if not user_exists:
         new_link = await create_start_link(bot, str(callback.from_user.id))
         link_for_db = new_link[new_link.index("=") + 1:]
-        await add_user(callback.from_user, link_for_db)
 
-        # State dan referal ID ni olamiz
+        await add_user(
+            tg_id=callback.from_user,
+            user_name=callback.from_user.first_name,
+            user_link=link_for_db,
+            bot_token=bot.token
+        )
+
         data = await state.get_data()
         referral = data.get('referral')
         if referral:
@@ -512,13 +525,11 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             except ValueError:
                 logger.error(f"Invalid referral ID: {referral}")
 
-    # State dan target ID ni tekshiramiz
     data = await state.get_data()
     target_id = data.get('link_user')
 
     if target_id:
-        # Anonim xabar uchun - yangi xabar yuboramiz
-        await callback.message.delete()  # Eski xabarni o'chiramiz
+        await callback.message.delete()
         await callback.message.answer(
             "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
             "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
@@ -541,7 +552,6 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             parse_mode="html",
             reply_markup=await main_menu_bt()
         )
-
 
 @client_bot_router.callback_query(F.data.in_(["cancel",
                                               "greeting_rem"]),AnonBotFilter())
