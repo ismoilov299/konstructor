@@ -444,7 +444,6 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
 
 @client_bot_router.message(F.text == "📱Профиль")
 async def profile(message: Message):
-    """Show user profile with referral information"""
     try:
         channels_checker = await check_channels(message)
         is_banned = await check_ban(message.from_user.id)
@@ -452,13 +451,10 @@ async def profile(message: Message):
         if not channels_checker or is_banned:
             return
 
-        # Foydalanuvchi ma'lumotlarini olish
         user_info = await get_user_info_db(message.from_user.id)
 
-        # Agar foydalanuvchi topilmasa, uni qo'shamiz
         if not user_info:
             try:
-                # Yangi foydalanuvchini qo'shish
                 await add_user(
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name,
@@ -466,7 +462,6 @@ async def profile(message: Message):
                 )
                 print(f"Added new user {message.from_user.id} from profile")
 
-                # Ma'lumotlarni qayta olish
                 user_info = await get_user_info_db(message.from_user.id)
 
                 if not user_info:

@@ -639,7 +639,7 @@ async def admin_get_stats(call: CallbackQuery):
         print(f"Bot DB object: {bot_db}")
 
         if bot_db:
-            total = await users_count(bot_db)
+            total =  await get_user_info_db(call.from_user.id)
             print(f"Users count: {total}")
 
             new_text = f'<b>Количество пользователей в боте:</b> {total}'
