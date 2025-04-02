@@ -642,7 +642,7 @@ async def admin_get_stats(call: CallbackQuery):
             total =  await get_user_info_db(call.from_user.id)
             print(f"Users count: {total}")
 
-            new_text = f'<b>Количество пользователей в боте:</b> {total}'
+            new_text = f'<b>Количество пользователей в боте:</b> {total[3]}'
 
             try:
                 await call.message.edit_text(
