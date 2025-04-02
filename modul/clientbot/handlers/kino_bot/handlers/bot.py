@@ -1362,7 +1362,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
     await message.answer(text, **kwargs)
 
-
+import html
 @client_bot_router.message(CommandStart(), NonChatGptFilter())
 async def start_on(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     try:
