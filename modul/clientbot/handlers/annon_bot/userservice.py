@@ -7,7 +7,7 @@ from django.utils import timezone
 from psycopg2 import IntegrityError
 
 from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today, \
-    ChannelSponsor, ClientBotUser
+    ChannelSponsor, ClientBotUser, Bot
 import pytz
 
 moscow_timezone = pytz.timezone('Europe/Moscow')
