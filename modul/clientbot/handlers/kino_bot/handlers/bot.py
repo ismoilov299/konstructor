@@ -1630,7 +1630,7 @@ async def reply_start_search(message: Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.message(SearchFilmForm.query)
 async def get_results(message: types.Message, state: FSMContext, bot: Bot):
-    await state.clear()
+    # await state.clear()  # Bu qatorni olib tashlang yoki kommentariyaga aylantiring
 
     sub_status = await check_subs(message.from_user.id, bot)
 
@@ -1649,6 +1649,12 @@ async def get_results(message: types.Message, state: FSMContext, bot: Bot):
     kb = await get_films_kb(results)
 
     await message.answer(f'<b>Результаты поиска по ключевому слову</b>: {message.text}', reply_markup=kb)
+
+    await state.set_state(SearchFilmForm.query)
+    await message.answer(
+        '<b>Можете искать другие фильмы. Отправьте название фильма / сериала / аниме</b>',
+        parse_mode="HTML"
+    )
 
 
 @client_bot_router.message(StateFilter(SearchFilmForm.query), KinoBotFilter())
