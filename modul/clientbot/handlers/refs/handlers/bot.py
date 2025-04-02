@@ -279,7 +279,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext = None, referr
                     logger.warning(f"SELF-REFERRAL DETECTED: User {message.from_user.id} tried to refer themselves!")
                     await add_user(
                         tg_id=message.from_user.id,
-                        user_name=message.from_user.first_name
+                        user_name=message.from_user.first_name,
+                        bot_token=message.bot.token
                     )
                     await message.answer(
                         "❌ Siz o'zingizni taklif qila olmaysiz!",
@@ -297,7 +298,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext = None, referr
                     logger.warning(f"Referrer {referrer_id} does not exist in database")
                     await add_user(
                         tg_id=message.from_user.id,
-                        user_name=message.from_user.first_name
+                        user_name=message.from_user.first_name,
+                        bot_token=message.bot.token
                     )
                     await message.answer(
                         f"🎉 Привет, {message.from_user.first_name}",
@@ -313,7 +315,8 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext = None, referr
                     tg_id=message.from_user.id,
                     user_name=message.from_user.first_name,
                     invited="Referral",  # Referrerning statusi
-                    invited_id=referrer_id
+                    invited_id=referrer_id,
+                    bot_token=message.bot.token
                 )
 
                 if new_user:
@@ -368,13 +371,15 @@ async def start_ref(message: Message, bot: Bot, state: FSMContext = None, referr
                 logger.error(f"Invalid referral ID: {referral}")
                 await add_user(
                     tg_id=message.from_user.id,
-                    user_name=message.from_user.first_name
+                    user_name=message.from_user.first_name,
+                    bot_token=message.bot.token
                 )
         elif not is_registered:
             logger.info(f"Adding new user {message.from_user.id} without referral")
             await add_user(
                 tg_id=message.from_user.id,
-                user_name=message.from_user.first_name
+                user_name=message.from_user.first_name,
+                bot_token=message.bot.token
             )
 
         # Yangi foydalanuvchilarga xabar yuborish
@@ -456,7 +461,8 @@ async def profile(message: Message):
                 # Yangi foydalanuvchini qo'shish
                 await add_user(
                     tg_id=message.from_user.id,
-                    user_name=message.from_user.first_name
+                    user_name=message.from_user.first_name,
+                    bot_token=message.bot.token
                 )
                 print(f"Added new user {message.from_user.id} from profile")
 
@@ -514,7 +520,8 @@ async def info(message: Message):
             # Yangi foydalanuvchini qo'shish
             await add_user(
                 tg_id=message.from_user.id,
-                user_name=message.from_user.first_name
+                user_name=message.from_user.first_name,
+                bot_token=message.bot.token
             )
             print(f"Added new user {message.from_user.id} from info")
 
@@ -710,7 +717,8 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                         tg_id=user_id,
                         user_name=query.from_user.first_name,
                         invited="Referral",
-                        invited_id=ref_id
+                        invited_id=ref_id,
+                        bot_token=query.bot.token
                     )
                     print(f"➕ Added user {user_id} to database, result: {new_user}")
 
@@ -866,7 +874,8 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
                             tg_id=query.from_user.id,
                             user_name=query.from_user.first_name,
                             invited="Referral",
-                            invited_id=ref_id
+                            invited_id=ref_id,
+                            bot_token=query.bot.token
                         )
 
                         if new_user:
@@ -930,7 +939,8 @@ async def process_new_user_referral(query, referrer_id):
             tg_id=query.from_user.id,
             user_name=query.from_user.first_name,
             invited="Referral",
-            invited_id=referrer_id
+            invited_id=referrer_id,
+            bot_token=query.bot.token
         )
 
         if not user_added:
