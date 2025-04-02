@@ -1568,8 +1568,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         # )
 
         # State'ni tozalash
-        await state.clear()
-        print(f"🧹 Cleared state for user {message.from_user.id}")
+        # await state.clear()
+        # print(f"🧹 Cleared state for user {message.from_user.id}")
 
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
@@ -1676,7 +1676,6 @@ async def simple_text_film_handler(message: Message, bot: Bot):
 
     await message.answer(f'<b>Результаты поиска по ключевому слову</b>: {message.text}', reply_markup=kb,
                          parse_mode="HTML")
-
 
 @client_bot_router.inline_query(F.query)
 async def inline_film_requests(query: InlineQuery):
