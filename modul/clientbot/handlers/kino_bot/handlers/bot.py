@@ -1174,7 +1174,7 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         await callback.message.answer(text,
                                       reply_markup=await reply_kb.main_menu(user_id, bot))
 # Kino_bot/bot.py faylidagi start funksiyasining referral jarayonini boshqaradigan qismi
-
+import html
 async def start(message: Message, state: FSMContext, bot: Bot):
     print(f"Start function called for user {message.from_user.id}")
     bot_db = await shortcuts.get_bot(bot)
@@ -1199,7 +1199,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         state_data = await state.get_data()
         print(f"State after saving for user {uid}: {state_data}")
 
-    text = "Добро пожаловать, {hello}".format(hello=html.quote(message.from_user.full_name))
+    text = "Добро пожаловать, {hello}".format(hello=html.escape(message.from_user.full_name))
     kwargs = {}
 
     if shortcuts.have_one_module(bot_db, "download"):
