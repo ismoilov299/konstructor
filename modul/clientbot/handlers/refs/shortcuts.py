@@ -4,7 +4,7 @@ import traceback
 from asgiref.sync import sync_to_async
 from django.db.models import F, Sum
 from django.utils import timezone
-from psycopg import IntegrityError
+from psycopg2 import IntegrityError
 
 from modul.models import UserTG, Checker, Withdrawals, AdminInfo, Channels, Bot, ChannelSponsor, ClientBotUser
 
