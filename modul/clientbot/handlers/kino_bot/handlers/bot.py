@@ -1561,12 +1561,11 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         print(f"🚫 Self-referral detected: user {message.from_user.id} trying to refer themselves")
                 except ValueError:
                     print(f"❌ Invalid referrer_id: {referral}")
-
-        # Asosiy menyuni ko'rsatish
-        await message.answer(
-            f"🎉Привет, {message.from_user.first_name}",
-            reply_markup=await main_menu_bt()
-        )
+        await start(message,state, bot)
+        # await message.answer(
+        #     f"🎉Привет, {message.from_user.first_name}",
+        #     reply_markup=await main_menu_bt()
+        # )
 
         # State'ni tozalash
         await state.clear()
