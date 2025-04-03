@@ -250,7 +250,7 @@ def change_price(new_price):
 
 @sync_to_async
 def change_min_amount(new_amount):
-    AdminInfo.objects.filter(id=1).update(min_amount=new_amount)
+    AdminInfo.objects.filter(id=2).update(min_amount=new_amount)
 
 
 @sync_to_async

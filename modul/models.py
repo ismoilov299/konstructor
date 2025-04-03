@@ -331,7 +331,7 @@ class Channels(models.Model):
 
 class AdminInfo(models.Model):
     admin_channel = models.CharField(max_length=255)
-    price = models.FloatField(default=10.0)  # Default narx qo'shildi
+    price = models.FloatField(default=10.0)
     min_amount = models.FloatField(default=50.0)
 
     class Meta:

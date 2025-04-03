@@ -516,6 +516,7 @@ async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
 
     try:
         new_min_payout = float(message.text)
+        print(new_min_payout)
 
         await change_min_amount(new_min_payout)
 
