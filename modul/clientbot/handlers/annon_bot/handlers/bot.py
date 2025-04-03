@@ -361,7 +361,8 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                     await add_user(
                         tg_id=message.from_user.id,
                         user_name=message.from_user.first_name,
-                        invited_id=str(referral_id)
+                        invited_id=str(referral_id),
+                        bot_token=message.bot.token  # Bot tokenini qo'shdik
                     )
                     # So'ng referral jarayonini ishga tushirish
                     success = await process_referral(message, referral_id)
@@ -372,7 +373,8 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                     await add_user(
                         tg_id=message.from_user.id,
                         user_name=message.from_user.first_name,
-                        user_link=link_for_db
+                        user_link=link_for_db,
+                        bot_token=message.bot.token  # Bot tokenini qo'shdik
                     )
             except ValueError:
                 # Agar args son bo'lmasa
@@ -389,7 +391,8 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             await add_user(
                 tg_id=message.from_user.id,
                 user_name=message.from_user.first_name,
-                user_link=link_for_db
+                user_link=link_for_db,
+                bot_token=message.bot.token  # Bot tokenini qo'shdik
             )
 
     # Anonim xabar yuborish qismi
