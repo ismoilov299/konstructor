@@ -310,6 +310,7 @@ async def show_main_menu(message: types.Message, bot: Bot):
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
+    await state.clear()
     logger.info(f"Start command received from user {message.from_user.id} anon bot")
     args = command.args
 
