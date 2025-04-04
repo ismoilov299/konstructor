@@ -211,7 +211,7 @@ def value_handler(num):
     return num or 0
 
 
-sync_to_async
+@sync_to_async
 def get_all_statistic(uid: int):
     today_start = timezone.now().astimezone(moscow_timezone).replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start.replace(hour=23, minute=59, second=59, microsecond=999999)
