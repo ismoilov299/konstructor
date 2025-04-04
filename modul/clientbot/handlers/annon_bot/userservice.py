@@ -189,15 +189,22 @@ def add_rating_overall(uid):
 
 @sync_to_async
 def add_link_statistic(uid):
-    Link_statistic.objects.create(
-        user_id=uid,
-    )
+    def create_link():
+        return Link_statistic.objects.create(
+            user_id=uid,
+            reg_date=timezone.now().astimezone(moscow_timezone)
+        )
+
+    stat = create_link()
     return uid
+
 
 async def add_stats(uid):
     user_id = await add_link_statistic(uid)
     await add_rating_today(user_id)
     await add_rating_overall(user_id)
+
+    return user_id
 
 @sync_to_async
 def add_answer_statistic(uid):
