@@ -168,7 +168,7 @@ def add_rating_today(uid):
     actual_date = timezone.now().astimezone(moscow_timezone).date()
     rating, created = Rating_today.objects.get_or_create(
         user_id=uid,
-        reg_date=actual_date,
+        reg_date=actual_date,  # Bu qism muammoli bo'lishi mumkin
         defaults={'amount': 1}
     )
     if not created:
