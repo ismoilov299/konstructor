@@ -211,18 +211,19 @@ def value_handler(num):
     return num or 0
 
 
-@sync_to_async
+sync_to_async
 def get_all_statistic(uid: int):
-    actual_date = timezone.now().astimezone(moscow_timezone).date()
+    today_start = timezone.now().astimezone(moscow_timezone).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-    messages_today = Messages.objects.filter(receiver_id=uid, reg_date=actual_date).count()
+    messages_today = Messages.objects.filter(receiver_id=uid, reg_date__range=(today_start, today_end)).count()
     messages_overall = Messages.objects.filter(receiver_id=uid).count()
-    answers_today = Answer_statistic.objects.filter(user_id=uid, reg_date=actual_date).count()
-    answers_overall = Rating_overall.objects.filter(user_id=uid).count()
-    links_today = Link_statistic.objects.filter(user_id=uid, reg_date=actual_date).count()
+    answers_today = Answer_statistic.objects.filter(user_id=uid, reg_date__range=(today_start, today_end)).count()
+    answers_overall = Answer_statistic.objects.filter(user_id=uid).count()
+    links_today = Link_statistic.objects.filter(user_id=uid, reg_date__range=(today_start, today_end)).count()
     links_overall = Link_statistic.objects.filter(user_id=uid).count()
 
-    rating_today = Rating_today.objects.filter(reg_date=actual_date).order_by('-amount')
+    rating_today = Rating_today.objects.filter(reg_date__range=(today_start, today_end)).order_by('-amount')
     rating_overall = Rating_overall.objects.order_by('-amount')
 
     position_today = next((i for i, r in enumerate(rating_today, 1) if r.user_id == uid), "1000+")
