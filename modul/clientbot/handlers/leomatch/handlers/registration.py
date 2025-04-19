@@ -278,7 +278,7 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         await add_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search,
                       bot.username)
     else:
-        await update_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search)
+        await update_leo(uid= message.from_user.id,photo= photo,media_type= media_type,sex= sex,age= age,full_name= full_name,about_me= about_me,city= city,which_search= which_search)
     await state.clear()
     await manage(message, state)
 
