@@ -172,7 +172,8 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                 f"Data: {{'photo': {photo}, 'media_type': {media_type}, 'sex': {sex}, 'age': {age}, 'full_name': {full_name}, 'about_me': {about_me}, 'city': {city}, 'which_search': {which_search}}}")
 
             # Agar rasmni bazadan olish mumkin bo'lsa
-            existing_leo = LeoMatchModel.objects.filter(uid=uid).first()
+            # "uid" ni "user_id" ga o'zgartirish
+            existing_leo = LeoMatchModel.objects.filter(user_id=uid).first()
             if existing_leo:
                 print(f"Found existing LeoMatch data for user {uid}")
                 # Agar bazada ma'lumotlar bo'lsa, faqat ularni yangilash
@@ -183,21 +184,39 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                     media_type = existing_leo.media_type
                     print(f"Using existing media_type: {media_type}")
 
-        leo = LeoMatchModel.objects.get(uid=uid)
-        leo.photo = photo
-        leo.media_type = media_type
-        leo.sex = sex
-        leo.age = age
-        leo.full_name = full_name
-        leo.about_me = about_me
-        leo.city = city
-        leo.which_search = which_search
+        # "uid" ni "user_id" ga o'zgartirish va .get() o'rniga .filter().first()
+        leo = LeoMatchModel.objects.filter(user_id=uid).first()
+
+        # Agar ma'lumotlar topilmasa, yangi yozuv yaratish
+        if not leo:
+            print(f"Creating new LeoMatchModel for user {uid}")
+            leo = LeoMatchModel(
+                user_id=uid,
+                photo=photo,
+                media_type=media_type,
+                sex=sex,
+                age=age,
+                full_name=full_name,
+                about_me=about_me,
+                city=city,
+                which_search=which_search
+            )
+        else:
+            # Mavjud yozuvni yangilash
+            leo.photo = photo
+            leo.media_type = media_type
+            leo.sex = sex
+            leo.age = age
+            leo.full_name = full_name
+            leo.about_me = about_me
+            leo.city = city
+            leo.which_search = which_search
+
         leo.save()
         return True
     except Exception as e:
         print(f"Error updating LeoMatch data for user {uid}: {e}")
         raise e
-
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
                      reply_markup: types.ReplyKeyboardMarkup = None):
     account = await get_leo(from_account)
