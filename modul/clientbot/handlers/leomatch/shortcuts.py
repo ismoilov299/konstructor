@@ -158,6 +158,7 @@ def save_model_sync(model):
     model.save()
 
 
+@sync_to_async
 def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search):
     try:
         # Debug
@@ -217,6 +218,7 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
     except Exception as e:
         print(f"Error updating LeoMatch data for user {uid}: {e}")
         raise e
+
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
                      reply_markup: types.ReplyKeyboardMarkup = None):
     account = await get_leo(from_account)
