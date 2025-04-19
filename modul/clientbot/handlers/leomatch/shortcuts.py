@@ -165,6 +165,10 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         print(f"Updating LeoMatch data for user {uid}")
         print(f"Photo: {photo}, Media Type: {media_type}")
 
+        # Agar photo yoki media_type NULL bo'lsa, sukut bo'yicha qiymat berish
+        DEFAULT_PHOTO = "default_photo_id"  # Sukut bo'yicha rasm ID
+        DEFAULT_MEDIA_TYPE = "PHOTO"  # Sukut bo'yicha media turi
+
         # Null qiymatlarni tekshirish
         if photo is None or media_type is None:
             # Qo'shimcha xatolik ma'lumotlarini log qilish
@@ -173,17 +177,24 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                 f"Data: {{'photo': {photo}, 'media_type': {media_type}, 'sex': {sex}, 'age': {age}, 'full_name': {full_name}, 'about_me': {about_me}, 'city': {city}, 'which_search': {which_search}}}")
 
             # Agar rasmni bazadan olish mumkin bo'lsa
-            # "uid" ni "user_id" ga o'zgartirish
             existing_leo = LeoMatchModel.objects.filter(user_id=uid).first()
             if existing_leo:
                 print(f"Found existing LeoMatch data for user {uid}")
                 # Agar bazada ma'lumotlar bo'lsa, faqat ularni yangilash
                 if photo is None:
-                    photo = existing_leo.photo
+                    photo = existing_leo.photo if existing_leo.photo else DEFAULT_PHOTO
                     print(f"Using existing photo: {photo}")
                 if media_type is None:
-                    media_type = existing_leo.media_type
+                    media_type = existing_leo.media_type if existing_leo.media_type else DEFAULT_MEDIA_TYPE
                     print(f"Using existing media_type: {media_type}")
+            else:
+                # Agar mavjud ma'lumotlar bo'lmasa, sukut qiymatlarini ishlatamiz
+                if photo is None:
+                    photo = DEFAULT_PHOTO
+                    print(f"Using default photo: {photo}")
+                if media_type is None:
+                    media_type = DEFAULT_MEDIA_TYPE
+                    print(f"Using default media_type: {media_type}")
 
         # "uid" ni "user_id" ga o'zgartirish va .get() o'rniga .filter().first()
         leo = LeoMatchModel.objects.filter(user_id=uid).first()
@@ -193,8 +204,8 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             print(f"Creating new LeoMatchModel for user {uid}")
             leo = LeoMatchModel(
                 user_id=uid,
-                photo=photo,
-                media_type=media_type,
+                photo=photo or DEFAULT_PHOTO,  # None bo'lsa, sukut bo'yicha qiymat
+                media_type=media_type or DEFAULT_MEDIA_TYPE,  # None bo'lsa, sukut bo'yicha qiymat
                 sex=sex,
                 age=age,
                 full_name=full_name,
@@ -204,8 +215,8 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             )
         else:
             # Mavjud yozuvni yangilash
-            leo.photo = photo
-            leo.media_type = media_type
+            leo.photo = photo or DEFAULT_PHOTO  # None bo'lsa, sukut bo'yicha qiymat
+            leo.media_type = media_type or DEFAULT_MEDIA_TYPE  # None bo'lsa, sukut bo'yicha qiymat
             leo.sex = sex
             leo.age = age
             leo.full_name = full_name
