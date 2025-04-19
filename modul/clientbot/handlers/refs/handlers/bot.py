@@ -545,7 +545,7 @@ async def info(message: Message):
 
         await message.bot.send_message(
             message.from_user.id,
-            f"👥 Всего пользователей: {user_info[3]}\n",
+            f"👥 Всего пользователей: {all_info}\n",
             reply_markup=await admin_in(admin_user)
         )
 
