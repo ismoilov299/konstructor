@@ -32,18 +32,25 @@ def get_file_extension(media_type):
         return "jpg"
 
 
-
 async def save_media(message: types.Message, state: FSMContext, file_path: str, media_type: str):
     try:
+        # Barcha mavjud state ma'lumotlarini olish
         data = await state.get_data()
+
+        # Ma'lumotlarni olish
         age = data.get('age')
         full_name = data.get('full_name')
         about_me = data.get('about_me')
         city = data.get('city')
-
         await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, media_type)
-        await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
+
         await state.set_state(LeomatchRegistration.FINAL)
+
+        await state.update_data(photo=data.get('photo'), media_type=data.get('media_type'))
+        await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
+        final_data = await state.get_data()
+        print(f"Final state data after save_media: {final_data}")
+
     except Exception as e:
         print(f"Error in save_media: {e}")
         await message.answer("Произошла ошибка при сохранении медиа")
