@@ -34,22 +34,46 @@ def get_file_extension(media_type):
 
 async def save_media(message: types.Message, state: FSMContext, file_path: str, media_type: str):
     try:
-        # Barcha mavjud state ma'lumotlarini olish
+        # Oldingi state ma'lumotlarini olish
         data = await state.get_data()
+        print(f"Data in save_media BEFORE: {data}")
 
-        # Ma'lumotlarni olish
+        # State'ga photo va media_type qiymatlarini saqlash
+        photo = data.get('photo')
+        media_type_value = data.get('media_type')
+
+        # Agar photo va media_type statedan olinmagan bo'lsa, parametrlar orqali keldi
+        if not photo or not media_type_value:
+            print("Using provided parameters for media")
+            # Bu yerda ma'lumotlarni file_path va media_type dan olish mumkin
+
+        # Qolgan ma'lumotlarni olish
         age = data.get('age')
         full_name = data.get('full_name')
         about_me = data.get('about_me')
         city = data.get('city')
+
+        # Profilni ko'rsatish
         await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, media_type)
 
+        # Yangi statega o'tish
         await state.set_state(LeomatchRegistration.FINAL)
 
-        await state.update_data(photo=data.get('photo'), media_type=data.get('media_type'))
+        # MUHIM: barcha ma'lumotlarni qayta saqlash
+        await state.update_data(
+            photo=photo,  # Rasmni qayta saqlash
+            media_type=media_type_value,  # Media turini qayta saqlash
+            age=age,
+            full_name=full_name,
+            about_me=about_me,
+            city=city
+        )
+
+        # Tekshirish uchun
+        updated_data = await state.get_data()
+        print(f"Data in save_media AFTER: {updated_data}")
+
         await message.answer("Всё верно?", reply_markup=reply_kb.final_registration())
-        final_data = await state.get_data()
-        print(f"Final state data after save_media: {final_data}")
 
     except Exception as e:
         print(f"Error in save_media: {e}")
@@ -222,6 +246,10 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         print(f"File saved to: {file_path}")
 
         await state.update_data(photo=url, media_type=type)
+
+        updated_data = await state.get_data()
+        print(f"State after saving photo: {updated_data}")
+
         await save_media(message, state, file_path, type)
 
     except Exception as e:

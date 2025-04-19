@@ -158,48 +158,45 @@ def save_model_sync(model):
     model.save()
 
 
-@sync_to_async
-def update_leo(user_id, photo, media_type, sex, age, full_name, about_me, city, which_search):
-    """Update LeoMatch user information"""
+def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search):
     try:
-        with transaction.atomic():
-            # Get user first
-            user = UserTG.objects.get(uid=user_id)
+        # Debug
+        print(f"Updating LeoMatch data for user {uid}")
+        print(f"Photo: {photo}, Media Type: {media_type}")
 
-            # Get or create LeoMatch instance
-            leo, created = LeoMatchModel.objects.get_or_create(
-                user=user,
-                defaults={
-                    'photo': photo,
-                    'media_type': media_type,
-                    'sex': sex,
-                    'age': age,
-                    'full_name': full_name,
-                    'about_me': about_me,
-                    'city': city,
-                    'which_search': which_search,
-                    'bot_username': 'YOUR_BOT_USERNAME'  # O'zgartiring yoki dinamik qilib oling
-                }
-            )
+        # Null qiymatlarni tekshirish
+        if photo is None or media_type is None:
+            # Qo'shimcha xatolik ma'lumotlarini log qilish
+            print(f"Error: photo or media_type is None for user {uid}")
+            print(
+                f"Data: {{'photo': {photo}, 'media_type': {media_type}, 'sex': {sex}, 'age': {age}, 'full_name': {full_name}, 'about_me': {about_me}, 'city': {city}, 'which_search': {which_search}}}")
 
-            if not created:
-                # Update existing record
-                leo.photo = photo
-                leo.media_type = media_type
-                leo.sex = sex
-                leo.age = age
-                leo.full_name = full_name
-                leo.about_me = about_me
-                leo.city = city
-                leo.which_search = which_search
-                leo.save()
+            # Agar rasmni bazadan olish mumkin bo'lsa
+            existing_leo = LeoMatchModel.objects.filter(uid=uid).first()
+            if existing_leo:
+                print(f"Found existing LeoMatch data for user {uid}")
+                # Agar bazada ma'lumotlar bo'lsa, faqat ularni yangilash
+                if photo is None:
+                    photo = existing_leo.photo
+                    print(f"Using existing photo: {photo}")
+                if media_type is None:
+                    media_type = existing_leo.media_type
+                    print(f"Using existing media_type: {media_type}")
 
-            return leo
-
+        leo = LeoMatchModel.objects.get(uid=uid)
+        leo.photo = photo
+        leo.media_type = media_type
+        leo.sex = sex
+        leo.age = age
+        leo.full_name = full_name
+        leo.about_me = about_me
+        leo.city = city
+        leo.which_search = which_search
+        leo.save()
+        return True
     except Exception as e:
-        print(f"Error updating LeoMatch data for user {user_id}: {e}")
+        print(f"Error updating LeoMatch data for user {uid}: {e}")
         raise e
-
 
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
                      reply_markup: types.ReplyKeyboardMarkup = None):
