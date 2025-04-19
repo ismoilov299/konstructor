@@ -227,6 +227,7 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
 @client_bot_router.message(F.text == ("Да"), LeomatchRegistration.FINAL)
 async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
+    print(data)
     photo = data['photo']
     media_type = data['media_type']
     data = await state.get_data()
