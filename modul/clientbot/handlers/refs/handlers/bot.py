@@ -539,7 +539,7 @@ async def info(message: Message):
 
     if channels_checker and checker_banned:
         # all_info = await count_info()
-        info_user = await get_user_info_db()
+        # info_user = await get_user_info_db()
 
         users_count = await count_info()
         total_users = users_count[0]
