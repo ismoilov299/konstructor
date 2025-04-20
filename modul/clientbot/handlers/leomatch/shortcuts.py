@@ -184,9 +184,10 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             # Используем информацию из параметров
             user = UserTG(
                 id=uid,
+                uid=str(uid),  # Заполняем uid тем же значением, что и id
                 username=f"user_{uid}",  # временное имя пользователя
-                first_name=full_name if full_name else f"User {uid}",
-                # Другие поля по умолчанию
+                first_name=full_name if full_name else f"User {uid}"
+                # Остальные поля заполняются значениями по умолчанию
             )
             user.save()
             print(f"Created new UserTG with ID {uid}")
