@@ -1,3 +1,4 @@
+import traceback
 from dataclasses import dataclass
 
 from aiogram.types import ReplyKeyboardMarkup, FSInputFile
@@ -259,75 +260,90 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         if keyboard:
             kwargs['reply_markup'] = keyboard
 
-        print(f"Showing profile - media_type: {media_type}, photo: {photo}")
+        print(f"DEBUG: Showing profile - media_type: {media_type}, photo path: {photo}")
 
-        # Проверяем существование файла и формируем абсолютный путь при необходимости
-        if not os.path.isabs(photo) and not photo.startswith(('http://', 'https://')):
-            # Если путь относительный, сделаем его абсолютным
-            base_path = os.path.dirname(os.path.abspath(__file__))  # Путь к текущему файлу
-            absolute_path = os.path.join(base_path, photo)
-            if os.path.exists(absolute_path):
-                photo = absolute_path
+        # Отладка путей
+        print(f"DEBUG: Current working directory: {os.getcwd()}")
+        print(f"DEBUG: Is absolute path: {os.path.isabs(photo)}")
 
-        is_local_file = os.path.exists(photo)
+        # Проверка существования файла с подробной информацией
+        file_exists = os.path.exists(photo)
+        print(f"DEBUG: File exists check (direct): {file_exists}")
+
+        # Если путь относительный, попробуем построить разные варианты пути
+        if not os.path.isabs(photo):
+            # Вариант 1: от текущей директории
+            abs_path1 = os.path.join(os.getcwd(), photo)
+            exists1 = os.path.exists(abs_path1)
+            print(f"DEBUG: Absolute path 1: {abs_path1}, exists: {exists1}")
+
+            # Вариант 2: от родительской директории текущего файла
+            current_file = os.path.abspath(__file__)
+            parent_dir = os.path.dirname(os.path.dirname(current_file))
+            abs_path2 = os.path.join(parent_dir, photo)
+            exists2 = os.path.exists(abs_path2)
+            print(f"DEBUG: Absolute path 2: {abs_path2}, exists: {exists2}")
+
+            # Вариант 3: от корня проекта (предполагая, что modul находится в корне)
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+            abs_path3 = os.path.join(project_root, photo)
+            exists3 = os.path.exists(abs_path3)
+            print(f"DEBUG: Absolute path 3: {abs_path3}, exists: {exists3}")
+
+            # Используем первый найденный рабочий путь
+            if exists1:
+                photo = abs_path1
+                file_exists = True
+            elif exists2:
+                photo = abs_path2
+                file_exists = True
+            elif exists3:
+                photo = abs_path3
+                file_exists = True
+
+        print(f"DEBUG: Final photo path: {photo}")
+        print(f"DEBUG: Final file exists: {file_exists}")
 
         if media_type == "VIDEO":
-            if is_local_file:
+            if file_exists:
+                print("DEBUG: Sending video as local file")
                 await message.answer_video(
                     video=FSInputFile(photo),
                     caption=caption,
                     **kwargs
                 )
             else:
-                # Проверяем, является ли photo валидным URL
-                if photo.startswith(('http://', 'https://')):
-                    await message.answer_video(
-                        video=photo,
-                        caption=caption,
-                        **kwargs
-                    )
-                else:
-                    # Если не файл и не URL, отправляем сообщение об ошибке
-                    await message.answer(f"Видео не найдено. {caption}", **kwargs)
+                print("DEBUG: Video file not found, sending error message")
+                await message.answer(f"Видео не найдено. {caption}", **kwargs)
 
         elif media_type == "VIDEO_NOTE":
-            if is_local_file:
+            if file_exists:
+                print("DEBUG: Sending video note as local file")
                 await message.answer_video_note(
                     video_note=FSInputFile(photo),
                     **kwargs
                 )
             else:
-                if photo.startswith(('http://', 'https://')):
-                    await message.answer_video_note(
-                        video_note=photo,
-                        **kwargs
-                    )
-                else:
-                    await message.answer(f"Видеозаписка не найдена.", **kwargs)
+                print("DEBUG: Video note file not found, sending error message")
+                await message.answer(f"Видеозаписка не найдена.", **kwargs)
             await message.answer(caption, **kwargs)
 
         else:  # PHOTO
-            if is_local_file:
+            if file_exists:
+                print("DEBUG: Sending photo as local file")
                 await message.answer_photo(
                     photo=FSInputFile(photo),
                     caption=caption,
                     **kwargs
                 )
             else:
-                if photo.startswith(('http://', 'https://')):
-                    await message.answer_photo(
-                        photo=photo,
-                        caption=caption,
-                        **kwargs
-                    )
-                else:
-                    # Если не файл и не URL, отправляем сообщение без фото
-                    await message.answer(f"Фото не найдено. {caption}", **kwargs)
+                print("DEBUG: Photo file not found, sending error message")
+                await message.answer(f"Фото не найдено. {caption}", **kwargs)
 
     except Exception as e:
-        print(f"Error in show_profile: {e}")
-        # Отправляем сообщение без медиа при ошибке
-        await message.answer(f"{full_name}, {age}, {city}\n{about_me}\nОшибка при загрузке медиа.", **kwargs)
+        print(f"DEBUG: Error in show_profile: {e}")
+        print(f"DEBUG: Error traceback: {traceback.format_exc()}")
+        await message.answer(f"{full_name}, {age}, {city}\n{about_me}\nОшибка при загрузке медиа: {str(e)}", **kwargs)
 
 async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
                            type: str, username: str, keyboard=None):
