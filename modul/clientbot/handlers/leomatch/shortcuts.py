@@ -166,6 +166,16 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         print(f"Updating LeoMatch data for user {uid}")
         print(f"Photo: {photo}, Media Type: {media_type}")
 
+        # Проверяем, нет ли пустых значений для обязательных полей
+        if photo is None:
+            # Используем путь к файлу как значение для photo
+            photo = f"modul/clientbot/data/leo{uid}.jpg"
+            print(f"Using default photo path: {photo}")
+
+        if media_type is None:
+            media_type = "PHOTO"
+            print(f"Using default media_type: {media_type}")
+
         # Поиск существующей записи
         leo = LeoMatchModel.objects.filter(user_id=uid).first()
 
@@ -182,7 +192,7 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                 about_me=about_me,
                 city=city,
                 which_search=which_search,
-                bot_username=""  # Добавляем пустую строку для обязательного поля
+                bot_username=""  # Пустая строка для обязательного поля
             )
         else:
             # Обновление существующей записи

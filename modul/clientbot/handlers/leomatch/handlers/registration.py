@@ -38,31 +38,22 @@ async def save_media(message: types.Message, state: FSMContext, file_path: str, 
         data = await state.get_data()
         print(f"Data in save_media BEFORE: {data}")
 
-        # State'ga photo va media_type qiymatlarini saqlash
-        photo = data.get('photo')
-        media_type_value = data.get('media_type')
-
-        # Agar photo va media_type statedan olinmagan bo'lsa, parametrlar orqali keldi
-        if not photo or not media_type_value:
-            print("Using provided parameters for media")
-            # Bu yerda ma'lumotlarni file_path va media_type dan olish mumkin
-
         # Qolgan ma'lumotlarni olish
         age = data.get('age')
         full_name = data.get('full_name')
         about_me = data.get('about_me')
         city = data.get('city')
 
-        # Profilni ko'rsaxtish
+        # Profilni ko'rsatish
         await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, media_type)
 
         # Yangi statega o'tish
         await state.set_state(LeomatchRegistration.FINAL)
 
-        # MUHIM: barcha ma'lumotlarni qayta saqlash
+        # MUHIM: barcha ma'lumotlarni qayta saqlash va file_path, media_type ni ham qo'shish
         await state.update_data(
-            photo=photo,  # Rasmni qayta saqlash
-            media_type=media_type_value,  # Media turini qayta saqlash
+            photo=file_path,  # file_path ni photo sifatida saqlash
+            media_type=media_type,  # Parametr orqali kelgan media_type ni saqlash
             age=age,
             full_name=full_name,
             about_me=about_me,
