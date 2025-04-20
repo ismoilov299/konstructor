@@ -248,8 +248,6 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         await message.answer("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
 
 
-
-
 @client_bot_router.message(F.text == ("Да"), LeomatchRegistration.FINAL)
 async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
@@ -263,13 +261,19 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     about_me = data['about_me']
     city = data['city']
     which_search = data['which_search']
+
+    # Получаем username текущего бота
+    bot_username = bot.username
+
     leo = await get_leo(message.from_user.id)
     if not leo:
-        bot = await get_current_bot(bot)
         await add_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search,
-                      bot.username)
+                      bot_username)
     else:
-        await update_leo(uid= message.from_user.id,photo= photo,media_type= media_type,sex= sex,age= age,full_name= full_name,about_me= about_me,city= city,which_search= which_search)
+        await update_leo(uid=message.from_user.id, photo=photo, media_type=media_type, sex=sex, age=age,
+                         full_name=full_name, about_me=about_me, city=city, which_search=which_search,
+                         bot_username=bot_username)  # Передаем username бота
+
     await state.clear()
     await manage(message, state)
 

@@ -160,11 +160,12 @@ def save_model_sync(model):
 
 
 @sync_to_async
-def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search):
+def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username=""):
     try:
         # Debug
         print(f"Updating LeoMatch data for user {uid}")
         print(f"Photo: {photo}, Media Type: {media_type}")
+        print(f"Bot username: {bot_username}")
 
         # Проверяем, нет ли пустых значений для обязательных полей
         if photo is None:
@@ -181,16 +182,16 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         if not user_exists:
             print(f"User {uid} does not exist in UserTG table. Creating user...")
             # Создаем нового пользователя в таблице UserTG
-            # Используем информацию из параметров
             user = UserTG(
                 id=uid,
                 uid=str(uid),  # Заполняем uid тем же значением, что и id
                 username=f"user_{uid}",  # временное имя пользователя
-                first_name=full_name if full_name else f"User {uid}"
+                first_name=full_name if full_name else f"User {uid}",
+                bot_username=bot_username  # Используем переданный username бота
                 # Остальные поля заполняются значениями по умолчанию
             )
             user.save()
-            print(f"Created new UserTG with ID {uid}")
+            print(f"Created new UserTG with ID {uid} for bot {bot_username}")
 
         # Поиск существующей записи
         leo = LeoMatchModel.objects.filter(user_id=uid).first()
@@ -208,7 +209,7 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                 about_me=about_me,
                 city=city,
                 which_search=which_search,
-                bot_username=""  # Пустая строка для обязательного поля
+                bot_username=bot_username  # Используем переданный username бота
             )
         else:
             # Обновление существующей записи
@@ -220,6 +221,7 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             leo.about_me = about_me
             leo.city = city
             leo.which_search = which_search
+            leo.bot_username = bot_username  # Обновляем username бота
 
         leo.save()
         return True
