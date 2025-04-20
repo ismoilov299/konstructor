@@ -261,18 +261,14 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     city = data['city']
     which_search = data['which_search']
 
-    # Получаем информацию о боте через метод get_me()
-    me = await bot.get_me()
-    bot_username = me.username if hasattr(me, 'username') else ""
+    # Убираем получение bot_username
 
     leo = await get_leo(message.from_user.id)
     if not leo:
-        await add_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search,
-                      bot_username)
+        await add_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search)
     else:
         await update_leo(uid=message.from_user.id, photo=photo, media_type=media_type, sex=sex, age=age,
-                         full_name=full_name, about_me=about_me, city=city, which_search=which_search,
-                         bot_username=bot_username)
+                         full_name=full_name, about_me=about_me, city=city, which_search=which_search)
 
     await state.clear()
     await manage(message, state)

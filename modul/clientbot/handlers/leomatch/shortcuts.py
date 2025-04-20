@@ -160,16 +160,14 @@ def save_model_sync(model):
 
 
 @sync_to_async
-def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username=""):
+def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search):
     try:
         # Debug
         print(f"Updating LeoMatch data for user {uid}")
         print(f"Photo: {photo}, Media Type: {media_type}")
-        print(f"Bot username: {bot_username}")
 
         # Проверяем, нет ли пустых значений для обязательных полей
         if photo is None:
-            # Используем путь к файлу как значение для photo
             photo = f"modul/clientbot/data/leo{uid}.jpg"
             print(f"Using default photo path: {photo}")
 
@@ -186,32 +184,16 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                 id=uid,
                 uid=str(uid),  # Заполняем uid тем же значением, что и id
                 username=f"user_{uid}",  # временное имя пользователя
-                first_name=full_name if full_name else f"User {uid}",
-                bot_username=bot_username  # Используем переданный username бота
-                # Остальные поля заполняются значениями по умолчанию
+                first_name=full_name if full_name else f"User {uid}"
             )
             user.save()
-            print(f"Created new UserTG with ID {uid} for bot {bot_username}")
+            print(f"Created new UserTG with ID {uid}")
 
         # Поиск существующей записи
         leo = LeoMatchModel.objects.filter(user_id=uid).first()
 
-        # Создание новой записи или обновление существующей
-        if not leo:
-            print(f"Creating new LeoMatchModel for user {uid}")
-            leo = LeoMatchModel(
-                user_id=uid,
-                photo=photo,
-                media_type=media_type,
-                sex=sex,
-                age=age,
-                full_name=full_name,
-                about_me=about_me,
-                city=city,
-                which_search=which_search,
-                bot_username=bot_username  # Используем переданный username бота
-            )
-        else:
+        # Только обновление существующей записи, без создания новой
+        if leo:
             # Обновление существующей записи
             leo.photo = photo
             leo.media_type = media_type
@@ -221,9 +203,11 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             leo.about_me = about_me
             leo.city = city
             leo.which_search = which_search
-            leo.bot_username = bot_username  # Обновляем username бота
+            leo.save()
+            print(f"Updated LeoMatchModel for user {uid}")
+        else:
+            print(f"No existing LeoMatchModel found for user {uid}, skipping update")
 
-        leo.save()
         return True
     except Exception as e:
         print(f"Error updating LeoMatch data for user {uid}: {e}")
