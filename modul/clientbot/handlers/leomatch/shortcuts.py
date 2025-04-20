@@ -175,19 +175,23 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             media_type = "PHOTO"
             print(f"Using default media_type: {media_type}")
 
-        # Проверяем существование пользователя в таблице UserTG
-        user_exists = UserTG.objects.filter(id=uid).exists()
-        if not user_exists:
+        # Проверяем существование пользователя в таблице UserTG по ОБОИМ полям id и uid
+        user_exists_by_id = UserTG.objects.filter(id=uid).exists()
+        user_exists_by_uid = UserTG.objects.filter(uid=str(uid)).exists()
+
+        if not user_exists_by_id and not user_exists_by_uid:
             print(f"User {uid} does not exist in UserTG table. Creating user...")
             # Создаем нового пользователя в таблице UserTG
             user = UserTG(
                 id=uid,
-                uid=str(uid),  # Заполняем uid тем же значением, что и id
-                username=f"user_{uid}",  # временное имя пользователя
+                uid=str(uid),
+                username=f"user_{uid}",
                 first_name=full_name if full_name else f"User {uid}"
             )
             user.save()
             print(f"Created new UserTG with ID {uid}")
+        else:
+            print(f"User already exists (id: {user_exists_by_id}, uid: {user_exists_by_uid})")
 
         # Поиск существующей записи
         leo = LeoMatchModel.objects.filter(user_id=uid).first()
