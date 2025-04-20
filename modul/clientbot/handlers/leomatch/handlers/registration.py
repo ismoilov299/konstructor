@@ -53,7 +53,7 @@ async def save_media(message: types.Message, state: FSMContext, file_path: str, 
         about_me = data.get('about_me')
         city = data.get('city')
 
-        # Profilni ko'rsatish
+        # Profilni ko'rsaxtish
         await show_profile(message, message.from_user.id, full_name, age, city, about_me, file_path, media_type)
 
         # Yangi statega o'tish

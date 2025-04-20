@@ -250,9 +250,8 @@ async def show_media(bot: Bot, to_account: int, from_account: int, text_before: 
         await bot.send_message(to_account, text=text)
 
 
-
 async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, photo: str,
-                      media_type: str, keyboard=None, comment: str = None):
+                       media_type: str, keyboard=None, comment: str = None):
     try:
         text = f"\n\nВам сообщение: {comment}" if comment else ""
         caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
@@ -262,48 +261,73 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
 
         print(f"Showing profile - media_type: {media_type}, photo: {photo}")
 
+        # Проверяем существование файла и формируем абсолютный путь при необходимости
+        if not os.path.isabs(photo) and not photo.startswith(('http://', 'https://')):
+            # Если путь относительный, сделаем его абсолютным
+            base_path = os.path.dirname(os.path.abspath(__file__))  # Путь к текущему файлу
+            absolute_path = os.path.join(base_path, photo)
+            if os.path.exists(absolute_path):
+                photo = absolute_path
+
+        is_local_file = os.path.exists(photo)
+
         if media_type == "VIDEO":
-            if os.path.exists(photo):
+            if is_local_file:
                 await message.answer_video(
                     video=FSInputFile(photo),
                     caption=caption,
                     **kwargs
                 )
             else:
-                await message.answer_video(
-                    video=photo,
-                    caption=caption,
-                    **kwargs
-                )
+                # Проверяем, является ли photo валидным URL
+                if photo.startswith(('http://', 'https://')):
+                    await message.answer_video(
+                        video=photo,
+                        caption=caption,
+                        **kwargs
+                    )
+                else:
+                    # Если не файл и не URL, отправляем сообщение об ошибке
+                    await message.answer(f"Видео не найдено. {caption}", **kwargs)
+
         elif media_type == "VIDEO_NOTE":
-            if os.path.exists(photo):
+            if is_local_file:
                 await message.answer_video_note(
                     video_note=FSInputFile(photo),
                     **kwargs
                 )
             else:
-                await message.answer_video_note(
-                    video_note=photo,
-                    **kwargs
-                )
+                if photo.startswith(('http://', 'https://')):
+                    await message.answer_video_note(
+                        video_note=photo,
+                        **kwargs
+                    )
+                else:
+                    await message.answer(f"Видеозаписка не найдена.", **kwargs)
             await message.answer(caption, **kwargs)
-        else:
-            if os.path.exists(photo):
+
+        else:  # PHOTO
+            if is_local_file:
                 await message.answer_photo(
                     photo=FSInputFile(photo),
                     caption=caption,
                     **kwargs
                 )
             else:
-                await message.answer_photo(
-                    photo=photo,
-                    caption=caption,
-                    **kwargs
-                )
+                if photo.startswith(('http://', 'https://')):
+                    await message.answer_photo(
+                        photo=photo,
+                        caption=caption,
+                        **kwargs
+                    )
+                else:
+                    # Если не файл и не URL, отправляем сообщение без фото
+                    await message.answer(f"Фото не найдено. {caption}", **kwargs)
 
     except Exception as e:
         print(f"Error in show_profile: {e}")
-        await message.answer("Произошла ошибка при отправке медиа. Пожалуйста, попробуйте позже.")
+        # Отправляем сообщение без медиа при ошибке
+        await message.answer(f"{full_name}, {age}, {city}\n{about_me}\nОшибка при загрузке медиа.", **kwargs)
 
 async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
                            type: str, username: str, keyboard=None):
