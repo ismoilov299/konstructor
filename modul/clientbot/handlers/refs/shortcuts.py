@@ -106,27 +106,45 @@ def check_user(tg_id):
 @sync_to_async
 def get_bot_user_info(user_id, bot_token):
     try:
+        print(f"DEBUG: get_bot_user_info called with user_id={user_id}, bot_token={bot_token}")
+
         # Получаем бота по токену
         bot = Bot.objects.get(token=bot_token)
+        print(f"DEBUG: Found bot: id={bot.id}, username={bot.username}")
+
+        # Получаем пользователя по uid
+        user_tg = UserTG.objects.filter(uid=user_id).first()
+
+        if not user_tg:
+            print(f"DEBUG: UserTG with uid={user_id} not found")
+            return None
+
+        print(f"DEBUG: Found UserTG: id={user_tg.id}, username={user_tg.username}")
 
         # Получаем информацию о пользователе для этого бота
         client_bot_user = ClientBotUser.objects.filter(
-            uid=user_id,
+            user=user_tg,
             bot=bot
         ).first()
 
         if client_bot_user:
+            print(
+                f"DEBUG: Found ClientBotUser: id={client_bot_user.id}, balance={client_bot_user.balance}, referral_balance={client_bot_user.referral_balance}, referral_count={client_bot_user.referral_count}")
             # Возвращаем баланс и количество рефералов
-            return [
-                client_bot_user.balance + client_bot_user.referral_balance,  # Общий баланс
-                client_bot_user.referral_count  # Количество рефералов
-            ]
-        return None
+            total_balance = client_bot_user.balance + client_bot_user.referral_balance
+            referral_count = client_bot_user.referral_count
+            print(f"DEBUG: Returning balance={total_balance}, referrals={referral_count}")
+            return [total_balance, referral_count]
+        else:
+            print(f"DEBUG: ClientBotUser not found for user={user_tg.id}, bot={bot.id}")
+            return None
     except Bot.DoesNotExist:
-        print(f"Bot with token {bot_token} does not exist")
+        print(f"DEBUG: Bot with token {bot_token} does not exist")
         return None
     except Exception as e:
-        print(f"Error getting bot user info: {e}")
+        print(f"DEBUG: Error in get_bot_user_info: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
