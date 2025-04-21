@@ -1485,7 +1485,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         # Referrer bonuslarini yangilash
                         @sync_to_async
                         @transaction.atomic
-                        def update_referrer(ref_id, bot):
+                        def update_referrer(ref_id, bot):  # Добавьте параметры ref_id и bot
                             try:
                                 # Получаем бота по токену
                                 current_bot = Bot.objects.get(token=bot.token)
@@ -1504,13 +1504,16 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                         'referral_balance': 0
                                     }
                                 )
+
                                 # Получаем цену из настроек
                                 admin_info = AdminInfo.objects.first()
                                 price = float(admin_info.price) if admin_info and admin_info.price else 3.0
+
                                 # Обновляем поля для конкретного бота
                                 client_bot_user.referral_count += 1
                                 client_bot_user.referral_balance += price
                                 client_bot_user.save()
+
                                 # Также обновляем общие поля в UserTG
                                 user_tg.refs += 1
                                 user_tg.balance += price
@@ -1531,7 +1534,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 traceback.print_exc()
                                 return False
 
-                        success = await update_referrer()
+                        success = await update_referrer(ref_id, message.bot)
                         print(f"✅ Referrer update success for user {message.from_user.id}: {success}")
 
                         if success:
