@@ -104,6 +104,33 @@ def check_user(tg_id):
 
 
 @sync_to_async
+def get_bot_user_info(user_id, bot_token):
+    try:
+        # Получаем бота по токену
+        bot = Bot.objects.get(token=bot_token)
+
+        # Получаем информацию о пользователе для этого бота
+        client_bot_user = ClientBotUser.objects.filter(
+            uid=user_id,
+            bot=bot
+        ).first()
+
+        if client_bot_user:
+            # Возвращаем баланс и количество рефералов
+            return [
+                client_bot_user.balance + client_bot_user.referral_balance,  # Общий баланс
+                client_bot_user.referral_count  # Количество рефералов
+            ]
+        return None
+    except Bot.DoesNotExist:
+        print(f"Bot with token {bot_token} does not exist")
+        return None
+    except Exception as e:
+        print(f"Error getting bot user info: {e}")
+        return None
+
+
+@sync_to_async
 def check_ban(tg_id):
     user = UserTG.objects.filter(uid=tg_id).first()
     return user.banned if user else False
