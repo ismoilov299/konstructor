@@ -454,11 +454,19 @@ async def get_new_amount_handler(message: Message, state: FSMContext):
 
     try:
         new_reward = float(message.text)
-        await change_price(new_reward)
-        await message.answer(
-            f"Награда за реферала успешно изменена на {new_reward:.2f} руб.",
-            reply_markup=await main_menu_bt()
-        )
+        # Передаем токен текущего бота
+        success = await change_price(new_reward, message.bot.token)
+
+        if success:
+            await message.answer(
+                f"Награда за реферала успешно изменена на {new_reward:.2f} руб.",
+                reply_markup=await main_menu_bt()
+            )
+        else:
+            await message.answer(
+                "🚫 Не удалось изменить награду за реферала.",
+                reply_markup=await main_menu_bt()
+            )
         await state.clear()
 
     except ValueError:
@@ -1507,7 +1515,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 )
 
                                 # Получаем цену из настроек
-                                admin_info = AdminInfo.objects.first()
+                                admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
                                 price = float(admin_info.price) if admin_info and admin_info.price else 3.0
 
                                 # Обновляем поля для конкретного бота

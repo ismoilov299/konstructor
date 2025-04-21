@@ -316,20 +316,30 @@ def status_declined(id):
 
 
 @sync_to_async
-def change_price(new_price):
+def change_price(new_price, bot_token):
     try:
+        # Получаем бота по токену
+        bot = Bot.objects.get(token=bot_token)
+
+        # Получаем или создаем запись AdminInfo для этого бота
         admin_info, created = AdminInfo.objects.get_or_create(
-            defaults={'price': new_price, 'admin_channel': '', 'min_amount': 50.0}
+            bot_token=bot_token,
+            defaults={
+                'admin_channel': '',
+                'price': 3.0,
+                'min_amount': 30.0
+            }
         )
 
-        if not created:
-            admin_info.price = new_price
-            admin_info.save()
+        # Обновляем цену
+        admin_info.price = new_price
+        admin_info.save()
 
-        print(f"Narx yangilandi: {new_price}, AdminInfo ID: {admin_info.id}")
+        print(f"Updated referral price to {new_price} for bot {bot.username}")
         return True
     except Exception as e:
-        print(f"Narxni yangilashda xatolik: {e}")
+        print(f"Error updating referral price: {e}")
+        traceback.print_exc()
         return False
 
 
