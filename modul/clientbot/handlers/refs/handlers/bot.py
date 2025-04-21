@@ -451,8 +451,10 @@ async def profile(message: Message):
         if not channels_checker or is_banned:
             return
 
+        # Получаем базовую информацию о пользователе
         user_info = await get_user_info_db(message.from_user.id)
 
+        # Если пользователь не найден, добавляем его
         if not user_info:
             try:
                 await add_user(
@@ -478,13 +480,24 @@ async def profile(message: Message):
                 )
                 return
 
+        # Получаем информацию о пользователе для конкретного бота
+        bot_user_info = await get_bot_user_info(message.from_user.id, message.bot.token)
+
+        # Если информация для бота не найдена, используем значения по умолчанию
+        bot_balance = 0
+        bot_referrals = 0
+
+        if bot_user_info:
+            bot_balance = bot_user_info[0]  # Баланс пользователя в этом боте
+            bot_referrals = bot_user_info[1]  # Количество рефералов в этом боте
+
         profile_text = (
             f"📱Профиль\n\n"
             f"📝 Ваше имя: {message.from_user.full_name}\n"
             f"🆔 Ваш ID: <code>{user_info[1]}</code>\n"
             f"==========================\n"
-            f"💳 Баланс: {user_info[2]}₽\n"
-            f"👥 Всего друзей: {user_info[3]}\n"
+            f"💳 Баланс: {bot_balance}₽\n"
+            f"👥 Всего друзей: {bot_referrals}\n"
             f"==========================\n"
         )
 
