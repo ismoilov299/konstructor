@@ -538,14 +538,19 @@ async def info(message: Message):
             return
 
     if channels_checker and checker_banned:
-        refs_count = user_info[3]  # get_user_info_db() funksiyasi qaytargan massivning 3-elementi
-
+        # Текущий бот
         bot_token = message.bot.token
+
+        # Получаем количество пользователей текущего бота из базы данных
+        total_users_count = await get_total_users_count(bot_token)
+        refs_count = user_info[3]  # Количество рефералов пользователя
+
         admin_user = await get_admin_user(bot_token)
 
         await message.bot.send_message(
             message.from_user.id,
-            f"👥 Всего пользователей: {refs_count}\n",
+            f"👥 Всего пользователей: {total_users_count}\n"
+            f"👨‍👨‍👦 Друзья: {refs_count}\n",
             reply_markup=await admin_in(admin_user)
         )
 

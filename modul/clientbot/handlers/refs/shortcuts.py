@@ -54,6 +54,23 @@ def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=
 
 
 @sync_to_async
+def get_total_users_count(bot_token):
+    try:
+        # Получаем объект бота по токену
+        bot = Bot.objects.get(token=bot_token)
+
+        # Получаем количество пользователей для этого бота
+        total_count = ClientBotUser.objects.filter(bot=bot).count()
+
+        return total_count
+    except Bot.DoesNotExist:
+        print(f"Bot with token {bot_token} does not exist")
+        return 0
+    except Exception as e:
+        print(f"Error getting total users count: {e}")
+        return 0
+
+@sync_to_async
 def add_ref(tg_id, inv_id):
     Checker.objects.create(tg_id=tg_id, inv_id=inv_id)
 
