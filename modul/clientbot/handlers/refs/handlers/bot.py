@@ -785,7 +785,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                             traceback.print_exc()
                             return False
 
-                    success = await update_referrer()
+                    success = await update_referrer(ref_id, query.bot)
                     print(f"✅ Referrer update success for user {user_id}: {success}")
 
                     if success:
