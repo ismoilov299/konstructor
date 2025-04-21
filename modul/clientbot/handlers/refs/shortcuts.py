@@ -14,38 +14,58 @@ logger = logging.getLogger(__name__)
 @sync_to_async
 def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=None):
     try:
-        user_tg = UserTG.objects.create(
+        # Проверяем, существует ли пользователь
+        user_tg, created = UserTG.objects.get_or_create(
             uid=tg_id,
-            username=user_name,
-            first_name=user_name,
-            invited=invited,
-            invited_id=invited_id,
-            created_at=timezone.now()
+            defaults={
+                'username': user_name,
+                'first_name': user_name,
+                'invited': invited,
+                'invited_id': invited_id,
+                'created_at': timezone.now()
+            }
         )
-        print(f"User {tg_id} successfully added with link {tg_id}")
 
+        if created:
+            print(f"User {tg_id} successfully added with link {tg_id}")
+        else:
+            print(f"User {tg_id} already exists, using existing record")
+
+        # Добавляем связь с ботом вне зависимости от того, новый пользователь или нет
         if bot_token:
             try:
                 current_bot = Bot.objects.get(token=bot_token)
 
-                inviter_client = None
-                if invited_id:
-                    inviter_client = ClientBotUser.objects.filter(uid=invited_id, bot=current_bot).first()
-
-                client_bot_user = ClientBotUser.objects.create(
+                # Проверяем, существует ли уже запись ClientBotUser
+                client_bot_user, client_created = ClientBotUser.objects.get_or_create(
                     user=user_tg,
                     bot=current_bot,
-                    uid=tg_id,
-                    inviter=inviter_client
+                    defaults={
+                        'uid': tg_id,
+                        'inviter': None  # Инвайтера добавим потом, если он есть
+                    }
                 )
-                print(f"ClientBotUser {tg_id} successfully added for bot {current_bot.username}")
+
+                # Если инвайтер существует и запись была создана, обновляем инвайтера
+                if invited_id and client_created:
+                    inviter_client = ClientBotUser.objects.filter(uid=invited_id, bot=current_bot).first()
+                    if inviter_client:
+                        client_bot_user.inviter = inviter_client
+                        client_bot_user.save()
+
+                        # Увеличиваем счетчик рефералов у пригласившего
+                        inviter_client.referral_count += 1
+                        inviter_client.save()
+
+                if client_created:
+                    print(f"ClientBotUser {tg_id} successfully added for bot {current_bot.username}")
+                else:
+                    print(f"ClientBotUser {tg_id} already exists for bot {current_bot.username}")
+
             except Exception as e:
-                print(f"⚠️ Error creating ClientBotUser: {e}")
+                print(f"⚠️ Error creating/updating ClientBotUser: {e}")
                 traceback.print_exc()
 
-        return True
-    except IntegrityError:
-        print(f"User {tg_id} already exists, skipping addition")
         return True
     except Exception as e:
         print(f"Error adding user {tg_id} to database: {e}")
@@ -58,9 +78,11 @@ def get_total_users_count(bot_token):
     try:
         # Получаем объект бота по токену
         bot = Bot.objects.get(token=bot_token)
+        print(f"Found bot {bot.username} with ID {bot.id}")
 
         # Получаем количество пользователей для этого бота
         total_count = ClientBotUser.objects.filter(bot=bot).count()
+        print(f"Total count for bot {bot.username}: {total_count}")
 
         return total_count
     except Bot.DoesNotExist:
@@ -68,6 +90,7 @@ def get_total_users_count(bot_token):
         return 0
     except Exception as e:
         print(f"Error getting total users count: {e}")
+        traceback.print_exc()
         return 0
 
 @sync_to_async

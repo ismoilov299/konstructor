@@ -156,7 +156,7 @@ async def process_referral(message: Message, referrer_id: int):
                     return False
 
                 user_tg.refs += 1
-                user_tg.balance += float(admin_info.price or 10.0)
+                user_tg.balance += float(admin_info.price or 3.0)
                 user_tg.save()
                 return True
             except Exception as ex:

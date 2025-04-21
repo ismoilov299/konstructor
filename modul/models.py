@@ -331,8 +331,8 @@ class Channels(models.Model):
 
 class AdminInfo(models.Model):
     admin_channel = models.CharField(max_length=255)
-    price = models.FloatField(default=10.0)
-    min_amount = models.FloatField(default=50.0)
+    price = models.FloatField(default=3.0)  # Изменено с 10.0 на 3.0
+    min_amount = models.FloatField(default=30.0)  # Изменено с 50.0 на 30.0
 
     class Meta:
         db_table = 'admin_info'
