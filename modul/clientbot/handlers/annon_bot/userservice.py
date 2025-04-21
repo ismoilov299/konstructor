@@ -31,73 +31,74 @@ def check_user(uid):
 
 
 @sync_to_async
-def add_user(tg_id, user_name=None, invited="Никто", invited_id=None, bot_token=None, user_link=None):
+def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=None):
     try:
-        if hasattr(tg_id, 'id'):
-            user_obj = tg_id
-            user_id = user_obj.id
-            username = user_obj.username or user_obj.first_name or "User"
-            first_name = user_obj.first_name or username
+        # Создаем или получаем пользователя в UserTG
+        user_tg, created = UserTG.objects.get_or_create(
+            uid=tg_id,
+            defaults={
+                'username': user_name,
+                'first_name': user_name,
+                'invited': invited,
+                'invited_id': invited_id,
+                'created_at': timezone.now()
+            }
+        )
+
+        if created:
+            print(f"User {tg_id} successfully added to UserTG")
         else:
-            user_id = tg_id
-            username = user_name or "User"
-            first_name = user_name or username
+            print(f"User {tg_id} already exists in UserTG, using existing record")
 
-        try:
-            user_tg, created = UserTG.objects.get_or_create(
-                uid=user_id,
-                defaults={
-                    'username': username,
-                    'first_name': first_name,
-                    'invited': invited,
-                    'invited_id': invited_id,
-                    'created_at': timezone.now(),
-                    'user_link': user_link
-                }
-            )
+        # Добавляем связь с ботом, если указан токен
+        if bot_token:
+            try:
+                current_bot = Bot.objects.get(token=bot_token)
 
-            if not created:
-                user_tg.username = username
-                user_tg.first_name = first_name
-                if user_link:
-                    user_tg.user_link = user_link
-                user_tg.save()
+                # Находим пригласившего пользователя, если есть
+                inviter = None
+                if invited_id:
+                    # Ищем запись ClientBotUser для пригласившего в этом боте
+                    inviter_client_bot_user = ClientBotUser.objects.filter(
+                        uid=invited_id,
+                        bot=current_bot
+                    ).first()
+                    inviter = inviter_client_bot_user
 
-            print(f"User {user_id} successfully added or updated in UserTG")
+                # Создаем или получаем запись ClientBotUser
+                client_bot_user, client_created = ClientBotUser.objects.get_or_create(
+                    user=user_tg,
+                    bot=current_bot,
+                    defaults={
+                        'uid': tg_id,
+                        'inviter': inviter,
+                        'balance': 0,
+                        'referral_count': 0,
+                        'referral_balance': 0
+                    }
+                )
 
-            if bot_token:
-                try:
-                    current_bot = Bot.objects.get(token=bot_token)
+                if client_created:
+                    print(f"ClientBotUser {tg_id} successfully added for bot {current_bot.username}")
+                else:
+                    print(f"ClientBotUser {tg_id} already exists for bot {current_bot.username}")
 
-                    inviter_client = None
-                    if invited_id:
-                        inviter_client = ClientBotUser.objects.filter(uid=invited_id, bot=current_bot).first()
-
-                    client_bot_user, created = ClientBotUser.objects.get_or_create(
-                        uid=user_id,
-                        bot=current_bot,
-                        defaults={
-                            'user': user_tg,
-                            'inviter': inviter_client
-                        }
-                    )
-
-                    if not created:
-                        client_bot_user.user = user_tg
-                        if inviter_client and not client_bot_user.inviter:
-                            client_bot_user.inviter = inviter_client
+                    # Обновляем пригласившего, если он не был установлен ранее
+                    if inviter and not client_bot_user.inviter:
+                        client_bot_user.inviter = inviter
                         client_bot_user.save()
+                        print(f"Updated inviter for ClientBotUser {tg_id}")
 
-                    print(f"ClientBotUser {user_id} successfully added or updated for bot {current_bot.username}")
-                except Exception as e:
-                    print(f"⚠️ Error creating ClientBotUser: {e}")
-                    traceback.print_exc()
+            except Bot.DoesNotExist:
+                print(f"⚠️ Bot with token {bot_token} not found")
+            except Exception as e:
+                print(f"⚠️ Error creating/updating ClientBotUser: {e}")
+                traceback.print_exc()
 
-            return True
-        except IntegrityError:
-            print(f"User {user_id} already exists, updating info")
-            return True
-
+        return True
+    except IntegrityError:
+        print(f"User {tg_id} has integrity error, likely already exists")
+        return True
     except Exception as e:
         print(f"Error adding user {tg_id} to database: {e}")
         traceback.print_exc()

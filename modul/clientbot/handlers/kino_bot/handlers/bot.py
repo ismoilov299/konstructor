@@ -46,7 +46,7 @@ from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_ac
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bot_by_token, get_users, users_count
 from modul.loader import client_bot_router
-from modul.models import UserTG, AdminInfo, User
+from modul.models import UserTG, AdminInfo, User, ClientBotUser
 from typing import Union, List
 import yt_dlp
 import logging
@@ -1485,54 +1485,47 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         # Referrer bonuslarini yangilash
                         @sync_to_async
                         @transaction.atomic
-                        def update_referrer():
+                        def update_referrer(ref_id, bot):
                             try:
-                                # Avval UserTG jadvalidan qidirish
-                                referrer = UserTG.objects.select_for_update().get(uid=ref_id)
+                                # Получаем бота по токену
+                                current_bot = Bot.objects.get(token=bot.token)
+
+                                # Находим пользователя
+                                user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
+
+                                # Находим или создаем запись ClientBotUser
+                                client_bot_user, created = ClientBotUser.objects.get_or_create(
+                                    uid=ref_id,
+                                    bot=current_bot,
+                                    defaults={
+                                        'user': user_tg,
+                                        'balance': 0,
+                                        'referral_count': 0,
+                                        'referral_balance': 0
+                                    }
+                                )
+                                # Получаем цену из настроек
                                 admin_info = AdminInfo.objects.first()
+                                price = float(admin_info.price) if admin_info and admin_info.price else 3.0
+                                # Обновляем поля для конкретного бота
+                                client_bot_user.referral_count += 1
+                                client_bot_user.referral_balance += price
+                                client_bot_user.save()
+                                # Также обновляем общие поля в UserTG
+                                user_tg.refs += 1
+                                user_tg.balance += price
+                                user_tg.save()
 
-                                price = float(admin_info.price) if admin_info and admin_info.price else 10.0
-
-                                # Balansni va referallar sonini yangilash
-                                referrer.refs += 1
-                                referrer.balance += price
-                                referrer.save()
-
-                                print(f"💰 Updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
+                                print(
+                                    f"💰 Updated referrer {ref_id} for bot {current_bot.username}: referrals={client_bot_user.referral_count}, balance={client_bot_user.referral_balance}")
                                 return True
                             except UserTG.DoesNotExist:
-                                try:
-                                    # UserTG topilmasa, User jadvalidan qidirish
-                                    user = User.objects.get(uid=ref_id)
-
-                                    # Agar User topilsa, shu User uchun yangi UserTG yaratish
-                                    referrer = UserTG.objects.create(
-                                        user=user,
-                                        uid=ref_id,
-                                        username=user.username,
-                                        first_name=user.first_name or "User",
-                                        last_name=user.last_name
-                                    )
-
-                                    # Mukofot miqdorini olish
-                                    admin_info = AdminInfo.objects.first()
-                                    price = float(admin_info.price) if admin_info and admin_info.price else 10.0
-
-                                    # Balansni va referallar sonini yangilash
-                                    referrer.refs += 1
-                                    referrer.balance += price
-                                    referrer.save()
-
-                                    print(
-                                        f"💰 Created and updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
-                                    return True
-                                except User.DoesNotExist:
-                                    print(f"❓ Referrer {ref_id} not found in both UserTG and User tables")
-                                    return False
-                                except Exception as e:
-                                    print(f"⚠️ Error creating UserTG from User: {e}")
-                                    traceback.print_exc()
-                                    return False
+                                print(f"❓ Referrer {ref_id} not found in UserTG table")
+                                return False
+                            except Exception as e:
+                                print(f"⚠️ Error updating referrer: {e}")
+                                traceback.print_exc()
+                                return False
                             except Exception as e:
                                 print(f"⚠️ Error updating referrer: {e}")
                                 traceback.print_exc()
@@ -1563,15 +1556,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 except ValueError:
                     print(f"❌ Invalid referrer_id: {referral}")
         await start(message,state, bot)
-        # await message.answer(
-        #     f"🎉Привет, {message.from_user.first_name}",
-        #     reply_markup=await main_menu_bt()
-        # )
-
-        # State'ni tozalash
-        # await state.clear()
-        # print(f"🧹 Cleared state for user {message.from_user.id}")
-
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
         traceback.print_exc()  # Bu xato stack trace'ni chiqaradi

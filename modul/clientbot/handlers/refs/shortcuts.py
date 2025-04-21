@@ -123,7 +123,7 @@ def get_bot_user_info(user_id, bot_token):
 
         # Получаем информацию о пользователе для этого бота
         client_bot_user = ClientBotUser.objects.filter(
-            user=user_tg,
+            uid=user_id,
             bot=bot
         ).first()
 
@@ -137,15 +137,15 @@ def get_bot_user_info(user_id, bot_token):
             return [total_balance, referral_count]
         else:
             print(f"DEBUG: ClientBotUser not found for user={user_tg.id}, bot={bot.id}")
-            return None
+            return [0, 0]  # Возвращаем нулевые значения если запись не найдена
     except Bot.DoesNotExist:
         print(f"DEBUG: Bot with token {bot_token} does not exist")
-        return None
+        return [0, 0]
     except Exception as e:
         print(f"DEBUG: Error in get_bot_user_info: {e}")
         import traceback
         traceback.print_exc()
-        return None
+        return [0, 0]
 
 
 @sync_to_async
