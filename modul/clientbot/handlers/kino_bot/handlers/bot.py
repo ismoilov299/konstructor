@@ -1485,10 +1485,11 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                         # Referrer bonuslarini yangilash
                         @sync_to_async
                         @transaction.atomic
-                        def update_referrer(ref_id, bot):  # Добавьте параметры ref_id и bot
+                        def update_referrer(ref_id, bot_token):
                             try:
                                 # Получаем бота по токену
-                                current_bot = Bot.objects.get(token=bot.token)
+                                from modul.models import Bot  # Явно импортируем модель Bot из Django
+                                current_bot = Bot.objects.get(token=bot_token)
 
                                 # Находим пользователя
                                 user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
@@ -1534,7 +1535,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 traceback.print_exc()
                                 return False
 
-                        success = await update_referrer(ref_id, message.bot)
+                        success = await update_referrer(ref_id, message.bot.token)
                         print(f"✅ Referrer update success for user {message.from_user.id}: {success}")
 
                         if success:
