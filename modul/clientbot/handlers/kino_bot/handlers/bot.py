@@ -12,7 +12,7 @@ from aiogram.filters.state import State, StatesGroup, StateFilter
 from aiogram.methods import GetChat, CreateChatInviteLink, GetChatMember
 
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, \
-    InputTextMessageContent, InlineQuery, BotCommand, ReplyKeyboardRemove, URLInputFile
+    InputTextMessageContent, InlineQuery, BotCommand, ReplyKeyboardRemove, URLInputFile, BufferedInputFile
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from asgiref.sync import async_to_sync
@@ -629,10 +629,10 @@ async def process_change_balance(message: Message, state: FSMContext):
 async def show_refs_handler(call: CallbackQuery):
     user_id = int(call.data.replace("showrefs_", ""))
     try:
-        file_path = await convert_to_excel(user_id)
-        document = FSInputFile(file_path, filename=os.path.basename(file_path))
-        await call.message.answer_document(document)
-        os.remove(file_path)
+        file_data, filename = await convert_to_excel(user_id, call.bot.token)
+        await call.message.answer_document(
+            document=BufferedInputFile(file_data, filename=filename)
+        )
     except Exception as e:
         await call.message.answer(f"🚫 Произошла ошибка при создании файла: {e}")
 
