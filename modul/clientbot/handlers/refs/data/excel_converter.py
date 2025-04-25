@@ -6,9 +6,12 @@ from asgiref.sync import sync_to_async
 import tempfile
 import os
 
+
 @sync_to_async
 def convert_to_excel(user_id, bot_token=None):
     from modul.models import UserTG, ClientBotUser, Bot
+    import pandas as pd
+    from io import BytesIO
 
     if bot_token:
         try:
@@ -79,10 +82,9 @@ def convert_to_excel(user_id, bot_token=None):
 
     df['reg_date'] = df['reg_date'].dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')
 
-    temp_dir = tempfile.gettempdir()
-    temp_file_path = os.path.join(temp_dir, f"temp_excel_{user_id}.xlsx")
+    excel_file = BytesIO()
+    df.to_excel(excel_file, index=False, engine='openpyxl')
+    excel_file.seek(0)
 
-    df.to_excel(temp_file_path, index=False, engine='openpyxl')
-    return temp_file_path
-
+    return excel_file.getvalue(), f"referrals_{user_id}.xlsx"
 

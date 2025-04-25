@@ -630,9 +630,8 @@ async def show_refs_handler(call: CallbackQuery):
     user_id = int(call.data.replace("showrefs_", ""))
     try:
         file_data, filename = await convert_to_excel(user_id, call.bot.token)
-        await call.message.answer_document(
-            document=BufferedInputFile(file_data, filename=filename)
-        )
+        document = BufferedInputFile(file_data, filename=filename)
+        await call.message.answer_document(document)
     except Exception as e:
         await call.message.answer(f"🚫 Произошла ошибка при создании файла: {e}")
 
