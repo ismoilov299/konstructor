@@ -643,15 +643,22 @@ async def admin_get_stats(call: CallbackQuery):
         bot_token = call.bot.token
         print(f"Bot token: {bot_token}")
 
-        # Bot modelini olish
         bot_db = await get_bot_by_token(bot_token)
         print(f"Bot DB object: {bot_db}")
 
         if bot_db:
-            total =  await get_user_info_db(call.from_user.id)
-            print(f"Users count: {total}")
+            @sync_to_async
+            def count_bot_users(bot_id):
+                try:
+                    return models.ClientBotUser.objects.filter(bot_id=bot_id).count()
+                except Exception as e:
+                    logger.error(f"Error counting bot users: {e}")
+                    return 0
 
-            new_text = f'<b>Количество пользователей в боте:</b> {total[3]}'
+            total_users = await count_bot_users(bot_db.id)
+            print(f"Users count for this bot: {total_users}")
+
+            new_text = f'<b>Количество пользователей в боте:</b> {total_users}'
 
             try:
                 await call.message.edit_text(
@@ -1408,11 +1415,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         print(f"Full start message: {message.text}")
         logger.info(f"Start command received from user {message.from_user.id}")
 
-        # Referralni olish va state'ga saqlash
         referral = command.args if command and command.args else None
         print(f"Extracted referral from command.args: {referral}")
 
-        # Agar args bo'lmasa, message.text dan olishga urinish
         if not referral and message.text and len(message.text) > 7:
             text_referral = message.text[7:]
             if text_referral.isdigit():
@@ -1420,18 +1425,14 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 print(f"Extracted referral from text: {referral}")
 
         if referral:
-            # Har ikkala kalit nomi bilan saqlash - ishonch uchun
             await state.update_data(referral=referral, referrer_id=referral)
             print(f"Saved referral to state with both keys: {referral}")
 
-            # Tekshirish
             state_data = await state.get_data()
             print(f"State after saving referral: {state_data}")
 
-        # Kanal tekshiruvi
         channels = await get_channels_for_check()
         if channels:
-            # Obuna bo'lmagan kanallar ro'yxatini yaratish
             not_subscribed_channels = []
 
             for channel_id, channel_url in channels:
@@ -1443,7 +1444,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     print(f"Channel {channel_id} status: {member.status}")
 
                     if member.status == "left":
-                        # Obuna bo'lmagan kanal ma'lumotlarini olish
                         try:
                             chat_info = await message.bot.get_chat(chat_id=channel_id)
                             not_subscribed_channels.append({
@@ -1464,7 +1464,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     continue
 
             if not_subscribed_channels:
-                # Obuna bo'lmagan kanallarni ko'rsatish
                 channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
 
                 kb = InlineKeyboardBuilder()
@@ -1477,34 +1476,28 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     kb.button(text=f"📢 {title}", url=invite_link)
 
                 kb.button(text="✅ Проверить подписку", callback_data="check_chan")
-                kb.adjust(1)  # Har bir qatorda 1 ta tugma
+                kb.adjust(1)
 
                 await message.answer(
                     channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
                     reply_markup=kb.as_markup(),
                     parse_mode="HTML"
                 )
-                # Kanal tekshiruvi o'tmasa ham state'da ma'lumot saqlanib qoladi
                 state_data = await state.get_data()
                 print(f"State before channel check (user not subscribed): {state_data}")
                 return False
 
-        # Kanal tekshiruvidan o'tgach, state'ni tekshirib ko'ramiz
         state_data = await state.get_data()
         print(f"State after channel check (user subscribed): {state_data}")
 
-        # Foydalanuvchi va current bot ma'lumotlarini olish
         bot_db = await shortcuts.get_bot(bot)
         current_user_id = message.from_user.id
 
-        # START: O'ZGARTIRILGAN QISM - AYNAN SHU BOTDA FOYDALANUVCHI MAVJUDLIGINI TEKSHIRISH
         @sync_to_async
         def check_user_in_specific_bot(user_id, bot_token):
             try:
-                # Botni topish
                 bot_obj = models.Bot.objects.get(token=bot_token)
 
-                # Shu botga tegishli ClientBotUser ni qidirish
                 client_user = models.ClientBotUser.objects.filter(
                     uid=user_id,
                     bot=bot_obj
@@ -1516,10 +1509,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 return False
 
         is_registered = await check_user_in_specific_bot(current_user_id, bot.token)
-        # END: O'ZGARTIRILGAN QISM
 
         if not is_registered:
-            # Foydalanuvchini bazaga saqlash
             new_user = await add_user(
                 tg_id=current_user_id,
                 user_name=message.from_user.first_name,
@@ -1529,37 +1520,28 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             )
             print(f"➕ Added user {current_user_id} to database, result: {new_user}")
 
-            # Agar referral mavjud bo'lsa, referral jarayonini bajarish
             if referral:
                 try:
                     ref_id = int(referral)
                     print(f"🔄 Processing referral for user {current_user_id} from {ref_id}")
 
-                    # O'ziga-o'zi refer qilmaslikni tekshirish
                     if ref_id != current_user_id:
                         print(f"👥 User {current_user_id} referred by {ref_id}")
 
-                        # START: O'ZGARTIRILGAN QISM - REFERRAL USERNING SHU BOTDA MAVJUDLIGINI TEKSHIRISH
                         referrer_exists = await check_user_in_specific_bot(ref_id, bot.token)
 
                         if not referrer_exists:
                             print(f"⚠️ Referrer {ref_id} not found in this bot's database, skipping referral")
                         else:
-                            # END: O'ZGARTIRILGAN QISM
-
-                            # Referrer bonuslarini yangilash
                             @sync_to_async
                             @transaction.atomic
                             def update_referrer(ref_id, bot_token):
                                 try:
-                                    # Получаем бота по токену
-                                    from modul.models import Bot  # Явно импортируем модель Bot из Django
+                                    from modul.models import Bot
                                     current_bot = Bot.objects.get(token=bot_token)
 
-                                    # Находим пользователя
                                     user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
 
-                                    # Находим или создаем запись ClientBotUser
                                     client_bot_user, created = ClientBotUser.objects.get_or_create(
                                         uid=ref_id,
                                         bot=current_bot,
@@ -1571,16 +1553,13 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                         }
                                     )
 
-                                    # Получаем цену из настроек
                                     admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
                                     price = float(admin_info.price) if admin_info and admin_info.price else 3.0
 
-                                    # Обновляем поля для конкретного бота
                                     client_bot_user.referral_count += 1
                                     client_bot_user.referral_balance += price
                                     client_bot_user.save()
 
-                                    # Также обновляем общие поля в UserTG
                                     user_tg.refs += 1
                                     user_tg.balance += price
                                     user_tg.save()
@@ -1601,12 +1580,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 print(f"✅ Referrer update success for user {current_user_id}: {success}")
 
                                 if success:
-                                    # Referrerga xabar yuborish
                                     try:
                                         user_name = html.escape(message.from_user.first_name)
                                         user_profile_link = f'tg://user?id={current_user_id}'
 
-                                        # O'zgarishlar saqlanishini kutish
                                         await asyncio.sleep(1)
 
                                         await bot.send_message(
@@ -1627,7 +1604,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         await start(message, state, bot)
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
-        traceback.print_exc()  # Bu xato stack trace'ni chiqaradi
+        traceback.print_exc()
         await message.answer(
             "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
         )
