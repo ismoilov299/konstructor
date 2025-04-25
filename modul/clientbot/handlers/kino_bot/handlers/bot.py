@@ -896,7 +896,6 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
         reply_markup=await main_menu_bt2()
     )
 
-
 async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
     try:
         bot_db = await shortcuts.get_bot(bot)
@@ -1275,27 +1274,53 @@ async def start(message: Message, state: FSMContext, bot: Bot):
 
                             @sync_to_async
                             @transaction.atomic
-                            def update_referrer_balance():
+                            def update_referrer_balance(ref_id, bot_token):
                                 try:
-                                    user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
-                                    admin_info = AdminInfo.objects.first()
+                                    # Получаем бота по токену
+                                    bot = Bot.objects.get(token=bot_token)
 
+                                    # Получаем пользователя
+                                    user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
+
+                                    # Получаем или создаем запись ClientBotUser для этого бота
+                                    client_bot_user, created = ClientBotUser.objects.get_or_create(
+                                        uid=ref_id,
+                                        bot=bot,
+                                        defaults={
+                                            'user': user_tg,
+                                            'balance': 0,
+                                            'referral_count': 0,
+                                            'referral_balance': 0
+                                        }
+                                    )
+
+                                    # Получаем цену из настроек для этого бота
+                                    admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
+
+                                    if not admin_info:
+                                        admin_info = AdminInfo.objects.first()
+
+                                    # Определяем награду
                                     if admin_info and hasattr(admin_info, 'price') and admin_info.price:
                                         price = float(admin_info.price)
                                     else:
-                                        price = 10.0
+                                        price = 3.0  # По умолчанию 3 рубля
 
+                                    # Обновляем поля для конкретного бота
+                                    client_bot_user.referral_count += 1
+                                    client_bot_user.referral_balance += price
+                                    client_bot_user.save()
+
+                                    # Также обновляем общие поля в UserTG
                                     user_tg.refs += 1
                                     user_tg.balance += price
                                     user_tg.save()
 
-                                    print(f"Updated referrer {ref_id}: refs={user_tg.refs}, balance={user_tg.balance}")
-                                    logger.info(
-                                        f"Updated referrer {ref_id}: refs={user_tg.refs}, balance={user_tg.balance}")
+                                    print(
+                                        f"Updated referrer {ref_id} for bot: refs={client_bot_user.referral_count}, balance={client_bot_user.referral_balance}")
                                     return True
                                 except Exception as e:
                                     print(f"Error updating referrer balance: {e}")
-                                    logger.error(f"Error updating referrer balance: {e}")
                                     traceback.print_exc()
                                     return False
 

@@ -27,7 +27,7 @@ from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt2
 from modul.clientbot.handlers.refs.shortcuts import get_actual_price, get_actual_min_amount
 from modul.loader import client_bot_router
 from modul.clientbot.shortcuts import get_bot_by_token
-from modul.models import UserTG, AdminInfo
+from modul.models import UserTG, AdminInfo, ClientBotUser
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +85,28 @@ def save_user(u, bot: Bot, link=None, inviter=None):
         raise
 
 
-
-
 @sync_to_async
-def check_if_already_referred(user_id: int, referrer_id: int):
-    # UserTG modelida invited_id maydonini tekshiramiz
-    return UserTG.objects.filter(uid=user_id, invited_id=referrer_id).exists()
+def check_if_already_referred(uid, ref_id, bot_token):
+    try:
+        # Получаем бота по токену
+        bot = Bot.objects.get(token=bot_token)
+
+        # Проверяем, есть ли пользователь с этим ботом в ClientBotUser
+        client_bot_user = ClientBotUser.objects.filter(
+            uid=uid,
+            bot=bot
+        ).first()
+
+        if client_bot_user:
+            # Проверяем, указан ли реферал
+            if client_bot_user.inviter and client_bot_user.inviter.uid == ref_id:
+                print(f"User {uid} is already referred by {ref_id} in bot {bot.username}")
+                return True
+
+        return False
+    except Exception as e:
+        print(f"Error checking referral status: {e}")
+        return False
 
 
 # async def process_referral(message: Message, referral_id: int):
