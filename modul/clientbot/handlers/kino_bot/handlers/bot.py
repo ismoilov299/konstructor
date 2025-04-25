@@ -1241,7 +1241,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                 print(f"Processing referral for new user {uid} from {ref_id}")
                 try:
                     # Allaqachon referral qilinganligini tekshirish
-                    already_referred = await check_if_already_referred(uid, ref_id)
+                    already_referred = await check_if_already_referred(uid, ref_id, message.bot.token)
                     if already_referred:
                         print(f"User {uid} is already referred by {ref_id}, skipping referral process")
                         logger.warning(f"ALREADY REFERRED: User {uid} is already referred by {ref_id}")
@@ -1324,7 +1324,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
                                     traceback.print_exc()
                                     return False
 
-                            success = await update_referrer_balance()
+                            success = await update_referrer_balance(ref_id, message.bot.token)
                             print(f"Referrer balance update success: {success}")
 
                             # HTML formatlash uchun to'g'irlang
