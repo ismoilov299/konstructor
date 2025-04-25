@@ -151,7 +151,7 @@ async def imp_menu_in(id, status):
             [InlineKeyboardButton(text="➕Баланс вывода", callback_data=f"addbalance_{id}"),
              InlineKeyboardButton(text="✏️Баланс вывода", callback_data=f"changebalance_{id}")],
             [InlineKeyboardButton(text="✏️Количество рефералов", callback_data=f"changerefs_{id}")],
-            # [InlineKeyboardButton(text="🔍Посмотреть рефералов", callback_data=f"showrefs_{id}")],
+            [InlineKeyboardButton(text="🔍Посмотреть рефералов", callback_data=f"showrefs_{id}")],
             [InlineKeyboardButton(text="Закрыть", callback_data="cancel")]
 
         ]
@@ -161,7 +161,7 @@ async def imp_menu_in(id, status):
             [InlineKeyboardButton(text="➕Баланс вывода", callback_data=f"addbalance_{id}"),
              InlineKeyboardButton(text="✏️Баланс вывода", callback_data=f"changebalance_{id}")],
             [InlineKeyboardButton(text="✏️Количество рефералов", callback_data=f"changerefs_{id}")],
-            # [InlineKeyboardButton(text="🔍Посмотреть рефералов", callback_data=f"showrefs_{id}")],
+            [InlineKeyboardButton(text="🔍Посмотреть рефералов", callback_data=f"showrefs_{id}")],
             [InlineKeyboardButton(text="Закрыть", callback_data="cancel")]
 
         ]
