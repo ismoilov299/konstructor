@@ -423,10 +423,10 @@ def get_actual_price():
         if admin_info and admin_info.price is not None:
             return float(admin_info.price)
         else:
-            return 10.0
+            return 3.0
     except Exception as e:
         logger.error(f"Error getting actual price: {e}")
-        return 10.0
+        return 3.0
 
 
 @sync_to_async
