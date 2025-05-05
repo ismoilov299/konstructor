@@ -1805,68 +1805,51 @@ def get_best_formats(formats):
 
     return video_formats, audio_format
 
+
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
-        # Yuklab olish uchun papkalarni yaratish
         download_dir = "/var/www/downloads"
         os.makedirs(download_dir, exist_ok=True)
 
-        # ffmpeg manzilini aniqlash
-        ffmpeg_path = None
+        timestamp = int(time.time())
+        output_filename = f"video_{timestamp}.mp4"
+        output_file = os.path.join(download_dir, output_filename)
+
+        ffmpeg_exists = False
         try:
-            # ffmpeg manzilini aniqlash uchun 'which' buyrug'ini ishlatamiz
             process = await asyncio.create_subprocess_exec(
                 'which', 'ffmpeg',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await process.communicate()
-            if process.returncode == 0:
-                ffmpeg_path = stdout.decode().strip()
-                logger.info(f"Found ffmpeg at: {ffmpeg_path}")
-            else:
-                logger.warning("ffmpeg not found in PATH. Trying default locations.")
-                # Agar topilmasa, standart manzillarni tekshiramiz
-                for path in ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg']:
-                    if os.path.exists(path):
-                        ffmpeg_path = path
-                        logger.info(f"Found ffmpeg at predefined path: {ffmpeg_path}")
-                        break
+            await process.communicate()
+            ffmpeg_exists = (process.returncode == 0)
+            logger.info(f"FFMPEG {'is' if ffmpeg_exists else 'is not'} available")
         except Exception as e:
             logger.error(f"Error checking ffmpeg: {e}")
 
-        # Vaqtinchalik fayl nomi (timestamp bilan)
-        timestamp = int(time.time())
-        output_filename = f"video_{timestamp}.mp4"
-        output_file = os.path.join(download_dir, output_filename)
-
-        # yt-dlp konfiguratsiyasi
         ydl_opts = {
-            'format': format_id,  # Faqat bir formatni yuklaymiz
             'outtmpl': output_file,
             'quiet': False,
-            'verbose': True,  # Ko'proq ma'lumot olish uchun
+            'verbose': True,
             'no_warnings': False,
             'retries': 5,
             'fragment_retries': 5,
             'continuedl': True,
-            'skip_download': False
         }
 
-        # FFMPEG topilgan bo'lsa, sozlamalarni qo'shamiz
-        if ffmpeg_path:
-            ydl_opts['ffmpeg_location'] = os.path.dirname(ffmpeg_path)
-        else:
-            # FFMPEG topilmagan bo'lsa, video+audio formatni yuklamang
-            logger.warning("FFMPEG not found. Avoiding merged formats.")
-            if '+' in format_id:
-                # '+' belgisini tashlaymiz va faqat video formatni yuklaymiz
-                format_id = format_id.split('+')[0]
-                ydl_opts['format'] = format_id
 
-        logger.info(f"Starting download for url: {url}, format: {format_id}")
-        with YoutubeDL(ydl_opts) as ydl:
-            # Yuklab olish jarayoni
+        if ffmpeg_exists:
+            ydl_opts['format'] = format_id
+        else:
+            logger.warning("FFMPEG not found. Using best single format instead.")
+            if '+' in format_id:
+                format_id = format_id.split('+')[0]
+            ydl_opts['format'] = 'best'
+
+        logger.info(f"Starting download with format: {ydl_opts['format']}")
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: ydl.extract_info(url, download=True)
@@ -1875,14 +1858,13 @@ async def download_video(url: str, format_id: str, state: FSMContext):
             if not info:
                 raise Exception("Could not get video info")
 
-            # Fayl nomini olish
             output_path = ydl.prepare_filename(info)
             logger.info(f"Download completed. Output file: {output_path}")
 
-            # Fayl mavjudligini tekshirish
             if not os.path.exists(output_path):
-                possible_extensions = ['.mp4', '.webm', '.mkv']
+                possible_extensions = ['.mp4', '.webm', '.mkv', '.mp3']
                 found = False
+
                 for ext in possible_extensions:
                     test_path = output_path.rsplit('.', 1)[0] + ext
                     if os.path.exists(test_path):
@@ -1894,17 +1876,10 @@ async def download_video(url: str, format_id: str, state: FSMContext):
                 if not found:
                     raise FileNotFoundError(f"Downloaded file not found: {output_path}")
 
-            # Fayl hajmini tekshirish
-            file_size = os.path.getsize(output_path)
-            if file_size == 0:
-                raise Exception(f"Downloaded file is empty: {output_path}")
-
-            logger.info(f"File size: {file_size} bytes")
-
             return output_path, info
 
     except Exception as e:
-        logger.error(f"Error downloading video: {str(e)}")
+        logger.error(f"Download error: {str(e)}")
         logger.exception("Detailed error:")
         raise
 
@@ -1975,25 +1950,31 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             formats = info.get('formats', [])
             title = info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')
 
-            video_formats, audio_format = get_best_formats(formats)
+            video_formats = []
+            audio_format = None
+
+            for fmt in formats:
+                if not isinstance(fmt, dict):
+                    continue
+
+                if fmt.get('vcodec', 'none') != 'none':
+                    height = fmt.get('height', 0)
+                    if height and height > 0:
+                        video_formats.append(fmt)
+
+                elif fmt.get('acodec', 'none') != 'none':
+                    if audio_format is None or (fmt.get('abr', 0) or 0) > (audio_format.get('abr', 0) or 0):
+                        audio_format = fmt
+
+            video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
+
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
-            # Debug: Barcha formatlarni ko'rish
-            logger.debug(f"Total formats found: {len(formats)}")
-            for i, fmt in enumerate(formats[:5]):  # Faqat birinchi 5ta format
-                logger.debug(
-                    f"Format {i}: {fmt.get('format_id')} - {fmt.get('ext')} - {fmt.get('vcodec', 'none')}/{fmt.get('acodec', 'none')} - {fmt.get('resolution', 'unknown')} - {fmt.get('filesize', 'unknown')}")
-
-            # Video formatlarni buttonlarga qo'shish
-            for fmt in video_formats[:3]:  # Faqat eng yaxshi 3ta format
-                if not fmt.get('format_id'):
-                    continue
-
+            for fmt in video_formats[:3]:
                 height = fmt.get('height', 0)
-                quality_text = f"{height}p" if height else "Medium"
-
-                filesize = fmt.get('filesize', 0)
+                quality_text = f"{height}p" if height else "HD"
+                filesize = fmt.get('filesize', 0) or fmt.get('filesize_approx', 0)
                 filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
 
                 valid_formats.append(fmt)
@@ -2007,35 +1988,25 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     ).pack()
                 )
 
-            # Eng yaxshi audio formatni aniqlash
-            audio_only_formats = [f for f in formats if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
+            if audio_format:
+                bitrate = audio_format.get('abr', 0)
+                audio_size = audio_format.get('filesize', 0) or audio_format.get('filesize_approx', 0)
 
-            if audio_only_formats:
-                # Audio formatlarni bitrate bo'yicha saralash
-                audio_only_formats.sort(key=lambda x: float(x.get('abr', 0) or 0), reverse=True)
-                best_audio = audio_only_formats[0]
+                bitrate_text = f"{int(bitrate)}kbps" if bitrate else "HQ"
+                size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
 
-                audio_bitrate = best_audio.get('abr', 0)
-                audio_size = best_audio.get('filesize', 0)
-
-                bitrate_text = f"{int(audio_bitrate)}kbps" if audio_bitrate else "Best"
-                audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
-
-                valid_formats.append(best_audio)
+                valid_formats.append(audio_format)
                 builder.button(
-                    text=f"🎵 MP3 {bitrate_text}{audio_size_text}",
+                    text=f"🎵 MP3 {bitrate_text}{size_text}",
                     callback_data=FormatCallback(
-                        format_id=best_audio['format_id'],
+                        format_id=audio_format['format_id'],
                         type='audio',
                         quality='audio',
                         index=len(valid_formats) - 1
                     ).pack()
                 )
-                logger.debug(f"Added audio button for format: {best_audio.get('format_id')}")
-            else:
-                logger.warning("No audio-only formats found")
 
-            builder.adjust(2)  # Har qatorda 2 ta button
+            builder.adjust(2)
 
             if valid_formats:
                 await state.update_data(url=url, formats=valid_formats, title=title)
