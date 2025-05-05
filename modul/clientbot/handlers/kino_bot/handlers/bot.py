@@ -890,7 +890,7 @@ async def kinogain(message: Message, bot: Bot, state: FSMContext):
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={message.from_user.id}"
 
-    price = await get_actual_price()
+    price = await get_actual_price(bot.token)
     min_withdraw = (await get_actual_min_amount()) or 0
 
 

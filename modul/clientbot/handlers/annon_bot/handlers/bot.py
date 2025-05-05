@@ -270,7 +270,7 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
     me = await bot.get_me()
     ref_link = f"https://t.me/{me.username}?start={message.from_user.id}"
 
-    price = await get_actual_price()
+    price = await get_actual_price(bot.token)
     print(price)
     await message.bot.send_message(
         message.from_user.id,
