@@ -1805,150 +1805,67 @@ def get_best_formats(formats):
 
     return video_formats, audio_format
 
-
-async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
-    status_message = await message.answer("⏳ Получаю информацию о видео...")
-
-    try:
-        base_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-            'encoding': 'utf-8',
-            'extract_flat': False,
-        }
-
-        with yt_dlp.YoutubeDL(base_opts) as ydl:
-            info = await asyncio.get_event_loop().run_in_executor(
-                executor,
-                lambda: ydl.extract_info(url, download=False)
-            )
-
-            formats = info.get('formats', [])
-            title = info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')
-
-            video_formats, audio_formats = get_best_formats(formats)
-            builder = InlineKeyboardBuilder()
-            valid_formats = []
-
-            for fmt in video_formats[:3]:
-                if not fmt.get('format_id'):
-                    continue
-
-                height = fmt.get('height', 0)
-                quality_text = f"{height}p" if height else "Medium"
-
-                filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
-                filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
-
-                valid_formats.append(fmt)
-                builder.button(
-                    text=f"🎥 {quality_text}{filesize_text}",
-                    callback_data=FormatCallback(
-                        format_id=fmt['format_id'],
-                        type='video',
-                        quality=str(height),
-                        index=len(valid_formats) - 1
-                    ).pack()
-                )
-
-            for fmt in audio_formats[:2]:
-                if not fmt.get('format_id'):
-                    continue
-
-                audio_bitrate = fmt.get('abr', 0)
-                audio_size = fmt.get('filesize') or fmt.get('filesize_approx', 0)
-
-                bitrate_text = f"{int(audio_bitrate)}kbps" if audio_bitrate else "Unknown"
-                audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
-
-                valid_formats.append(fmt)
-                builder.button(
-                    text=f"🎵 Аудио {bitrate_text}{audio_size_text}",
-                    callback_data=FormatCallback(
-                        format_id=fmt['format_id'],
-                        type='audio',
-                        quality='audio',
-                        index=len(valid_formats) - 1
-                    ).pack()
-                )
-
-            builder.adjust(2)
-
-            if valid_formats:
-                await state.update_data(url=url, formats=valid_formats, title=title)
-                await status_message.edit_text(
-                    f"🎥 {title}\n\n"
-                    f"Выберите формат для скачивания:",
-                    reply_markup=builder.as_markup()
-                )
-            else:
-                await status_message.edit_text("❗ Не найдены подходящие форматы")
-
-    except Exception as e:
-        logger.error(f"YouTube handler error: {str(e)}")
-        await status_message.edit_text("❗ Ошибка при получении форматов")
-
-
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
         # Yuklab olish uchun papkalarni yaratish
         download_dir = "/var/www/downloads"
-        cache_dir = "/var/www/cache"
-
-        # Papkalar mavjudligini tekshirish
         os.makedirs(download_dir, exist_ok=True)
-        os.makedirs(cache_dir, exist_ok=True)
 
-        # ffmpeg mavjudligini tekshirish
-        ffmpeg_path = "/usr/bin/ffmpeg"
+        # ffmpeg manzilini aniqlash
+        ffmpeg_path = None
         try:
-            result = await asyncio.create_subprocess_exec(
-                ffmpeg_path, '-version',
+            # ffmpeg manzilini aniqlash uchun 'which' buyrug'ini ishlatamiz
+            process = await asyncio.create_subprocess_exec(
+                'which', 'ffmpeg',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await result.communicate()
-            logger.debug(f"ffmpeg status: {result.returncode}")
-            if result.returncode != 0:
-                logger.error(f"ffmpeg not available: {stderr.decode()}")
-                raise Exception("ffmpeg is required for processing video")
+            stdout, stderr = await process.communicate()
+            if process.returncode == 0:
+                ffmpeg_path = stdout.decode().strip()
+                logger.info(f"Found ffmpeg at: {ffmpeg_path}")
+            else:
+                logger.warning("ffmpeg not found in PATH. Trying default locations.")
+                # Agar topilmasa, standart manzillarni tekshiramiz
+                for path in ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg']:
+                    if os.path.exists(path):
+                        ffmpeg_path = path
+                        logger.info(f"Found ffmpeg at predefined path: {ffmpeg_path}")
+                        break
         except Exception as e:
             logger.error(f"Error checking ffmpeg: {e}")
-            raise Exception("Error checking ffmpeg availability")
 
         # Vaqtinchalik fayl nomi (timestamp bilan)
         timestamp = int(time.time())
-        temp_filename = f"video_{timestamp}.mp4"
-        output_file = os.path.join(download_dir, temp_filename)
+        output_filename = f"video_{timestamp}.mp4"
+        output_file = os.path.join(download_dir, output_filename)
 
         # yt-dlp konfiguratsiyasi
         ydl_opts = {
-            'format': f"{format_id}+bestaudio/best",
-            'quiet': False,  # Debug uchun
-            'no_warnings': False,  # Debug uchun
+            'format': format_id,  # Faqat bir formatni yuklaymiz
             'outtmpl': output_file,
-            'retries': 5,  # Qayta urinishlar soni
+            'quiet': False,
+            'verbose': True,  # Ko'proq ma'lumot olish uchun
+            'no_warnings': False,
+            'retries': 5,
             'fragment_retries': 5,
             'continuedl': True,
-            'buffersize': 1024 * 1024 * 2,  # 2MB
-            'merge_output_format': 'mp4',
-            'ffmpeg_location': os.path.dirname(ffmpeg_path),
-            'cachedir': cache_dir,
-            'postprocessors': [{
-                'key': 'FFmpegVideoConvertor',
-                'preferedformat': 'mp4',
-            }],
-            'progress_hooks': [
-                lambda d: logger.debug(f"Download progress: {d.get('status')} - {d.get('_percent_str', 'N/A')}")],
+            'skip_download': False
         }
 
-        # Asinxron tarzda yuklash
+        # FFMPEG topilgan bo'lsa, sozlamalarni qo'shamiz
+        if ffmpeg_path:
+            ydl_opts['ffmpeg_location'] = os.path.dirname(ffmpeg_path)
+        else:
+            # FFMPEG topilmagan bo'lsa, video+audio formatni yuklamang
+            logger.warning("FFMPEG not found. Avoiding merged formats.")
+            if '+' in format_id:
+                # '+' belgisini tashlaymiz va faqat video formatni yuklaymiz
+                format_id = format_id.split('+')[0]
+                ydl_opts['format'] = format_id
+
         logger.info(f"Starting download for url: {url}, format: {format_id}")
         with YoutubeDL(ydl_opts) as ydl:
-            # yt-dlp loglarini logger'ga yo'naltirish
-            ydl.params['logger'] = logger
-
             # Yuklab olish jarayoni
             info = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -1977,15 +1894,12 @@ async def download_video(url: str, format_id: str, state: FSMContext):
                 if not found:
                     raise FileNotFoundError(f"Downloaded file not found: {output_path}")
 
+            # Fayl hajmini tekshirish
             file_size = os.path.getsize(output_path)
             if file_size == 0:
                 raise Exception(f"Downloaded file is empty: {output_path}")
 
             logger.info(f"File size: {file_size} bytes")
-
-
-            downloaded_formats = info.get('requested_formats', [info])
-            logger.debug(f"Downloaded formats: {downloaded_formats}")
 
             return output_path, info
 
@@ -2065,16 +1979,20 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
+            # Debug: Barcha formatlarni ko'rish
+            logger.debug(f"Total formats found: {len(formats)}")
+            for i, fmt in enumerate(formats[:5]):  # Faqat birinchi 5ta format
+                logger.debug(
+                    f"Format {i}: {fmt.get('format_id')} - {fmt.get('ext')} - {fmt.get('vcodec', 'none')}/{fmt.get('acodec', 'none')} - {fmt.get('resolution', 'unknown')} - {fmt.get('filesize', 'unknown')}")
+
             # Video formatlarni buttonlarga qo'shish
-            for fmt in video_formats:
+            for fmt in video_formats[:3]:  # Faqat eng yaxshi 3ta format
                 if not fmt.get('format_id'):
                     continue
 
-                # Formatni aniqroq ko'rsatish
                 height = fmt.get('height', 0)
-                quality_text = f"{height}p" if height else fmt.get('format_note', 'Medium')
+                quality_text = f"{height}p" if height else "Medium"
 
-                # Fayl hajmini hisoblash
                 filesize = fmt.get('filesize', 0)
                 filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
 
@@ -2084,34 +2002,46 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     callback_data=FormatCallback(
                         format_id=fmt['format_id'],
                         type='video',
-                        quality=str(quality_text),
+                        quality=str(height),
                         index=len(valid_formats) - 1
                     ).pack()
                 )
 
-            # Audio formatni qo'shish
-            if audio_format and audio_format.get('format_id'):
-                valid_formats.append(audio_format)
-                audio_size = audio_format.get('filesize', 0)
+            # Eng yaxshi audio formatni aniqlash
+            audio_only_formats = [f for f in formats if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
+
+            if audio_only_formats:
+                # Audio formatlarni bitrate bo'yicha saralash
+                audio_only_formats.sort(key=lambda x: float(x.get('abr', 0) or 0), reverse=True)
+                best_audio = audio_only_formats[0]
+
+                audio_bitrate = best_audio.get('abr', 0)
+                audio_size = best_audio.get('filesize', 0)
+
+                bitrate_text = f"{int(audio_bitrate)}kbps" if audio_bitrate else "Best"
                 audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
 
+                valid_formats.append(best_audio)
                 builder.button(
-                    text=f"🎵 Аудио{audio_size_text}",
+                    text=f"🎵 MP3 {bitrate_text}{audio_size_text}",
                     callback_data=FormatCallback(
-                        format_id=audio_format['format_id'],
+                        format_id=best_audio['format_id'],
                         type='audio',
                         quality='audio',
                         index=len(valid_formats) - 1
                     ).pack()
                 )
+                logger.debug(f"Added audio button for format: {best_audio.get('format_id')}")
+            else:
+                logger.warning("No audio-only formats found")
 
-            builder.adjust(2)
+            builder.adjust(2)  # Har qatorda 2 ta button
 
             if valid_formats:
                 await state.update_data(url=url, formats=valid_formats, title=title)
                 await status_message.edit_text(
                     f"🎥 {title}\n\n"
-                    f"Выберите формат:",
+                    f"Выберите формат для скачивания:",
                     reply_markup=builder.as_markup()
                 )
             else:
