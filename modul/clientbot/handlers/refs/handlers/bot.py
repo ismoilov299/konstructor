@@ -423,7 +423,9 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
         if channels_checker and checker_banned:
             me = await bot.get_me()
             link = f"https://t.me/{me.username}?start={message.from_user.id}"
-            price = await get_actual_price()
+
+            price = await get_actual_price(bot.token)
+
             await message.bot.send_message(message.from_user.id,
                                            f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
                                            f"🔗 Ваша ссылка для приглашений:\n {link}",
@@ -434,7 +436,9 @@ async def gain(message: Message, bot: Bot, state: FSMContext):
         if channels_checker and checker_banned:
             me = await bot.get_me()
             link = f"https://t.me/{me.username}?start={message.from_user.id}"
-            price = await get_actual_price()
+
+            price = await get_actual_price(bot.token)
+
             await message.bot.send_message(message.from_user.id,
                                            f"👥 Приглашай друзей и зарабатывай, за \nкаждого друга ты получишь {price}₽\n\n"
                                            f"🔗 Ваша ссылка для приглашений:\n {link}"
