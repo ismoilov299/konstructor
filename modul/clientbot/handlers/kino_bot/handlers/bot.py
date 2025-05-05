@@ -1790,11 +1790,18 @@ def get_best_formats(formats):
                 seen_qualities.add(height)
                 video_formats.append(fmt)
 
-        elif acodec != 'none' and vcodec == 'none':
-            if not audio_format or (fmt.get('abr', 0) > audio_format.get('abr', 0)):
+        if acodec != 'none' and vcodec == 'none':
+            if audio_format is None or (fmt.get('abr', 0) or 0) > (audio_format.get('abr', 0) or 0):
                 audio_format = fmt
+                logger.debug(f"Found better audio format: {fmt.get('format_id')} - {fmt.get('abr')}kbps")
 
     video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
+
+    if audio_format:
+        logger.debug(
+            f"Best audio format: {audio_format.get('format_id')} - {audio_format.get('abr')}kbps - {audio_format.get('ext')}")
+    else:
+        logger.debug("No audio format found")
 
     return video_formats, audio_format
 
@@ -1820,18 +1827,18 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             formats = info.get('formats', [])
             title = info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')
 
-            video_formats, audio_format = get_best_formats(formats)
+            video_formats, audio_formats = get_best_formats(formats)
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
-            for fmt in video_formats:
+            for fmt in video_formats[:3]:
                 if not fmt.get('format_id'):
                     continue
 
                 height = fmt.get('height', 0)
                 quality_text = f"{height}p" if height else "Medium"
 
-                filesize = fmt.get('filesize', 0)
+                filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
                 filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
 
                 valid_formats.append(fmt)
@@ -1845,15 +1852,21 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     ).pack()
                 )
 
-            if audio_format and audio_format.get('format_id'):
-                valid_formats.append(audio_format)
-                audio_size = audio_format.get('filesize', 0)
+            for fmt in audio_formats[:2]:
+                if not fmt.get('format_id'):
+                    continue
+
+                audio_bitrate = fmt.get('abr', 0)
+                audio_size = fmt.get('filesize') or fmt.get('filesize_approx', 0)
+
+                bitrate_text = f"{int(audio_bitrate)}kbps" if audio_bitrate else "Unknown"
                 audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
 
+                valid_formats.append(fmt)
                 builder.button(
-                    text=f"🎵 Аудио{audio_size_text}",
+                    text=f"🎵 Аудио {bitrate_text}{audio_size_text}",
                     callback_data=FormatCallback(
-                        format_id=audio_format['format_id'],
+                        format_id=fmt['format_id'],
                         type='audio',
                         quality='audio',
                         index=len(valid_formats) - 1
@@ -1866,7 +1879,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 await state.update_data(url=url, formats=valid_formats, title=title)
                 await status_message.edit_text(
                     f"🎥 {title}\n\n"
-                    f"Выберите формат:",
+                    f"Выберите формат для скачивания:",
                     reply_markup=builder.as_markup()
                 )
             else:
@@ -1879,68 +1892,106 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
-        # Create download directory with proper permissions
+        # Yuklab olish uchun papkalarni yaratish
         download_dir = "/var/www/downloads"
         cache_dir = "/var/www/cache"
 
-        # Make sure these directories exist
+        # Papkalar mavjudligini tekshirish
         os.makedirs(download_dir, exist_ok=True)
         os.makedirs(cache_dir, exist_ok=True)
 
-        # Verify ffmpeg is available
+        # ffmpeg mavjudligini tekshirish
         ffmpeg_path = "/usr/bin/ffmpeg"
         try:
-            subprocess.run([ffmpeg_path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            logger.debug("ffmpeg is installed and available")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            logger.error(f"ffmpeg not found at {ffmpeg_path}")
-            raise Exception("ffmpeg is required for merging audio and video")
+            result = await asyncio.create_subprocess_exec(
+                ffmpeg_path, '-version',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await result.communicate()
+            logger.debug(f"ffmpeg status: {result.returncode}")
+            if result.returncode != 0:
+                logger.error(f"ffmpeg not available: {stderr.decode()}")
+                raise Exception("ffmpeg is required for processing video")
+        except Exception as e:
+            logger.error(f"Error checking ffmpeg: {e}")
+            raise Exception("Error checking ffmpeg availability")
 
+        # Vaqtinchalik fayl nomi (timestamp bilan)
+        timestamp = int(time.time())
+        temp_filename = f"video_{timestamp}.mp4"
+        output_file = os.path.join(download_dir, temp_filename)
+
+        # yt-dlp konfiguratsiyasi
         ydl_opts = {
             'format': f"{format_id}+bestaudio/best",
-            'quiet': False,
-            'no_warnings': False,
-            'outtmpl': os.path.join(download_dir, '%(title)s-%(id)s.%(ext)s'),  # Specify download directory
-            'retries': 3,
-            'fragment_retries': 3,
+            'quiet': False,  # Debug uchun
+            'no_warnings': False,  # Debug uchun
+            'outtmpl': output_file,
+            'retries': 5,  # Qayta urinishlar soni
+            'fragment_retries': 5,
             'continuedl': True,
-            'buffersize': 1024 * 1024,
+            'buffersize': 1024 * 1024 * 2,  # 2MB
             'merge_output_format': 'mp4',
             'ffmpeg_location': os.path.dirname(ffmpeg_path),
-            'cachedir': cache_dir,  # Specify cache directory
+            'cachedir': cache_dir,
             'postprocessors': [{
                 'key': 'FFmpegVideoConvertor',
                 'preferedformat': 'mp4',
             }],
+            'progress_hooks': [
+                lambda d: logger.debug(f"Download progress: {d.get('status')} - {d.get('_percent_str', 'N/A')}")],
         }
+
+        # Asinxron tarzda yuklash
+        logger.info(f"Starting download for url: {url}, format: {format_id}")
         with YoutubeDL(ydl_opts) as ydl:
-            # Route yt-dlp logs to your logger
+            # yt-dlp loglarini logger'ga yo'naltirish
             ydl.params['logger'] = logger
 
+            # Yuklab olish jarayoni
             info = await asyncio.get_event_loop().run_in_executor(
-                executor,
+                None,
                 lambda: ydl.extract_info(url, download=True)
             )
 
             if not info:
                 raise Exception("Could not get video info")
 
-            output_file = ydl.prepare_filename(info)
-            logger.debug(f"Expected output file: {output_file}")
+            # Fayl nomini olish
+            output_path = ydl.prepare_filename(info)
+            logger.info(f"Download completed. Output file: {output_path}")
 
-            if not os.path.exists(output_file):
-                raise Exception(f"Downloaded file does not exist: {output_file}")
-            if os.path.getsize(output_file) == 0:
-                raise Exception(f"Downloaded file is empty: {output_file}")
+            # Fayl mavjudligini tekshirish
+            if not os.path.exists(output_path):
+                possible_extensions = ['.mp4', '.webm', '.mkv']
+                found = False
+                for ext in possible_extensions:
+                    test_path = output_path.rsplit('.', 1)[0] + ext
+                    if os.path.exists(test_path):
+                        output_path = test_path
+                        found = True
+                        logger.info(f"Found file with different extension: {output_path}")
+                        break
 
-            # Debug: Log downloaded formats
+                if not found:
+                    raise FileNotFoundError(f"Downloaded file not found: {output_path}")
+
+            file_size = os.path.getsize(output_path)
+            if file_size == 0:
+                raise Exception(f"Downloaded file is empty: {output_path}")
+
+            logger.info(f"File size: {file_size} bytes")
+
+
             downloaded_formats = info.get('requested_formats', [info])
             logger.debug(f"Downloaded formats: {downloaded_formats}")
 
-            return output_file, info
+            return output_path, info
 
     except Exception as e:
-        logger.error(f"Download error: {str(e)}")
+        logger.error(f"Error downloading video: {str(e)}")
+        logger.exception("Detailed error:")
         raise
 
 async def handle_format_selection(callback_query: CallbackQuery, state: FSMContext):
@@ -2093,11 +2144,47 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         )
 
         try:
-            # Assuming download_video is async def download_video(url, format_id, state):
-            file_path, info = await download_video(url, selected_format['format_id'], state)
+            download_dir = "/var/www/downloads"
+            os.makedirs(download_dir, exist_ok=True)
+
+            timestamp = int(time.time())
+
+            if callback_data.type == 'audio':
+                output_file = os.path.join(download_dir, f"audio_{timestamp}.mp3")
+                ydl_opts = {
+                    'format': selected_format['format_id'],
+                    'outtmpl': output_file,
+                    'quiet': False,
+                    'no_warnings': False,
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }],
+                }
+            else:
+                output_file = os.path.join(download_dir, f"video_{timestamp}.mp4")
+                ydl_opts = {
+                    'format': f"{selected_format['format_id']}+bestaudio/best",
+                    'outtmpl': output_file,
+                    'quiet': False,
+                    'no_warnings': False,
+                    'merge_output_format': 'mp4',
+                }
+
+            with YoutubeDL(ydl_opts) as ydl:
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: ydl.extract_info(url, download=True)
+                )
+
+            if callback_data.type == 'audio':
+                file_path = f"{output_file[:-4]}.mp3"
+            else:
+                file_path = output_file
 
             if not os.path.exists(file_path):
-                raise FileNotFoundError("Файл не найден после загрузки")
+                raise FileNotFoundError(f"Файл не найден после загрузки: {file_path}")
 
             await progress_msg.edit_text("📤 Отправляю файл...")
 
@@ -2131,7 +2218,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
         except Exception as e:
             logger.error(f"Download error: {str(e)}")
-            await progress_msg.edit_text(f"❌ Ошибка при загрузке")
+            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)[:50]}...")
 
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
@@ -2333,13 +2420,6 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
         else:
             await message.answer("❌ Произошла ошибка")
 
-
-# @client_bot_router.message()
-# async def instagram_handler(message: Message, bot):
-#     url = message.text
-#     if 'instagram.com' in url or 'instagr.am' in url:
-#         me = await bot.get_me()
-#         await handle_instagram(message, url, me, bot)
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str,state: FSMContext):
     try:
