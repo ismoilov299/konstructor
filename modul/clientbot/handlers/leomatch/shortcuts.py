@@ -175,29 +175,45 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             media_type = "PHOTO"
             print(f"Using default media_type: {media_type}")
 
-        # Проверяем существование пользователя в таблице UserTG по ОБОИМ полям id и uid
-        user_exists_by_id = UserTG.objects.filter(id=uid).exists()
-        user_exists_by_uid = UserTG.objects.filter(uid=str(uid)).exists()
+        # Найдем пользователя по uid в строковом виде (это то, что сейчас используется)
+        user = UserTG.objects.filter(uid=str(uid)).first()
 
-        if not user_exists_by_id and not user_exists_by_uid:
+        # Если пользователя нет, пробуем найти по id
+        if not user:
+            user = UserTG.objects.filter(id=uid).first()
+
+        # Если пользователя всё ещё нет, создаём нового
+        if not user:
             print(f"User {uid} does not exist in UserTG table. Creating user...")
-            # Создаем нового пользователя в таблице UserTG
             user = UserTG(
-                id=uid,
                 uid=str(uid),
                 username=f"user_{uid}",
                 first_name=full_name if full_name else f"User {uid}"
             )
             user.save()
-            print(f"Created new UserTG with ID {uid}")
+            print(f"Created new UserTG with ID {user.id} and UID {user.uid}")
         else:
-            print(f"User already exists (id: {user_exists_by_id}, uid: {user_exists_by_uid})")
+            print(f"Found existing user with ID {user.id} and UID {user.uid}")
 
-        # Поиск существующей записи
-        leo = LeoMatchModel.objects.filter(user_id=uid).first()
+        # Поиск существующей LeoMatchModel записи по user
+        leo = LeoMatchModel.objects.filter(user=user).first()
 
-        # Только обновление существующей записи, без создания новой
-        if leo:
+        # Если записи нет - создаём новую
+        if not leo:
+            print(f"Creating new LeoMatchModel for user {uid}")
+            leo = LeoMatchModel.objects.create(
+                user=user,
+                photo=photo,
+                media_type=media_type,
+                sex=sex,
+                age=age,
+                full_name=full_name,
+                about_me=about_me,
+                city=city,
+                which_search=which_search
+            )
+            print(f"Created new LeoMatchModel for user {uid}")
+        else:
             # Обновление существующей записи
             leo.photo = photo
             leo.media_type = media_type
@@ -208,14 +224,12 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             leo.city = city
             leo.which_search = which_search
             leo.save()
-            print(f"Updated LeoMatchModel for user {uid}")
-        else:
-            print(f"No existing LeoMatchModel found for user {uid}, skipping update")
+            print(f"Updated existing LeoMatchModel for user {uid}")
 
         return True
     except Exception as e:
         print(f"Error updating LeoMatch data for user {uid}: {e}")
-        raise e
+        return False  # Возвращаем False вместо поднятия исключения
 
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
                      reply_markup: types.ReplyKeyboardMarkup = None):

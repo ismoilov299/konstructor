@@ -36,9 +36,11 @@ class BotAdmin(admin.ModelAdmin):
 
 @admin.register(AdminInfo)
 class AdminInfoAdmin(admin.ModelAdmin):
-    search_fields = ['admin_channel']
-    list_display = ['admin_channel']
+    search_fields = ['admin_channel', 'bot_token']
+    list_display = ['admin_channel', 'price', 'min_amount', 'bot_token']
+    list_editable = ['price', 'min_amount']
     ordering = ['-id']
+    list_filter = ['bot_token']
 
 
 @admin.register(Channels)

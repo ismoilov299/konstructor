@@ -271,13 +271,14 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
     ref_link = f"https://t.me/{me.username}?start={message.from_user.id}"
 
     price = await get_actual_price()
-
+    print(price)
     await message.bot.send_message(
         message.from_user.id,
         f"👥 Приглашай друзей и зарабатывай! За \nкаждого друга ты получишь {price:.2f}₽.\n\n"
         f"🔗 Ваша ссылка для приглашений:\n{ref_link}\n\n",
         # f"💰 Минимальная сумма для вывода: {min_withdraw}₽",
         reply_markup=await main_menu_bt2()
+
     )
 
 async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
