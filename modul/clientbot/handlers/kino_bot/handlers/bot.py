@@ -2042,52 +2042,167 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
         await message.answer("❗ Отправьте ссылку на видео с YouTube, Instagram или TikTok")
 
 
-async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: FSMContext):
+async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
+    """
+    Handle YouTube videos by showing available formats and audio option
+    """
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
     try:
-        # Clean the URL (remove parameters)
+        # Clean the URL to improve compatibility
         clean_url = url.split('&')[0] if '&' in url else url
         logger.info(f"Processing YouTube URL: {clean_url}")
 
-        # Simple button interface for better reliability
-        markup = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="🎥 Скачать видео", callback_data=f"dl_video:{clean_url}")],
-            [types.InlineKeyboardButton(text="🎵 Скачать аудио", callback_data=f"dl_audio:{clean_url}")]
-        ])
+        # Configure options to extract available formats
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'youtube_include_dash_manifest': False,
+            'noplaylist': True,
+        }
 
-        # Try to get video info (but don't fail if it doesn't work)
         try:
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
-                info = ydl.extract_info(clean_url, download=False)
-                title = info.get('title', 'YouTube Video')
-                duration = info.get('duration', 0)
-                uploader = info.get('uploader', '')
+            # Extract video info with all available formats
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info_dict = ydl.extract_info(clean_url, download=False)
 
+                if not info_dict:
+                    raise Exception("Failed to extract video info")
+
+                # Extract basic video information
+                title = info_dict.get('title', 'YouTube Video')
+                uploader = info_dict.get('uploader', 'Unknown')
+                duration = info_dict.get('duration', 0)
                 minutes = duration // 60
                 seconds = duration % 60
 
-                await status_message.edit_text(
-                    f"🎥 {title}\n"
-                    f"👤 {uploader}\n"
-                    f"⏱ {minutes}:{seconds:02d}\n\n"
-                    f"Выберите формат для скачивания:",
-                    reply_markup=markup
+                # Get available formats
+                formats = info_dict.get('formats', [])
+
+                # Filter and organize video formats
+                video_formats = []
+                audio_format = None
+                seen_resolutions = set()
+
+                # Process all formats to find unique video resolutions and best audio
+                for fmt in formats:
+                    if not isinstance(fmt, dict):
+                        continue
+
+                    vcodec = fmt.get('vcodec', 'none')
+                    acodec = fmt.get('acodec', 'none')
+                    filesize = fmt.get('filesize', 0)
+
+                    # Only consider video formats with height and valid video codec
+                    if vcodec != 'none' and vcodec != 'NA':
+                        height = fmt.get('height', 0)
+                        if height and height > 0:
+                            # Use resolution as key to avoid duplicates
+                            resolution_key = f"{height}p"
+                            if resolution_key not in seen_resolutions:
+                                seen_resolutions.add(resolution_key)
+
+                                # Create format info object
+                                format_info = {
+                                    'format_id': fmt.get('format_id'),
+                                    'height': height,
+                                    'extension': fmt.get('ext', 'mp4'),
+                                    'filesize': filesize,
+                                    'resolution': resolution_key
+                                }
+                                video_formats.append(format_info)
+
+                    # Find the best audio format
+                    if acodec != 'none' and vcodec == 'none':
+                        if not audio_format or (fmt.get('abr', 0) or 0) > (audio_format.get('abr', 0) or 0):
+                            audio_format = {
+                                'format_id': fmt.get('format_id'),
+                                'extension': fmt.get('ext', 'mp3'),
+                                'abr': fmt.get('abr', 0),
+                                'filesize': filesize
+                            }
+
+                # Sort video formats by resolution (highest first)
+                video_formats.sort(key=lambda x: x['height'], reverse=True)
+
+                # Limit to a reasonable number of choices (max 5 video formats)
+                if len(video_formats) > 5:
+                    # Keep highest, some middle options, and lowest quality
+                    video_formats = [
+                        video_formats[0],  # Highest
+                        video_formats[len(video_formats) // 4],  # 75% quality
+                        video_formats[len(video_formats) // 2],  # 50% quality
+                        video_formats[-1]  # Lowest
+                    ]
+
+                # Build keyboard with format options
+                markup = InlineKeyboardBuilder()
+
+                # Add video format buttons
+                for fmt in video_formats:
+                    resolution = fmt['resolution']
+                    size_text = ""
+                    if fmt['filesize']:
+                        size_mb = fmt['filesize'] / (1024 * 1024)
+                        size_text = f" ({size_mb:.1f} MB)"
+
+                    button_text = f"🎬 {resolution}{size_text}"
+                    markup.button(
+                        text=button_text,
+                        callback_data=f"format:{fmt['format_id']}:video:{resolution}:0"
+                    )
+
+                # Add audio button at the end
+                if audio_format:
+                    abr_text = f"{audio_format['abr']}kbps" if audio_format['abr'] else ""
+                    size_text = ""
+                    if audio_format['filesize']:
+                        size_mb = audio_format['filesize'] / (1024 * 1024)
+                        size_text = f" ({size_mb:.1f} MB)"
+
+                    markup.button(
+                        text=f"🎵 Аудио {abr_text}{size_text}",
+                        callback_data=f"format:{audio_format['format_id']}:audio:audio:0"
+                    )
+
+                # Set single column layout
+                markup.adjust(1)
+
+                # Store video information in state
+                await state.update_data(
+                    url=clean_url,
+                    title=title,
+                    uploader=uploader,
+                    duration=duration,
+                    formats=video_formats + ([audio_format] if audio_format else [])
                 )
 
-                # Save info to state
-                await state.update_data(
-                    title=title,
-                    duration=duration,
-                    uploader=uploader
+                # Display video information and format options
+                await status_message.edit_text(
+                    f"🎥 <b>{html.escape(title)}</b>\n"
+                    f"👤 {html.escape(uploader)}\n"
+                    f"⏱ {minutes}:{seconds:02d}\n\n"
+                    f"Выберите формат для скачивания:",
+                    reply_markup=markup.as_markup(),
+                    parse_mode="HTML"
                 )
 
         except Exception as e:
-            logger.error(f"Error getting video info: {e}")
+            logger.error(f"Error extracting formats: {e}")
+
+            # Fallback to simple options
+            markup = InlineKeyboardBuilder()
+            markup.button(text="🎬 Высокое качество", callback_data=f"yt_best:{clean_url}")
+            markup.button(text="🎬 Среднее качество", callback_data=f"yt_medium:{clean_url}")
+            markup.button(text="🎬 Низкое качество", callback_data=f"yt_low:{clean_url}")
+            markup.button(text="🎵 Аудио", callback_data=f"yt_audio:{clean_url}")
+            markup.adjust(1)
+
             await status_message.edit_text(
-                "🎥 YouTube Video\n\n"
-                "Выберите формат для скачивания:",
-                reply_markup=markup
+                f"🎥 YouTube видео\n\n"
+                f"Не удалось получить список форматов. Выберите вариант загрузки:",
+                reply_markup=markup.as_markup()
             )
 
     except Exception as e:
@@ -2096,92 +2211,119 @@ async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: 
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
-async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext, bot):
+async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext, bot: Bot):
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("⏳ Начинаю загрузку...")
 
         data = await state.get_data()
         url = data.get('url')
+        title = data.get('title', 'Video')
 
         if not url:
             await callback.message.answer("❌ Ошибка: данные не найдены")
             return
 
-        selected_format = callback_data.format_id
+        format_id = callback_data.format_id
+        is_audio = callback_data.type == 'audio'
+        quality = callback_data.quality
+
         progress_msg = await callback.message.answer(
-            f"⏳ Загружаю {data.get('title', 'видео')}\n"
-            f"Формат: {callback_data.quality}"
+            f"⏳ Загружаю {'аудио' if is_audio else 'видео'} - {title}\n"
+            f"{'🎵 Аудио формат' if is_audio else f'🎬 Качество: {quality}'}"
         )
 
         try:
-            file_path, info = await download_video(url, selected_format, state)
+            # Configure download options
+            ydl_opts = {
+                'format': format_id,
+                'outtmpl': f'temp_{int(time.time())}_{callback.from_user.id}.%(ext)s',
+                'noplaylist': True,
+                'quiet': False,
+                'verbose': True,
+            }
 
-            if not os.path.exists(file_path):
-                raise FileNotFoundError("Файл не найден после загрузки")
+            # Add audio post-processing if needed
+            if is_audio:
+                ydl_opts['postprocessors'] = [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }]
 
-            await progress_msg.edit_text("📤 Отправляю файл...")
+            # Download the file
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
 
-            try:
-                me = await bot.get_me()
+                if not info:
+                    raise Exception("Could not get video info")
 
-                if selected_format.startswith("pytube_"):
-                    title = data.get('title', 'Видео')
-                    author = data.get('author', '')
-                    is_audio = "audio" in selected_format
+                # Get the output path
+                video_path = ydl.prepare_filename(info)
 
-                    caption = f"{'🎵' if is_audio else '🎥'} {title}"
-                    if not is_audio:
-                        caption += f" ({callback_data.quality})"
-                    if author:
-                        caption += f"\n👤 {author}"
-                    caption += f"\nСкачано через @{me.username}"
+                # Check for file extension changes
+                if not os.path.exists(video_path):
+                    base_path = os.path.splitext(video_path)[0]
 
                     if is_audio:
+                        # Check if mp3 exists
+                        if os.path.exists(f"{base_path}.mp3"):
+                            video_path = f"{base_path}.mp3"
+                    else:
+                        # Check common video extensions
+                        for ext in ['.mp4', '.webm', '.mkv']:
+                            if os.path.exists(f"{base_path}{ext}"):
+                                video_path = f"{base_path}{ext}"
+                                break
+
+                if not os.path.exists(video_path):
+                    raise FileNotFoundError(f"Downloaded file not found: {video_path}")
+
+                # Get file size for logging
+                file_size = os.path.getsize(video_path)
+                logger.info(f"Downloaded file: {video_path}, size: {file_size / 1024 / 1024:.2f} MB")
+
+                # Check if file is too large
+                if file_size > 50 * 1024 * 1024:  # 50 MB limit
+                    await progress_msg.edit_text("⚠️ Файл слишком большой для отправки в Telegram (>50MB)")
+                    os.remove(video_path)
+                    return
+
+                await progress_msg.edit_text("📤 Отправляю файл...")
+
+                me = await bot.get_me()
+
+                try:
+                    # Send based on type
+                    if is_audio:
+                        # Send as audio
                         await bot.send_audio(
                             chat_id=callback.message.chat.id,
-                            audio=FSInputFile(file_path),
-                            caption=caption,
+                            audio=FSInputFile(video_path),
+                            caption=f"🎵 {title}\nСкачано через @{me.username}",
                             title=title,
-                            performer=author
+                            performer=data.get('uploader', 'Unknown')
                         )
                     else:
+                        # Send as video
                         await bot.send_video(
                             chat_id=callback.message.chat.id,
-                            video=FSInputFile(file_path),
-                            caption=caption,
+                            video=FSInputFile(video_path),
+                            caption=f"🎥 {title} ({quality})\nСкачано через @{me.username}",
                             supports_streaming=True
                         )
-                else:
-                    caption = f"🎥 {data.get('title', 'Видео')}"
-                    if callback_data.type == 'video':
-                        caption += f" ({callback_data.quality})"
-                    caption += f"\nСкачано через @{me.username}"
+                finally:
+                    # Always clean up
+                    if os.path.exists(video_path):
+                        os.remove(video_path)
 
-                    if callback_data.type == 'video':
-                        await bot.send_video(
-                            chat_id=callback.message.chat.id,
-                            video=FSInputFile(file_path),
-                            caption=caption,
-                            supports_streaming=True
-                        )
-                    else:
-                        await bot.send_audio(
-                            chat_id=callback.message.chat.id,
-                            audio=FSInputFile(file_path),
-                            caption=caption,
-                            title=data.get('title', 'Audio')
-                        )
-            finally:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-
-            await progress_msg.delete()
-            await state.clear()
+                # Clean up and finish
+                await progress_msg.delete()
+                await state.clear()
 
         except Exception as e:
             logger.error(f"Download error: {str(e)}")
-            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)[:50]}...")
+            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)[:100]}...")
 
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
@@ -2384,32 +2526,173 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
             await message.answer("❌ Произошла ошибка")
 
 
-async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str,state: FSMContext):
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            video_path = ydl.prepare_filename(info)
+async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str,
+                                  state: FSMContext):
+    """
+    Downloads and sends a video from the specified URL using yt-dlp.
 
-            if os.path.exists(video_path):
-                try:
-                    video = FSInputFile(video_path)
-                    await bot.send_video(
-                        chat_id=message.chat.id,
-                        video=video,
-                        caption=f"📹 {info.get('title', 'Video')} (Низкое качество)\nСкачано через @{me.username}",
-                        supports_streaming=True
-                    )
-                    await state.set_state(Download.download)
-                finally:
-                    # Всегда удаляем файл после отправки
-                    if os.path.exists(video_path):
-                        os.remove(video_path)
-            else:
-                raise FileNotFoundError("Downloaded video file not found")
+    Args:
+        message: Telegram message object
+        url: URL of the video to download
+        ydl_opts: Options for yt-dlp
+        me: Bot instance information
+        bot: Bot instance
+        platform: Platform name (YouTube, TikTok, etc.)
+        state: FSM context for state management
+    """
+    progress_msg = await message.answer(f"⏳ Загружаю видео из {platform}...")
+    temp_file = None
+
+    try:
+        # Add more robust options to ydl_opts
+        final_opts = {
+            'format': 'mp4',  # Ensure consistent format
+            'merge_output_format': 'mp4',
+            'outtmpl': f'temp_{int(time.time())}_{message.from_user.id}.%(ext)s',
+            'noplaylist': True,
+            'geo_bypass': True,  # Try to bypass geo-restrictions
+            'retries': 3,
+            'fragment_retries': 3,
+            'verbose': True,
+            **ydl_opts  # Add user-provided options
+        }
+
+        # Log download attempt
+        logger.info(f"Downloading {platform} video from {url} with options: {final_opts}")
+
+        # Create a custom progress hook to update the message
+        last_update_time = [time.time()]
+        download_start = [time.time()]
+
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                current_time = time.time()
+                # Update message at most every 3 seconds to avoid flood limits
+                if current_time - last_update_time[0] > 3:
+                    last_update_time[0] = current_time
+                    elapsed = current_time - download_start[0]
+
+                    try:
+                        percent = d.get('_percent_str', '0%').strip()
+                        speed = d.get('_speed_str', 'N/A')
+                        eta = d.get('_eta_str', 'N/A')
+
+                        # Schedule message update asynchronously
+                        asyncio.create_task(
+                            progress_msg.edit_text(
+                                f"⏳ Загружаю видео из {platform}...\n"
+                                f"Прогресс: {percent}\n"
+                                f"Скорость: {speed}\n"
+                                f"Осталось: {eta}\n"
+                                f"Прошло времени: {int(elapsed)}с"
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to update progress message: {e}")
+
+            elif d['status'] == 'finished':
+                logger.info(f"Download finished: {d['filename']}")
+
+        final_opts['progress_hooks'] = [progress_hook]
+
+        # Use youtube-dl in a separate thread to avoid blocking
+        with yt_dlp.YoutubeDL(final_opts) as ydl:
+            # Run in thread pool to avoid blocking the event loop
+            info_dict = await asyncio.to_thread(
+                ydl.extract_info, url, download=True
+            )
+
+            if not info_dict:
+                await progress_msg.edit_text(f"❌ Не удалось получить информацию о видео из {platform}")
+                return
+
+            # Get correct filename
+            video_path = ydl.prepare_filename(info_dict)
+            logger.info(f"Download completed to path: {video_path}")
+
+            # Handle potential filename format issues
+            if not os.path.exists(video_path):
+                base_path = video_path.rsplit('.', 1)[0]
+                for ext in ['.mp4', '.webm', '.mkv', '.mov']:
+                    if os.path.exists(base_path + ext):
+                        video_path = base_path + ext
+                        logger.info(f"Found file with different extension: {video_path}")
+                        break
+
+            # Verify file exists and has content
+            if not os.path.exists(video_path):
+                raise FileNotFoundError(f"Downloaded file not found at {video_path}")
+
+            file_size = os.path.getsize(video_path)
+            if file_size == 0:
+                raise ValueError("Downloaded file is empty (0 bytes)")
+
+            logger.info(f"File size: {file_size} bytes")
+
+            # Store path for cleanup
+            temp_file = video_path
+
+            # Check if file is too large for Telegram
+            MAX_SIZE = 50 * 1024 * 1024  # 50 MB
+            if file_size > MAX_SIZE:
+                await progress_msg.edit_text(
+                    f"⚠️ Файл слишком большой для отправки в Telegram ({file_size / (1024 * 1024):.1f} МБ > 50 МБ)"
+                )
+                return
+
+            # Update progress message
+            await progress_msg.edit_text("📤 Отправляю видео...")
+
+            # Get title and other metadata
+            title = info_dict.get('title', f"{platform} video")
+            duration = info_dict.get('duration')
+            duration_str = f" ({duration // 60}:{duration % 60:02d})" if duration else ""
+
+            # Prepare video for sending
+            video = FSInputFile(video_path)
+
+            # Send the video
+            await bot.send_chat_action(message.chat.id, "upload_video")
+            await bot.send_video(
+                chat_id=message.chat.id,
+                video=video,
+                caption=f"📹 {title}{duration_str}\nСкачано через @{me.username}",
+                supports_streaming=True
+            )
+
+            # Update state
+            await state.set_state(Download.download)
+
+            # Delete progress message
+            await progress_msg.delete()
 
     except Exception as e:
-        logger.error(f"Error downloading and sending video from {platform}: {e}")
-        await message.answer(f"❌ Не удалось скачать видео из {platform}")
+        logger.error(f"Error downloading video from {platform}: {str(e)}")
+        logger.exception("Full traceback:")
+        error_msg = str(e)
+
+        # Provide user-friendly error message
+        if "HTTP Error 429" in error_msg:
+            await progress_msg.edit_text(f"❌ Слишком много запросов к {platform}. Пожалуйста, попробуйте позже.")
+        elif "HTTP Error 403" in error_msg:
+            await progress_msg.edit_text(f"❌ Доступ запрещен. Возможно, видео имеет ограничения.")
+        elif "Age verification" in error_msg:
+            await progress_msg.edit_text(f"❌ Видео имеет возрастные ограничения.")
+        elif "Private video" in error_msg or "not available" in error_msg.lower():
+            await progress_msg.edit_text(f"❌ Видео недоступно (приватное или было удалено).")
+        elif "ffmpeg" in error_msg.lower():
+            await progress_msg.edit_text(f"❌ Ошибка обработки видео. Возможно, проблема с ffmpeg.")
+        else:
+            await progress_msg.edit_text(f"❌ Не удалось скачать видео из {platform}. Пожалуйста, попробуйте позже.")
+
+    finally:
+        # Clean up downloaded file
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+                logger.info(f"Removed temporary file: {temp_file}")
+            except Exception as e:
+                logger.error(f"Error removing temporary file: {e}")
 
 
 async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMContext):
