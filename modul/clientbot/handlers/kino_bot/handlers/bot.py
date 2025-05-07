@@ -2232,29 +2232,53 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
         data = await state.get_data()
         url = data.get('url')
-        title = data.get('title', 'Video')
 
         if not url:
-            await callback.message.answer("❌ Ошибка: данные не найдены")
-            return
+            # Try to get URL from previous state data or extract from callback
+            try:
+                format_parts = callback_data.data.split(':')
+                if len(format_parts) > 1:
+                    url = format_parts[1]
+            except:
+                pass
+
+            if not url:
+                await callback.message.answer("❌ Ошибка: данные о видео не найдены")
+                return
+
+        # Create a temporary directory with proper permissions
+        temp_dir = "/tmp/youtube_downloads"
+        try:
+            os.makedirs(temp_dir, exist_ok=True)
+            # Try to ensure proper permissions
+            os.chmod(temp_dir, 0o777)
+        except Exception as e:
+            logger.error(f"Error creating temp directory: {e}")
+            # Fallback to another location
+            temp_dir = "/var/tmp"
 
         format_id = callback_data.format_id
         is_audio = callback_data.type == 'audio'
         quality = callback_data.quality
 
         progress_msg = await callback.message.answer(
-            f"⏳ Загружаю {'аудио' if is_audio else 'видео'} - {title}\n"
+            f"⏳ Загружаю {'аудио' if is_audio else 'видео'}\n"
             f"{'🎵 Аудио формат' if is_audio else f'🎬 Качество: {quality}'}"
         )
 
         try:
+            # Create a unique filename in the temp directory
+            timestamp = int(time.time())
+            file_id = f"{timestamp}_{callback.from_user.id}"
+            output_template = os.path.join(temp_dir, f"{file_id}.%(ext)s")
+
             # Configure download options
             ydl_opts = {
                 'format': format_id,
-                'outtmpl': f'temp_{int(time.time())}_{callback.from_user.id}.%(ext)s',
+                'outtmpl': output_template,
                 'noplaylist': True,
-                'quiet': False,
-                'verbose': True,
+                'quiet': True,
+                'no_warnings': True,
             }
 
             # Add audio post-processing if needed
@@ -2291,6 +2315,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                                 break
 
                 if not os.path.exists(video_path):
+                    # List directory contents for debugging
+                    logger.error(f"Files in temp dir: {os.listdir(temp_dir)}")
                     raise FileNotFoundError(f"Downloaded file not found: {video_path}")
 
                 # Get file size for logging
@@ -2308,6 +2334,8 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 me = await bot.get_me()
 
                 try:
+                    title = info.get('title', 'YouTube Video')
+
                     # Send based on type
                     if is_audio:
                         # Send as audio
@@ -2315,8 +2343,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                             chat_id=callback.message.chat.id,
                             audio=FSInputFile(video_path),
                             caption=f"🎵 {title}\nСкачано через @{me.username}",
-                            title=title,
-                            performer=data.get('uploader', 'Unknown')
+                            title=title
                         )
                     else:
                         # Send as video
@@ -2329,7 +2356,10 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 finally:
                     # Always clean up
                     if os.path.exists(video_path):
-                        os.remove(video_path)
+                        try:
+                            os.remove(video_path)
+                        except Exception as e:
+                            logger.error(f"Error removing temp file: {e}")
 
                 # Clean up and finish
                 await progress_msg.delete()
