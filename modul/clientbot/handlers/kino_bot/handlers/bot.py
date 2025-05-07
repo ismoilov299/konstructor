@@ -2564,7 +2564,7 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
     """
-    Enhanced YouTube video downloader that shows all available formats
+    Enhanced YouTube video downloader that shows all available formats and handles ffmpeg missing
     """
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
@@ -2582,6 +2582,20 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             os.chmod(temp_dir, 0o777)
         except Exception as e:
             logger.warning(f"Could not set permissions on temp dir: {e}")
+
+        # Check if ffmpeg is installed
+        ffmpeg_available = False
+        try:
+            process = await asyncio.create_subprocess_exec(
+                'which', 'ffmpeg',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            ffmpeg_available = process.returncode == 0
+            logger.info(f"FFmpeg available: {ffmpeg_available}")
+        except Exception as e:
+            logger.warning(f"Failed to check for ffmpeg: {e}")
 
         # Configure options to extract all available formats
         ydl_opts = {
@@ -2614,6 +2628,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 # Create separate lists for video and audio formats
                 video_formats = []
                 audio_formats = []
+                mixed_formats = []  # Formats that already contain both audio and video
 
                 # Process all formats and categorize them
                 for fmt in formats:
@@ -2627,33 +2642,48 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     format_id = fmt.get('format_id', '')
                     format_note = fmt.get('format_note', '')
 
-                    # Skip formats without proper codecs or extention
+                    # Skip formats without proper codecs or extension
                     if (vcodec == 'none' and acodec == 'none') or not ext:
                         continue
 
-                    # Process video formats (with video codec)
-                    if vcodec != 'none' and vcodec != 'NA':
+                    # Process formats with both video and audio
+                    if vcodec != 'none' and acodec != 'none':
                         height = fmt.get('height', 0)
                         width = fmt.get('width', 0)
-                        fps = fmt.get('fps', 0)
 
-                        # Only include formats with actual height/width
                         if (height and height > 0) or (width and width > 0):
-                            # Create format description
                             resolution = f"{height}p"
-                            if fps and fps > 30:
-                                resolution += f"{fps}"
-
                             format_info = {
                                 'format_id': format_id,
                                 'height': height,
                                 'width': width,
-                                'fps': fps,
                                 'extension': ext,
                                 'filesize': filesize,
                                 'resolution': resolution,
-                                'has_audio': acodec != 'none',
-                                'format_note': format_note
+                                'has_audio': True,
+                                'format_note': format_note,
+                                'mixed': True  # Already contains both audio and video
+                            }
+                            mixed_formats.append(format_info)
+
+                    # Process video-only formats (with video codec but no audio)
+                    elif vcodec != 'none' and acodec == 'none':
+                        height = fmt.get('height', 0)
+                        width = fmt.get('width', 0)
+
+                        # Only include formats with actual height/width
+                        if (height and height > 0) or (width and width > 0):
+                            resolution = f"{height}p"
+                            format_info = {
+                                'format_id': format_id,
+                                'height': height,
+                                'width': width,
+                                'extension': ext,
+                                'filesize': filesize,
+                                'resolution': resolution,
+                                'has_audio': False,
+                                'format_note': format_note,
+                                'mixed': False
                             }
                             video_formats.append(format_info)
 
@@ -2666,32 +2696,47 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                             'filesize': filesize,
                             'quality': quality,
                             'audio_only': True,
-                            'format_note': format_note
+                            'format_note': format_note,
+                            'mixed': False
                         })
 
-                # Sort video formats by height (highest first)
-                video_formats.sort(key=lambda x: (x.get('height', 0) or 0, x.get('width', 0) or 0), reverse=True)
-
-                # Sort audio formats by quality (highest first)
+                # Sort formats by quality
+                mixed_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
                 audio_formats.sort(key=lambda x: x.get('quality', 0) or 0, reverse=True)
 
-                # Add a best overall option and combined video+audio options
-                combined_formats = [
-                    {
-                        'format_id': 'best',
-                        'format_note': 'Лучшее качество (видео+аудио)',
-                        'extension': 'mp4',
-                        'has_audio': True
-                    },
-                    {
-                        'format_id': 'bestvideo+bestaudio',
-                        'format_note': 'Лучшее видео + лучшее аудио',
-                        'extension': 'mp4',
-                        'has_audio': True
-                    }
-                ]
+                # If ffmpeg is not available, we can only use mixed formats and audio formats
+                # We can't merge separate video and audio streams
+                combined_available = ffmpeg_available
 
-                # Add a best audio option
+                # Add button options based on availability
+                markup = InlineKeyboardBuilder()
+
+                # Add combined options if ffmpeg is available
+                if combined_available:
+                    combined_formats = [
+                        {
+                            'format_id': 'best',
+                            'format_note': 'Лучшее качество (видео+аудио)',
+                            'extension': 'mp4',
+                            'has_audio': True
+                        },
+                        {
+                            'format_id': 'bestvideo+bestaudio',
+                            'format_note': 'Лучшее видео + лучшее аудио',
+                            'extension': 'mp4',
+                            'has_audio': True
+                        }
+                    ]
+
+                    for idx, fmt in enumerate(combined_formats):
+                        button_text = f"🚀 {fmt['format_note']}"
+                        markup.button(
+                            text=button_text,
+                            callback_data=f"format:{fmt['format_id']}:auto:best:{idx}"
+                        )
+
+                # Always add best audio option
                 best_audio = {
                     'format_id': 'bestaudio',
                     'format_note': 'Лучшее аудио (MP3)',
@@ -2699,52 +2744,64 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     'audio_only': True
                 }
 
-                # Build keyboard with format options - start with combined formats
-                markup = InlineKeyboardBuilder()
-
-                # Add combined/automated options first
-                for idx, fmt in enumerate(combined_formats):
-                    button_text = f"🚀 {fmt['format_note']}"
-                    markup.button(
-                        text=button_text,
-                        callback_data=f"format:{fmt['format_id']}:auto:best:{idx}"
-                    )
-
-                # Add best audio option
                 markup.button(
                     text=f"🎵 {best_audio['format_note']}",
-                    callback_data=f"format:{best_audio['format_id']}:audio:best:{len(combined_formats)}"
+                    callback_data=f"format:{best_audio['format_id']}:audio:best:{len(combined_formats) if combined_available else 0}"
                 )
 
-                # Show up to 15 video format options (to avoid Telegram button limits)
-                max_video_formats = min(len(video_formats), 15)
-                for idx, fmt in enumerate(video_formats[:max_video_formats]):
+                # First add mixed formats (they don't require ffmpeg for merging)
+                max_mixed_formats = min(len(mixed_formats), 10)
+                for idx, fmt in enumerate(mixed_formats[:max_mixed_formats]):
                     resolution = fmt.get('resolution', '')
                     format_note = fmt.get('format_note', '')
                     ext = fmt.get('extension', '')
 
-                    # Format the button text to be informative but concise
                     size_text = ""
                     if fmt.get('filesize'):
                         size_mb = fmt.get('filesize', 0) / (1024 * 1024)
                         if size_mb > 0:
                             size_text = f" ~{size_mb:.1f}MB"
 
-                    # Add icons for audio and format
-                    audio_text = "🔊" if fmt.get('has_audio', False) else "🔇"
                     format_details = f"{ext}"
                     if format_note:
                         format_details += f", {format_note}"
 
-                    button_text = f"🎬 {resolution} {audio_text} [{format_details}]{size_text}"
+                    button_text = f"🎬 {resolution} 🔊 [{format_details}]{size_text}"
 
+                    start_idx = (len(combined_formats) if combined_available else 0) + 1
                     markup.button(
                         text=button_text,
-                        callback_data=f"format:{fmt['format_id']}:video:{resolution}:{idx + len(combined_formats) + 1}"
+                        callback_data=f"format:{fmt['format_id']}:mixed:{resolution}:{idx + start_idx}"
                     )
 
-                # Show up to 5 audio format options if available
-                max_audio_formats = min(len(audio_formats), 5)
+                # Add video-only formats only if ffmpeg is available for merging
+                if combined_available:
+                    max_video_formats = min(len(video_formats), 5)
+                    for idx, fmt in enumerate(video_formats[:max_video_formats]):
+                        resolution = fmt.get('resolution', '')
+                        format_note = fmt.get('format_note', '')
+                        ext = fmt.get('extension', '')
+
+                        size_text = ""
+                        if fmt.get('filesize'):
+                            size_mb = fmt.get('filesize', 0) / (1024 * 1024)
+                            if size_mb > 0:
+                                size_text = f" ~{size_mb:.1f}MB"
+
+                        format_details = f"{ext}"
+                        if format_note:
+                            format_details += f", {format_note}"
+
+                        button_text = f"🎬 {resolution} 🔇 [{format_details}]{size_text}"
+
+                        start_idx = len(combined_formats) + 1 + max_mixed_formats
+                        markup.button(
+                            text=button_text,
+                            callback_data=f"format:{fmt['format_id']}:video:{resolution}:{idx + start_idx}"
+                        )
+
+                # Add audio formats (with separate buttons)
+                max_audio_formats = min(len(audio_formats), 3)
                 for idx, fmt in enumerate(audio_formats[:max_audio_formats]):
                     quality_text = f"{fmt.get('quality', 0)}kbps" if fmt.get('quality', 0) else ""
                     format_note = fmt.get('format_note', '')
@@ -2756,36 +2813,45 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                         if size_mb > 0:
                             size_text = f" ~{size_mb:.1f}MB"
 
-                    # Format info for audio
                     format_details = ext
                     if format_note:
                         format_details += f", {format_note}"
 
                     button_text = f"🎵 Аудио {quality_text} [{format_details}]{size_text}"
 
+                    # Calculate the correct index based on what was added before
+                    start_idx = (len(combined_formats) if combined_available else 0) + 1 + max_mixed_formats
+                    if combined_available:
+                        start_idx += max_video_formats
+
                     markup.button(
                         text=button_text,
-                        callback_data=f"format:{fmt['format_id']}:audio:{quality_text}:{idx + len(combined_formats) + max_video_formats + 1}"
+                        callback_data=f"format:{fmt['format_id']}:audio:{quality_text}:{idx + start_idx}"
                     )
 
                 # Set single column layout
                 markup.adjust(1)
 
-                # Store video information in state
+                # Store video information and ffmpeg status in state
                 await state.update_data(
                     url=clean_url,
                     title=title,
                     uploader=uploader,
                     duration=duration,
-                    formats=video_formats + audio_formats,
-                    temp_dir=temp_dir
+                    formats=mixed_formats + video_formats + audio_formats,
+                    temp_dir=temp_dir,
+                    ffmpeg_available=ffmpeg_available
                 )
 
                 # Display video information and format options
+                ffmpeg_warning = ""
+                if not ffmpeg_available:
+                    ffmpeg_warning = "\n\n⚠️ <b>FFmpeg не установлен на сервере</b>. Доступны только готовые форматы без объединения видео и аудио.\n"
+
                 await status_message.edit_text(
                     f"🎥 <b>{html.escape(title)}</b>\n"
                     f"👤 {html.escape(uploader)}\n"
-                    f"⏱ {minutes}:{seconds:02d}\n\n"
+                    f"⏱ {minutes}:{seconds:02d}{ffmpeg_warning}\n\n"
                     f"<b>Выберите формат для скачивания:</b>",
                     reply_markup=markup.as_markup(),
                     parse_mode="HTML"
@@ -2795,7 +2861,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             logger.error(f"Error extracting formats: {e}")
             logger.exception("Format extraction error:")
 
-            # Instead of fallback buttons, inform the user about the error
+            # Inform user about the error
             await status_message.edit_text(
                 f"❌ <b>Ошибка при получении форматов видео</b>\n\n"
                 f"Не удалось получить список форматов. Пожалуйста, проверьте ссылку или попробуйте позже.",
@@ -3180,18 +3246,30 @@ async def youtube_format_selected(callback: CallbackQuery, state: FSMContext, bo
         await callback.message.answer("❌ Ошибка при обработке запроса")
 
 
-@client_bot_router.callback_query(FormatCallback.filter())
-async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext, bot: Bot):
+@client_bot_router.callback_query(lambda c: c.data.startswith("format:"))
+async def process_format_selection(callback: CallbackQuery, state: FSMContext, bot: Bot):
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("⏳ Начинаю загрузку...")
 
+        # Parse callback data
+        parts = callback.data.split(":")
+        if len(parts) != 5:
+            await callback.message.answer("❌ Некорректный формат запроса")
+            return
+
+        _, format_id, media_type, quality, idx = parts
+        is_audio = media_type == 'audio'
+        is_auto = media_type == 'auto'
+        is_mixed = media_type == 'mixed'  # Format already contains both audio and video
+
+        # Get data from state
         data = await state.get_data()
         url = data.get('url')
         title = data.get('title', 'YouTube Video')
+        ffmpeg_available = data.get('ffmpeg_available', False)
 
         if not url:
-            # Try to extract from callback data or fail
             await callback.message.answer("❌ Ошибка: данные о видео не найдены")
             return
 
@@ -3199,19 +3277,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         temp_dir = data.get('temp_dir') or "/tmp/youtube_downloads"
         os.makedirs(temp_dir, exist_ok=True)
 
-        # Set appropriate permissions
-        try:
-            os.chmod(temp_dir, 0o777)
-        except Exception as e:
-            logger.warning(f"Could not set permissions on temp dir: {e}")
-
-        # Extract format information
-        format_id = callback_data.format_id
-        is_audio = callback_data.type == 'audio'
-        is_auto = callback_data.type == 'auto'
-        quality = callback_data.quality
-
-        # Create custom progress message
+        # Show progress message
         progress_msg = await callback.message.answer(
             f"⏳ Загружаю {'аудио' if is_audio else 'видео'} из YouTube...\n"
             f"{'🎵 Аудио формат' if is_audio else f'🎬 Качество: {quality}'}"
@@ -3228,28 +3294,36 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             'outtmpl': f"{output_path}.%(ext)s",
             'noplaylist': True,
             'quiet': False,  # Enable output for debugging
-            'no_warnings': False,
-            'progress_hooks': [lambda d: logger.debug(f"Download progress: {d.get('_percent_str', 'unknown')}")],
+            'ignoreerrors': True,  # Continue even with errors
         }
 
-        # Set format based on selection
+        # Set format based on selection and ffmpeg availability
         if is_audio:
             # Audio-only configuration
-            ydl_opts['format'] = format_id
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }]
-            expected_ext = '.mp3'
+            if ffmpeg_available:
+                ydl_opts['format'] = format_id
+                ydl_opts['postprocessors'] = [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }]
+            else:
+                # Direct download without ffmpeg processing
+                ydl_opts['format'] = format_id
+                # No postprocessors if ffmpeg is not available
         elif is_auto:
             # Automatic best quality
-            ydl_opts['format'] = 'bestvideo+bestaudio/best'
-            expected_ext = '.mp4'
+            if ffmpeg_available:
+                ydl_opts['format'] = 'bestvideo+bestaudio/best'
+            else:
+                # Fall back to best available format that doesn't need merging
+                ydl_opts['format'] = 'best'
+        elif is_mixed:
+            # Already combined format, just download directly
+            ydl_opts['format'] = format_id
         else:
             # Specific video format
             ydl_opts['format'] = format_id
-            expected_ext = '.mp4'
 
         # Add format note to log
         logger.info(f"Download with format: {ydl_opts['format']}, is_audio: {is_audio}, is_auto: {is_auto}")
@@ -3275,16 +3349,17 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 if not os.path.exists(downloaded_path):
                     base_path = os.path.splitext(downloaded_path)[0]
 
-                    if is_audio:
-                        # Look for MP3 file
-                        if os.path.exists(f"{base_path}.mp3"):
-                            downloaded_path = f"{base_path}.mp3"
+                    # Look for file with different extensions
+                    possible_extensions = []
+                    if is_audio and ffmpeg_available:
+                        possible_extensions = ['.mp3', '.m4a', '.webm']
                     else:
-                        # Look for video files with different extensions
-                        for ext in ['.mp4', '.webm', '.mkv', '.mov']:
-                            if os.path.exists(f"{base_path}{ext}"):
-                                downloaded_path = f"{base_path}{ext}"
-                                break
+                        possible_extensions = ['.mp4', '.webm', '.mkv', '.mov', '.3gp']
+
+                    for ext in possible_extensions:
+                        if os.path.exists(f"{base_path}{ext}"):
+                            downloaded_path = f"{base_path}{ext}"
+                            break
 
                 # Verify download
                 if not os.path.exists(downloaded_path):
@@ -3301,22 +3376,32 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                 if file_size > 50 * 1024 * 1024:  # 50 MB limit
                     await progress_msg.edit_text("📦 Файл слишком большой, применяю сжатие...")
 
-                    # Use compression function for large files
-                    me = await bot.get_me()
-                    success = await handle_large_video_download(
-                        bot=bot,
-                        chat_id=callback.message.chat.id,
-                        video_path=downloaded_path,
-                        title=title,
-                        username=me.username,
-                        progress_msg=progress_msg
-                    )
-
-                    if not success:
-                        await progress_msg.edit_text(
-                            "❌ Не удалось сжать видео до требуемого размера.\n"
-                            "Попробуйте выбрать вариант с более низким качеством."
+                    if ffmpeg_available:
+                        # Use compression function for large files if ffmpeg is available
+                        me = await bot.get_me()
+                        success = await handle_large_video_download(
+                            bot=bot,
+                            chat_id=callback.message.chat.id,
+                            video_path=downloaded_path,
+                            title=title,
+                            username=me.username,
+                            progress_msg=progress_msg
                         )
+
+                        if not success:
+                            await progress_msg.edit_text(
+                                "❌ Не удалось сжать видео до требуемого размера.\n"
+                                "Попробуйте выбрать вариант с более низким качеством."
+                            )
+                            return
+                    else:
+                        # Can't compress without ffmpeg
+                        await progress_msg.edit_text(
+                            "❌ Файл слишком большой для отправки в Telegram (>50MB).\n"
+                            "Невозможно сжать видео, так как FFmpeg не установлен на сервере.\n"
+                            "Пожалуйста, выберите формат с меньшим размером."
+                        )
+                        return
                 else:
                     # File is small enough to send directly
                     await progress_msg.edit_text("📤 Отправляю файл...")
@@ -3326,7 +3411,7 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
 
                     try:
                         # Send based on file type
-                        if is_audio:
+                        if is_audio or downloaded_path.endswith(('.mp3', '.m4a')):
                             # Prepare audio metadata
                             audio_performer = info_dict.get('uploader', '') or info_dict.get('channel', '')
 
@@ -3375,7 +3460,13 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             # Provide user-friendly error message
             error_msg = str(download_error).lower()
 
-            if "http error 429" in error_msg:
+            if "ffmpeg is not installed" in error_msg:
+                await progress_msg.edit_text(
+                    "❌ Ошибка: FFmpeg не установлен на сервере.\n"
+                    "Невозможно объединить видео и аудио.\n"
+                    "Пожалуйста, выберите формат, который не требует объединения."
+                )
+            elif "http error 429" in error_msg:
                 await progress_msg.edit_text("❌ Слишком много запросов к YouTube. Пожалуйста, попробуйте позже.")
             elif "http error 403" in error_msg:
                 await progress_msg.edit_text("❌ Доступ запрещен. Возможно, видео имеет ограничения.")
