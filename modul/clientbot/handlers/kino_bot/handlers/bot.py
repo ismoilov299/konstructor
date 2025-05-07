@@ -2564,7 +2564,7 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
     """
-    Enhanced YouTube video downloader with better format detection and display
+    Enhanced YouTube video downloader that shows all available formats
     """
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
@@ -2607,142 +2607,166 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 duration = info_dict.get('duration', 0)
                 minutes = duration // 60
                 seconds = duration % 60
-                thumbnail = info_dict.get('thumbnail')
 
-                # Process formats more effectively
+                # Process formats
                 formats = info_dict.get('formats', [])
 
                 # Create separate lists for video and audio formats
                 video_formats = []
                 audio_formats = []
-                seen_resolutions = {}  # Use dict to store best format for each resolution
 
-                # Process all formats
+                # Process all formats and categorize them
                 for fmt in formats:
                     if not isinstance(fmt, dict):
                         continue
 
                     vcodec = fmt.get('vcodec', 'none')
                     acodec = fmt.get('acodec', 'none')
-                    filesize = fmt.get('filesize') or fmt.get('approximate_filesize')
+                    filesize = fmt.get('filesize') or fmt.get('approximate_filesize') or 0
                     ext = fmt.get('ext', '')
                     format_id = fmt.get('format_id', '')
+                    format_note = fmt.get('format_note', '')
 
-                    # Skip formats without proper codecs
-                    if vcodec == 'none' and acodec == 'none':
-                        continue
-
-                    # Exclude formats with unknown extension
-                    if not ext:
+                    # Skip formats without proper codecs or extention
+                    if (vcodec == 'none' and acodec == 'none') or not ext:
                         continue
 
                     # Process video formats (with video codec)
                     if vcodec != 'none' and vcodec != 'NA':
                         height = fmt.get('height', 0)
+                        width = fmt.get('width', 0)
+                        fps = fmt.get('fps', 0)
 
-                        # Only include formats with actual height
-                        if height and height > 0:
-                            resolution_key = f"{height}p"
+                        # Only include formats with actual height/width
+                        if (height and height > 0) or (width and width > 0):
+                            # Create format description
+                            resolution = f"{height}p"
+                            if fps and fps > 30:
+                                resolution += f"{fps}"
 
-                            # Keep only the best format for each resolution
-                            if resolution_key not in seen_resolutions or filesize > seen_resolutions[resolution_key][
-                                'filesize']:
-                                format_info = {
-                                    'format_id': format_id,
-                                    'height': height,
-                                    'extension': ext,
-                                    'filesize': filesize or 0,
-                                    'resolution': resolution_key,
-                                    'has_audio': acodec != 'none'
-                                }
-                                seen_resolutions[resolution_key] = format_info
+                            format_info = {
+                                'format_id': format_id,
+                                'height': height,
+                                'width': width,
+                                'fps': fps,
+                                'extension': ext,
+                                'filesize': filesize,
+                                'resolution': resolution,
+                                'has_audio': acodec != 'none',
+                                'format_note': format_note
+                            }
+                            video_formats.append(format_info)
 
                     # Process audio-only formats
                     elif acodec != 'none' and vcodec == 'none':
-                        quality = fmt.get('abr', 0)
-                        if quality > 0:
-                            audio_formats.append({
-                                'format_id': format_id,
-                                'extension': ext,
-                                'filesize': filesize or 0,
-                                'quality': quality,
-                                'audio_only': True
-                            })
+                        quality = fmt.get('abr', 0) or 0
+                        audio_formats.append({
+                            'format_id': format_id,
+                            'extension': ext,
+                            'filesize': filesize,
+                            'quality': quality,
+                            'audio_only': True,
+                            'format_note': format_note
+                        })
 
-                # Convert resolution dict to list and sort by height (highest first)
-                video_formats = list(seen_resolutions.values())
-                video_formats.sort(key=lambda x: x['height'], reverse=True)
+                # Sort video formats by height (highest first)
+                video_formats.sort(key=lambda x: (x.get('height', 0) or 0, x.get('width', 0) or 0), reverse=True)
 
                 # Sort audio formats by quality (highest first)
-                audio_formats.sort(key=lambda x: x['quality'], reverse=True)
+                audio_formats.sort(key=lambda x: x.get('quality', 0) or 0, reverse=True)
 
-                # Take the best audio format
-                best_audio = audio_formats[0] if audio_formats else None
+                # Add a best overall option and combined video+audio options
+                combined_formats = [
+                    {
+                        'format_id': 'best',
+                        'format_note': 'Лучшее качество (видео+аудио)',
+                        'extension': 'mp4',
+                        'has_audio': True
+                    },
+                    {
+                        'format_id': 'bestvideo+bestaudio',
+                        'format_note': 'Лучшее видео + лучшее аудио',
+                        'extension': 'mp4',
+                        'has_audio': True
+                    }
+                ]
 
-                # Select the most distinct video resolutions (highest, mid, low)
-                selected_video_formats = []
-                if len(video_formats) > 0:
-                    selected_video_formats.append(video_formats[0])  # Highest quality
+                # Add a best audio option
+                best_audio = {
+                    'format_id': 'bestaudio',
+                    'format_note': 'Лучшее аудио (MP3)',
+                    'extension': 'mp3',
+                    'audio_only': True
+                }
 
-                if len(video_formats) > 2:
-                    selected_video_formats.append(video_formats[len(video_formats) // 2])  # Mid quality
-
-                if len(video_formats) > 1:
-                    selected_video_formats.append(video_formats[-1])  # Lowest quality
-
-                # Build keyboard with format options
+                # Build keyboard with format options - start with combined formats
                 markup = InlineKeyboardBuilder()
 
-                # Add video format buttons
-                for idx, fmt in enumerate(selected_video_formats):
-                    resolution = fmt['resolution']
-                    size_text = ""
-                    if fmt['filesize']:
-                        size_mb = fmt['filesize'] / (1024 * 1024)
-                        size_text = f" (~{size_mb:.1f} MB)" if size_mb > 0 else ""
-
-                    audio_text = "🔊" if fmt.get('has_audio', False) else "🔇"
-                    button_text = f"🎬 {resolution} {audio_text}{size_text}"
-
-                    # Use FormatCallback for consistent handling
+                # Add combined/automated options first
+                for idx, fmt in enumerate(combined_formats):
+                    button_text = f"🚀 {fmt['format_note']}"
                     markup.button(
                         text=button_text,
-                        callback_data=FormatCallback(
-                            format_id=fmt['format_id'],
-                            type="video",
-                            quality=resolution,
-                            index=idx
-                        ).pack()
+                        callback_data=f"format:{fmt['format_id']}:auto:best:{idx}"
                     )
 
-                # Add best audio format if available
-                if best_audio:
-                    quality_text = f"{best_audio['quality']}kbps" if best_audio['quality'] else ""
+                # Add best audio option
+                markup.button(
+                    text=f"🎵 {best_audio['format_note']}",
+                    callback_data=f"format:{best_audio['format_id']}:audio:best:{len(combined_formats)}"
+                )
+
+                # Show up to 15 video format options (to avoid Telegram button limits)
+                max_video_formats = min(len(video_formats), 15)
+                for idx, fmt in enumerate(video_formats[:max_video_formats]):
+                    resolution = fmt.get('resolution', '')
+                    format_note = fmt.get('format_note', '')
+                    ext = fmt.get('extension', '')
+
+                    # Format the button text to be informative but concise
                     size_text = ""
-                    if best_audio['filesize']:
-                        size_mb = best_audio['filesize'] / (1024 * 1024)
-                        size_text = f" (~{size_mb:.1f} MB)" if size_mb > 0 else ""
+                    if fmt.get('filesize'):
+                        size_mb = fmt.get('filesize', 0) / (1024 * 1024)
+                        if size_mb > 0:
+                            size_text = f" ~{size_mb:.1f}MB"
+
+                    # Add icons for audio and format
+                    audio_text = "🔊" if fmt.get('has_audio', False) else "🔇"
+                    format_details = f"{ext}"
+                    if format_note:
+                        format_details += f", {format_note}"
+
+                    button_text = f"🎬 {resolution} {audio_text} [{format_details}]{size_text}"
 
                     markup.button(
-                        text=f"🎵 Аудио MP3 {quality_text}{size_text}",
-                        callback_data=FormatCallback(
-                            format_id=best_audio['format_id'],
-                            type="audio",
-                            quality="audio",
-                            index=len(selected_video_formats)
-                        ).pack()
+                        text=button_text,
+                        callback_data=f"format:{fmt['format_id']}:video:{resolution}:{idx + len(combined_formats) + 1}"
                     )
 
-                # Add auto option for easy download
-                markup.button(
-                    text="🚀 Авто (Лучшее качество)",
-                    callback_data=FormatCallback(
-                        format_id="best",
-                        type="auto",
-                        quality="best",
-                        index=len(selected_video_formats) + 1
-                    ).pack()
-                )
+                # Show up to 5 audio format options if available
+                max_audio_formats = min(len(audio_formats), 5)
+                for idx, fmt in enumerate(audio_formats[:max_audio_formats]):
+                    quality_text = f"{fmt.get('quality', 0)}kbps" if fmt.get('quality', 0) else ""
+                    format_note = fmt.get('format_note', '')
+                    ext = fmt.get('extension', '')
+
+                    size_text = ""
+                    if fmt.get('filesize'):
+                        size_mb = fmt.get('filesize', 0) / (1024 * 1024)
+                        if size_mb > 0:
+                            size_text = f" ~{size_mb:.1f}MB"
+
+                    # Format info for audio
+                    format_details = ext
+                    if format_note:
+                        format_details += f", {format_note}"
+
+                    button_text = f"🎵 Аудио {quality_text} [{format_details}]{size_text}"
+
+                    markup.button(
+                        text=button_text,
+                        callback_data=f"format:{fmt['format_id']}:audio:{quality_text}:{idx + len(combined_formats) + max_video_formats + 1}"
+                    )
 
                 # Set single column layout
                 markup.adjust(1)
@@ -2753,7 +2777,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     title=title,
                     uploader=uploader,
                     duration=duration,
-                    formats=selected_video_formats + ([best_audio] if best_audio else []),
+                    formats=video_formats + audio_formats,
                     temp_dir=temp_dir
                 )
 
@@ -2771,21 +2795,10 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             logger.error(f"Error extracting formats: {e}")
             logger.exception("Format extraction error:")
 
-            # Fallback to simple options
-            markup = InlineKeyboardBuilder()
-            markup.button(text="🎬 Высокое качество", callback_data=f"yt_best:{clean_url}")
-            markup.button(text="🎬 Среднее качество", callback_data=f"yt_medium:{clean_url}")
-            markup.button(text="🎬 Низкое качество", callback_data=f"yt_low:{clean_url}")
-            markup.button(text="🎵 Аудио MP3", callback_data=f"yt_audio:{clean_url}")
-            markup.adjust(1)
-
-            # Store temp dir in state for fallback options too
-            await state.update_data(temp_dir=temp_dir)
-
+            # Instead of fallback buttons, inform the user about the error
             await status_message.edit_text(
-                f"🎥 <b>YouTube видео</b>\n\n"
-                f"Не удалось получить список форматов. Выберите вариант загрузки:",
-                reply_markup=markup.as_markup(),
+                f"❌ <b>Ошибка при получении форматов видео</b>\n\n"
+                f"Не удалось получить список форматов. Пожалуйста, проверьте ссылку или попробуйте позже.",
                 parse_mode="HTML"
             )
 
