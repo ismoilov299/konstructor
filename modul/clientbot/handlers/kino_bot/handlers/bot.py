@@ -1775,776 +1775,50 @@ def update_download_analytics(bot_username, domain):
     DownloadAnalyticsModel.objects.filter(id=analytics.id).update(count=F('count') + 1)
 
 
+
+
+# Router va FSM
+
+
+class Download(StatesGroup):
+    download = State()
+
+# Bot filtri
 class DownloaderBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
-        bot_db = await shortcuts.get_bot(bot)
-        return shortcuts.have_one_module(bot_db, "download")
+        return True  # Agar maxsus modul cheklovlari bo'lsa, bu yerni o'zgartiring
 
-
+# Formatlarni tanlash
 def get_best_formats(formats):
     video_formats = []
     audio_format = None
     seen_qualities = set()
 
-    # Log the total number of formats found
-    logger.debug(f"Total formats found: {len(formats)}")
-
     for fmt in formats:
         if not isinstance(fmt, dict):
             continue
 
-        # Add more detailed logging
-        logger.debug(
-            f"Format: {fmt.get('format_id')} - vcodec: {fmt.get('vcodec')} - acodec: {fmt.get('acodec')} - ext: {fmt.get('ext')} - height: {fmt.get('height')}")
-
         vcodec = fmt.get('vcodec', 'none')
         acodec = fmt.get('acodec', 'none')
+        height = fmt.get('height', 0)
 
-        # Only add video formats with real height values
-        if vcodec != 'none' and vcodec != 'NA':
-            height = fmt.get('height', 0)
-            if height and height not in seen_qualities and height > 0:
-                seen_qualities.add(height)
-                video_formats.append(fmt)
-                logger.debug(f"Added video format: {fmt.get('format_id')} - {height}p")
+        if vcodec != 'none' and height and height not in seen_qualities and height in [360, 720, 1080]:
+            seen_qualities.add(height)
+            video_formats.append(fmt)
+            logger.debug(f"Добавлен видео формат: {fmt.get('format_id')} - {height}p")
 
-        # Only select audio formats with no video
         if acodec != 'none' and vcodec == 'none':
-            if not audio_format or (fmt.get('abr', 0) or 0) > (audio_format.get('abr', 0) or 0):
+            if not audio_format or fmt.get('abr', 0) > audio_format.get('abr', 0):
                 audio_format = fmt
-                logger.debug(f"Found better audio format: {fmt.get('format_id')} - {fmt.get('abr')}kbps")
+                logger.debug(f"Найден лучший аудио формат: {fmt.get('format_id')} - {fmt.get('abr')}kbps")
 
-    # Sort video formats by height (resolution) in descending order
-    video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
-    logger.debug(f"Final video formats count: {len(video_formats)}")
-
+    video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
     return video_formats, audio_format
 
-
-async def download_video(url: str, format_id: str, state: FSMContext):
-    try:
-        # Use a secure temporary directory
-        temp_dir = "/tmp/youtube_downloads"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Try to ensure proper permissions
-        try:
-            os.chmod(temp_dir, 0o777)
-        except Exception as e:
-            logger.warning(f"Could not set permissions on temp dir: {e}")
-
-        timestamp = int(time.time())
-        output_filename = f"video_{timestamp}.mp4"
-        output_file = os.path.join(temp_dir, output_filename)
-
-        logger.info(f"Starting download for format {format_id} to {output_file}")
-
-        # Check for ffmpeg
-        ffmpeg_exists = False
-        try:
-            process = await asyncio.create_subprocess_exec(
-                'which', 'ffmpeg',
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-            ffmpeg_exists = (process.returncode == 0)
-            logger.info(f"FFMPEG {'is' if ffmpeg_exists else 'is not'} available: {stdout.decode().strip()}")
-        except Exception as e:
-            logger.error(f"Error checking ffmpeg: {e}")
-
-        # Configure yt-dlp options
-        ydl_opts = {
-            'outtmpl': output_file,
-            'verbose': True,
-            'retries': 5,
-            'fragment_retries': 5,
-            'ignoreerrors': False,
-            'continuedl': True,
-            'nooverwrites': False,
-        }
-
-        # Set format based on ffmpeg availability
-        if ffmpeg_exists:
-            if format_id.lower() == 'audio':
-                ydl_opts['format'] = 'bestaudio'
-                ydl_opts['postprocessors'] = [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }]
-                output_file = output_file.replace('.mp4', '.mp3')
-            else:
-                ydl_opts['format'] = format_id
-        else:
-            logger.warning("FFMPEG not found. Using single format mode.")
-            if format_id.lower() == 'audio':
-                ydl_opts['format'] = 'bestaudio'
-            else:
-                ydl_opts['format'] = 'best'
-
-        logger.info(f"Download options: {ydl_opts}")
-
-        # Use a semaphore to limit concurrent downloads
-        async with asyncio.Semaphore(2):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Run the download in a separate thread
-                info = await asyncio.to_thread(
-                    ydl.extract_info, url, download=True
-                )
-
-                if not info:
-                    raise Exception("Failed to extract video info")
-
-                logger.info(f"Download complete for {info.get('title')}")
-
-                # Get the actual output path (yt-dlp might modify it)
-                actual_output = ydl.prepare_filename(info)
-
-                # Check if file exists with potential different extensions
-                if not os.path.exists(actual_output):
-                    base_name = os.path.splitext(actual_output)[0]
-                    for ext in ['.mp4', '.webm', '.mkv', '.mp3', '.m4a']:
-                        test_path = f"{base_name}{ext}"
-                        if os.path.exists(test_path):
-                            actual_output = test_path
-                            logger.info(f"Found file with different extension: {actual_output}")
-                            break
-                    else:
-                        # List all files in directory to help debug
-                        logger.error(f"Files in directory: {os.listdir(os.path.dirname(actual_output))}")
-                        raise FileNotFoundError(f"Downloaded file not found: {actual_output}")
-
-                # Verify file size
-                file_size = os.path.getsize(actual_output)
-                logger.info(f"Downloaded file size: {file_size} bytes")
-
-                if file_size == 0:
-                    raise Exception("Downloaded file is empty")
-
-                return actual_output, info
-
-    except Exception as e:
-        logger.error(f"Download error: {str(e)}")
-        logger.exception("Detailed error:")
-        raise
-
-
-async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str,
-                                  state: FSMContext):
-    """
-    Downloads and sends a video from the specified URL using yt-dlp.
-    For files larger than 50MB, automatically compresses them.
-
-    Args:
-        message: Telegram message object
-        url: URL of the video to download
-        ydl_opts: Options for yt-dlp
-        me: Bot instance information
-        bot: Bot instance
-        platform: Platform name (YouTube, TikTok, etc.)
-        state: FSM context for state management
-    """
-    progress_msg = await message.answer(f"⏳ Загружаю видео из {platform}...")
-    temp_file = None
-    compressed_file = None
-
-    try:
-        # Create a secure temporary directory
-        temp_dir = "/tmp/youtube_downloads"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Try to set permissions
-        try:
-            os.chmod(temp_dir, 0o777)
-        except Exception as e:
-            logger.warning(f"Could not set permissions on temp dir: {e}")
-
-        # Add more robust options to ydl_opts
-        final_opts = {
-            'format': 'mp4',  # Ensure consistent format
-            'merge_output_format': 'mp4',
-            'outtmpl': os.path.join(temp_dir, f'temp_{int(time.time())}_{message.from_user.id}.%(ext)s'),
-            'noplaylist': True,
-            'geo_bypass': True,  # Try to bypass geo-restrictions
-            'retries': 3,
-            'fragment_retries': 3,
-            'verbose': True,
-            **ydl_opts  # Add user-provided options
-        }
-
-        # Log download attempt
-        logger.info(f"Downloading {platform} video from {url} with options: {final_opts}")
-
-        # Create a custom progress hook to update the message
-        last_update_time = [time.time()]
-        download_start = [time.time()]
-
-        def progress_hook(d):
-            if d['status'] == 'downloading':
-                current_time = time.time()
-                # Update message at most every 3 seconds to avoid flood limits
-                if current_time - last_update_time[0] > 3:
-                    last_update_time[0] = current_time
-                    elapsed = current_time - download_start[0]
-
-                    try:
-                        percent = d.get('_percent_str', '0%').strip()
-                        speed = d.get('_speed_str', 'N/A')
-                        eta = d.get('_eta_str', 'N/A')
-
-                        # Schedule message update asynchronously
-                        asyncio.create_task(
-                            progress_msg.edit_text(
-                                f"⏳ Загружаю видео из {platform}...\n"
-                                f"Прогресс: {percent}\n"
-                                f"Скорость: {speed}\n"
-                                f"Осталось: {eta}\n"
-                                f"Прошло времени: {int(elapsed)}с"
-                            )
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to update progress message: {e}")
-
-            elif d['status'] == 'finished':
-                logger.info(f"Download finished: {d['filename']}")
-
-        final_opts['progress_hooks'] = [progress_hook]
-
-        # Use youtube-dl in a separate thread to avoid blocking
-        with yt_dlp.YoutubeDL(final_opts) as ydl:
-            # Run in thread pool to avoid blocking the event loop
-            info_dict = await asyncio.to_thread(
-                ydl.extract_info, url, download=True
-            )
-
-            if not info_dict:
-                await progress_msg.edit_text(f"❌ Не удалось получить информацию о видео из {platform}")
-                return
-
-            # Get correct filename
-            video_path = ydl.prepare_filename(info_dict)
-            logger.info(f"Download completed to path: {video_path}")
-
-            # Handle potential filename format issues
-            if not os.path.exists(video_path):
-                base_path = video_path.rsplit('.', 1)[0]
-                for ext in ['.mp4', '.webm', '.mkv', '.mov']:
-                    if os.path.exists(base_path + ext):
-                        video_path = base_path + ext
-                        logger.info(f"Found file with different extension: {video_path}")
-                        break
-
-            # Verify file exists and has content
-            if not os.path.exists(video_path):
-                raise FileNotFoundError(f"Downloaded file not found at {video_path}")
-
-            file_size = os.path.getsize(video_path)
-            if file_size == 0:
-                raise ValueError("Downloaded file is empty (0 bytes)")
-
-            logger.info(f"File size: {file_size} bytes")
-
-            # Store path for cleanup
-            temp_file = video_path
-
-            # Get title and other metadata
-            title = info_dict.get('title', f"{platform} video")
-            duration = info_dict.get('duration')
-            duration_str = f" ({duration // 60}:{duration % 60:02d})" if duration else ""
-
-            # Check if file is too large for Telegram
-            MAX_SIZE = 50 * 1024 * 1024  # 50 MB
-            if file_size <= MAX_SIZE:
-                # File is small enough, send directly
-                await progress_msg.edit_text("📤 Отправляю видео...")
-
-                # Prepare video for sending
-                video = FSInputFile(video_path)
-
-                # Send the video
-                await bot.send_chat_action(message.chat.id, "upload_video")
-                await bot.send_video(
-                    chat_id=message.chat.id,
-                    video=video,
-                    caption=f"📹 {title}{duration_str}\nСкачано через @{me.username}",
-                    supports_streaming=True
-                )
-
-                # Update state
-                await state.set_state(Download.download)
-
-                # Delete progress message
-                await progress_msg.delete()
-            else:
-                # File is too large, compress it
-                await progress_msg.edit_text(
-                    f"📦 Файл слишком большой ({file_size / (1024 * 1024):.1f} МБ), сжимаю видео...")
-
-                # Create path for compressed file
-                compressed_path = os.path.join(temp_dir, f"compressed_{os.path.basename(video_path)}")
-                compressed_file = compressed_path
-
-                try:
-                    # Get video duration
-                    duration_cmd = [
-                        'ffprobe',
-                        '-v', 'error',
-                        '-show_entries', 'format=duration',
-                        '-of', 'default=noprint_wrappers=1:nokey=1',
-                        video_path
-                    ]
-
-                    process = await asyncio.create_subprocess_exec(
-                        *duration_cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-
-                    stdout, stderr = await process.communicate()
-
-                    if process.returncode != 0:
-                        logger.error(f"Error getting video duration: {stderr.decode()}")
-                        raise Exception("Не удалось определить длительность видео")
-
-                    try:
-                        duration = float(stdout.decode().strip())
-                    except (ValueError, TypeError):
-                        logger.error("Invalid duration value received")
-                        duration = 60  # Default to 60 seconds if duration can't be determined
-
-                    # Calculate target bitrate for a ~45MB file (leaving margin)
-                    target_size_bits = 45 * 8 * 1024 * 1024
-                    target_bitrate = int(target_size_bits / duration) if duration > 0 else 500000
-
-                    # Ensure reasonable bitrate range
-                    target_bitrate = max(300000, min(target_bitrate, 2000000))
-
-                    # Compress the video with FFmpeg
-                    compress_cmd = [
-                        'ffmpeg',
-                        '-i', video_path,
-                        '-c:v', 'libx264',
-                        '-preset', 'fast',  # Use 'fast' preset for speed
-                        '-crf', '30',  # Use higher CRF value for smaller file size
-                        '-maxrate', f'{target_bitrate}',
-                        '-bufsize', f'{target_bitrate * 2}',
-                        '-movflags', '+faststart',  # Optimize for web streaming
-                        '-c:a', 'aac',
-                        '-b:a', '128k',
-                        '-y',  # Overwrite output file
-                        compressed_path
-                    ]
-
-                    await progress_msg.edit_text("📦 Сжимаю видео... Это может занять несколько минут")
-
-                    process = await asyncio.create_subprocess_exec(
-                        *compress_cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-
-                    stdout, stderr = await process.communicate()
-
-                    if process.returncode != 0:
-                        error_output = stderr.decode()
-                        logger.error(f"Error compressing video: {error_output}")
-                        raise Exception("Ошибка сжатия видео. Попробуйте другой формат.")
-
-                    # Check if compression was successful and file exists
-                    if not os.path.exists(compressed_path):
-                        raise FileNotFoundError("Сжатый файл не найден")
-
-                    # Check final file size
-                    compressed_size = os.path.getsize(compressed_path)
-
-                    # If still too big, adjust quality and try again
-                    if compressed_size > 50 * 1024 * 1024:
-                        await progress_msg.edit_text("📦 Файл всё ещё слишком большой, оптимизирую...")
-
-                        # Try more aggressive compression
-                        retry_compress_cmd = [
-                            'ffmpeg',
-                            '-i', video_path,
-                            '-c:v', 'libx264',
-                            '-preset', 'medium',
-                            '-crf', '35',  # Much higher CRF for smaller size
-                            '-vf', 'scale=854:480',  # Reduce resolution to 480p
-                            '-c:a', 'aac',
-                            '-b:a', '96k',
-                            '-y',
-                            compressed_path
-                        ]
-
-                        process = await asyncio.create_subprocess_exec(
-                            *retry_compress_cmd,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
-
-                        stdout, stderr = await process.communicate()
-
-                        if process.returncode != 0:
-                            logger.error(f"Error during second compression attempt: {stderr.decode()}")
-                            raise Exception("Не удалось сжать видео до требуемого размера")
-
-                        # Check if second compression was successful
-                        if not os.path.exists(compressed_path):
-                            raise FileNotFoundError("Сжатый файл не найден после повторной попытки")
-
-                        compressed_size = os.path.getsize(compressed_path)
-
-                        # If still too big after second attempt
-                        if compressed_size > 50 * 1024 * 1024:
-                            await progress_msg.edit_text(
-                                f"⚠️ Не удалось сжать видео до требуемого размера. "
-                                f"Исходный размер: {file_size / (1024 * 1024):.1f} МБ, "
-                                f"Сжатый размер: {compressed_size / (1024 * 1024):.1f} МБ"
-                            )
-                            return
-
-                    # Send the compressed video
-                    await progress_msg.edit_text("📤 Отправляю сжатое видео...")
-
-                    await bot.send_video(
-                        chat_id=message.chat.id,
-                        video=FSInputFile(compressed_path),
-                        caption=f"📹 {title}{duration_str} (Сжатое видео)\n"
-                                f"Исходный размер: {file_size / (1024 * 1024):.1f} МБ\n"
-                                f"Скачано через @{me.username}",
-                        supports_streaming=True
-                    )
-
-                    # Update state
-                    await state.set_state(Download.download)
-
-                    # Delete progress message
-                    await progress_msg.delete()
-
-                except Exception as e:
-                    logger.error(f"Video compression error: {str(e)}")
-                    await progress_msg.edit_text(f"❌ Ошибка при обработке видео: {str(e)[:100]}...")
-
-    except Exception as e:
-        logger.error(f"Error downloading video from {platform}: {str(e)}")
-        logger.exception("Full traceback:")
-        error_msg = str(e)
-
-        # Provide user-friendly error message
-        if "HTTP Error 429" in error_msg:
-            await progress_msg.edit_text(f"❌ Слишком много запросов к {platform}. Пожалуйста, попробуйте позже.")
-        elif "HTTP Error 403" in error_msg:
-            await progress_msg.edit_text(f"❌ Доступ запрещен. Возможно, видео имеет ограничения.")
-        elif "Age verification" in error_msg:
-            await progress_msg.edit_text(f"❌ Видео имеет возрастные ограничения.")
-        elif "Private video" in error_msg or "not available" in error_msg.lower():
-            await progress_msg.edit_text(f"❌ Видео недоступно (приватное или было удалено).")
-        elif "ffmpeg" in error_msg.lower():
-            await progress_msg.edit_text(f"❌ Ошибка обработки видео. Возможно, проблема с ffmpeg.")
-        else:
-            await progress_msg.edit_text(f"❌ Не удалось скачать видео из {platform}. Пожалуйста, попробуйте позже.")
-
-    finally:
-        # Clean up downloaded files
-        if temp_file and os.path.exists(temp_file):
-            try:
-                os.remove(temp_file)
-                logger.info(f"Removed temporary file: {temp_file}")
-            except Exception as e:
-                logger.error(f"Error removing temporary file: {e}")
-
-        if compressed_file and os.path.exists(compressed_file):
-            try:
-                os.remove(compressed_file)
-                logger.info(f"Removed compressed file: {compressed_file}")
-            except Exception as e:
-                logger.error(f"Error removing compressed file: {e}")
-
-
-async def handle_large_video_download(bot, chat_id, video_path, title, username, progress_msg=None):
-    """
-    Handle video download and sending, with automatic compression for large files
-
-    Args:
-        bot: Bot instance
-        chat_id: Chat ID to send the video to
-        video_path: Path to the video file
-        title: Video title for the caption
-        username: Bot username for the caption
-        progress_msg: Optional message object to update with progress
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        # First check if the input file actually exists
-        if not os.path.exists(video_path):
-            logger.error(f"Input video file does not exist: {video_path}")
-            if progress_msg:
-                await progress_msg.edit_text("❌ Исходный файл видео не найден")
-            return False
-
-        file_size = os.path.getsize(video_path)
-
-        # Send directly if under 50MB
-        if file_size <= 50 * 1024 * 1024:
-            if progress_msg:
-                await progress_msg.edit_text("📤 Отправляю видео...")
-
-            await bot.send_video(
-                chat_id=chat_id,
-                video=FSInputFile(video_path),
-                caption=f"📹 {title}\nСкачано через @{username}",
-                supports_streaming=True
-            )
-            return True
-
-        # File is too large, compress it
-        if progress_msg:
-            await progress_msg.edit_text("📦 Файл слишком большой, сжимаю видео...")
-
-        # Create temp directory if it doesn't exist
-        temp_dir = os.path.dirname(video_path)
-        if not os.path.exists(temp_dir):
-            # If directory doesn't exist, create it
-            os.makedirs(temp_dir, exist_ok=True)
-
-        # Create output path for compressed video
-        compressed_path = os.path.join(temp_dir, f"compressed_{os.path.basename(video_path)}")
-
-        # Make sure ffmpeg is installed
-        try:
-            process = await asyncio.create_subprocess_exec(
-                'which', 'ffmpeg',
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-            if process.returncode != 0:
-                logger.error("FFmpeg not found on the system")
-                if progress_msg:
-                    await progress_msg.edit_text("❌ FFmpeg не найден на сервере")
-                return False
-        except Exception as e:
-            logger.error(f"Error checking for FFmpeg: {str(e)}")
-            if progress_msg:
-                await progress_msg.edit_text("❌ Ошибка проверки FFmpeg")
-            return False
-
-        try:
-            # Get video duration
-            duration_cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                video_path
-            ]
-
-            process = await asyncio.create_subprocess_exec(
-                *duration_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            stdout, stderr = await process.communicate()
-
-            if process.returncode != 0:
-                stderr_output = stderr.decode()
-                logger.error(f"Error getting video duration: {stderr_output}")
-                # Try to continue with default duration
-                duration = 60  # Default to 60 seconds
-            else:
-                try:
-                    duration = float(stdout.decode().strip())
-                    if duration <= 0:
-                        duration = 60  # Default if invalid duration
-                except (ValueError, TypeError):
-                    logger.error("Invalid duration value received")
-                    duration = 60  # Default to 60 seconds
-
-            # Calculate target bitrate for a ~45MB file (leaving margin)
-            target_size_bits = 45 * 8 * 1024 * 1024
-            target_bitrate = int(target_size_bits / duration)
-
-            # Ensure reasonable bitrate range
-            target_bitrate = max(300000, min(target_bitrate, 2000000))
-
-            # First compression attempt - moderate quality
-            if progress_msg:
-                await progress_msg.edit_text("📦 Сжимаю видео... Это может занять несколько минут")
-
-            # Log all commands for debugging
-            compress_cmd = [
-                'ffmpeg',
-                '-i', video_path,
-                '-c:v', 'libx264',
-                '-preset', 'fast',
-                '-crf', '30',
-                '-maxrate', f'{target_bitrate}',
-                '-bufsize', f'{target_bitrate * 2}',
-                '-movflags', '+faststart',
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-y',
-                compressed_path
-            ]
-
-            logger.info(f"Running compression command: {' '.join(compress_cmd)}")
-
-            process = await asyncio.create_subprocess_exec(
-                *compress_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            stdout, stderr = await process.communicate()
-
-            if process.returncode != 0:
-                stderr_output = stderr.decode()
-                logger.error(f"Error compressing video: {stderr_output}")
-
-                # Try with simpler options if first attempt failed
-                simple_compress_cmd = [
-                    'ffmpeg',
-                    '-i', video_path,
-                    '-vcodec', 'libx264',
-                    '-crf', '35',
-                    '-acodec', 'aac',
-                    '-y',
-                    compressed_path
-                ]
-
-                logger.info(f"Trying simpler compression: {' '.join(simple_compress_cmd)}")
-
-                if progress_msg:
-                    await progress_msg.edit_text("📦 Пробую альтернативный метод сжатия...")
-
-                process = await asyncio.create_subprocess_exec(
-                    *simple_compress_cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-
-                stdout, stderr = await process.communicate()
-
-                if process.returncode != 0:
-                    stderr_output = stderr.decode()
-                    logger.error(f"Error with simple compression: {stderr_output}")
-                    if progress_msg:
-                        await progress_msg.edit_text("❌ Не удалось сжать видео")
-                    return False
-
-            # Check if compression was successful and file exists
-            if not os.path.exists(compressed_path):
-                logger.error(f"Compressed file not found at: {compressed_path}")
-                if progress_msg:
-                    await progress_msg.edit_text("❌ Сжатый файл не найден")
-                return False
-
-            # Check final file size
-            compressed_size = os.path.getsize(compressed_path)
-            logger.info(f"Compressed file size: {compressed_size / (1024 * 1024):.1f} MB")
-
-            # If still too big, try more aggressive compression
-            if compressed_size > 50 * 1024 * 1024:
-                if progress_msg:
-                    await progress_msg.edit_text("📦 Файл всё ещё слишком большой, применяю сильное сжатие...")
-
-                # More aggressive compression with lower resolution
-                aggressive_compress_cmd = [
-                    'ffmpeg',
-                    '-i', video_path,
-                    '-vcodec', 'libx264',
-                    '-vf', 'scale=640:360',  # 360p resolution
-                    '-crf', '40',  # Very high compression
-                    '-preset', 'faster',
-                    '-acodec', 'aac',
-                    '-b:a', '96k',
-                    '-y',
-                    compressed_path
-                ]
-
-                logger.info(f"Running aggressive compression: {' '.join(aggressive_compress_cmd)}")
-
-                process = await asyncio.create_subprocess_exec(
-                    *aggressive_compress_cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-
-                stdout, stderr = await process.communicate()
-
-                if process.returncode != 0:
-                    stderr_output = stderr.decode()
-                    logger.error(f"Error with aggressive compression: {stderr_output}")
-                    if progress_msg:
-                        await progress_msg.edit_text("❌ Не удалось сжать видео до требуемого размера")
-                    return False
-
-                # Check if file exists after aggressive compression
-                if not os.path.exists(compressed_path):
-                    logger.error("Compressed file not found after aggressive compression")
-                    if progress_msg:
-                        await progress_msg.edit_text("❌ Сжатый файл не найден")
-                    return False
-
-                compressed_size = os.path.getsize(compressed_path)
-                logger.info(f"Aggressively compressed file size: {compressed_size / (1024 * 1024):.1f} MB")
-
-                # If still too big after aggressive compression
-                if compressed_size > 50 * 1024 * 1024:
-                    if progress_msg:
-                        await progress_msg.edit_text(
-                            f"⚠️ Не удалось сжать видео достаточно сильно\n"
-                            f"Размер файла: {compressed_size / (1024 * 1024):.1f} МБ > 50 МБ"
-                        )
-                    return False
-
-            # Send the compressed video
-            if progress_msg:
-                await progress_msg.edit_text("📤 Отправляю сжатое видео...")
-
-            await bot.send_video(
-                chat_id=chat_id,
-                video=FSInputFile(compressed_path),
-                caption=f"📹 {title} (Сжатое видео)\n"
-                        f"Исходный размер: {file_size / (1024 * 1024):.1f} МБ\n"
-                        f"Скачано через @{username}",
-                supports_streaming=True
-            )
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Video compression error: {str(e)}")
-            if progress_msg:
-                await progress_msg.edit_text(f"❌ Ошибка при обработке видео: {str(e)[:100]}...")
-            return False
-
-    except Exception as e:
-        logger.error(f"General error in handle_large_video_download: {str(e)}")
-        if progress_msg:
-            await progress_msg.edit_text(f"❌ Произошла ошибка при обработке видео: {str(e)[:100]}...")
-        return False
-
-    finally:
-        # Clean up files
-        try:
-            if 'video_path' in locals() and os.path.exists(video_path):
-                os.remove(video_path)
-                logger.info(f"Removed original file: {video_path}")
-
-            if 'compressed_path' in locals() and os.path.exists(compressed_path):
-                os.remove(compressed_path)
-                logger.info(f"Removed compressed file: {compressed_path}")
-        except Exception as e:
-            logger.error(f"Error cleaning up files: {e}")
-
-
+# Asosiy handler
 @client_bot_router.message(DownloaderBotFilter())
 @client_bot_router.message(Download.download)
-async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+async def download_handler(message: types.Message, state: FSMContext, bot: Bot):
     if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
@@ -2560,1651 +1834,223 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
         await handle_youtube(message, url, me, bot, state)
     else:
         await message.answer("❗ Отправьте ссылку на видео с YouTube, Instagram или TikTok")
-
-
-async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
-    """
-    Обработчик для YouTube с поддержкой FFmpeg для загрузки видео в высоком качестве с аудио
-    """
+from uuid import uuid4
+# YouTube handler
+async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: FSMContext):
     status_message = await message.answer("⏳ Получаю информацию о видео...")
-
     try:
-        # Очистка URL
         clean_url = url.split('&')[0] if '&' in url else url
-        logger.info(f"Обработка YouTube URL: {clean_url}")
-
-        # Создание временной директории
-        temp_dir = "/tmp/youtube_downloads"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Проверка FFmpeg
-        # Проверка FFmpeg
-        ffmpeg_available = False
-        try:
-            process = await asyncio.create_subprocess_exec(
-                'ffmpeg', '-version',
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-            ffmpeg_available = process.returncode == 0
-
-            if ffmpeg_available:
-                # Логирование информации о версии FFmpeg
-                version_info = stdout.decode().split('\n')[0] if stdout else "Версия не определена"
-                logger.info(f"FFmpeg доступен: {version_info}")
-            else:
-                logger.warning("FFmpeg не найден или вернул ошибку")
-        except Exception as e:
-            logger.warning(f"Ошибка при проверке FFmpeg: {e}")
-
-        # Обновляем состояние с верным статусом FFmpeg
-        await state.update_data(ffmpeg_available=ffmpeg_available)
-
-        # Конфигурация для получения форматов
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
-            'youtube_include_dash_manifest': True,
-            'extract_flat': False,
             'noplaylist': True,
         }
 
-        try:
-            # Получение информации о видео
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = await asyncio.to_thread(ydl.extract_info, clean_url, download=False)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = await asyncio.to_thread(ydl.extract_info, clean_url, download=False)
+            if not info_dict:
+                raise Exception("Не удалось получить информацию о видео")
 
+            title = info_dict.get('title', 'YouTube Video')
+            duration = info_dict.get('duration', 0)
+            duration_str = f"{duration // 60}:{duration % 60:02d}" if duration else ""
+
+            formats = info_dict.get('formats', [])
+            video_formats, audio_format = get_best_formats(formats)
+
+            markup = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 1080p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=1080]+bestaudio:video:1080p:{uuid4()}")],
+                [InlineKeyboardButton(text="🚀 720p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=720]+bestaudio:video:720p:{uuid4()}")],
+                [InlineKeyboardButton(text="🚀 360p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=360]+bestaudio:video:360p:{uuid4()}")],
+                [InlineKeyboardButton(text="🎵 Аудио MP3", callback_data=f"ytdl:bestaudio:audio:best:{uuid4()}")]
+            ])
+
+            await state.update_data(url=clean_url, title=title, duration=duration)
+            await status_message.edit_text(
+                f"🎥 <b>{title}</b>\n⏱ {duration_str}\n\nВыберите качество:",
+                reply_markup=markup
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка получения информации: {str(e)}")
+        await status_message.edit_text("❌ Ошибка при получении информации о видео")
+
+# Format tanlash handler
+@client_bot_router.callback_query(lambda c: c.data.startswith("ytdl:"))
+async def process_youtube_download(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.answer("⏳ Начинаю загрузку...")
+
+    try:
+        parts = callback.data.split(":")
+        if len(parts) != 5:
+            await callback.message.answer("❌ Некорректный формат запроса")
+            return
+
+        _, format_id, media_type, quality, _ = parts
+        is_audio = media_type == 'audio'
+
+        data = await state.get_data()
+        url = data.get('url')
+        title = data.get('title', 'YouTube Video')
+
+        if not url:
+            await callback.message.answer("❌ Данные о видео не найдены")
+            return
+
+        temp_dir = "/tmp/youtube_downloads"
+        os.makedirs(temp_dir, exist_ok=True)
+
+        progress_msg = await callback.message.answer(
+            f"⏳ Загружаю {'аудио' if is_audio else 'видео'}...\nКачество: {quality}"
+        )
+
+        timestamp = int(time.time())
+        user_id = callback.from_user.id
+        output_filename = f"yt_{timestamp}_{user_id}.%(ext)s"
+        output_path = os.path.join(temp_dir, output_filename)
+
+        ydl_opts = {
+            'outtmpl': output_path,
+            'noplaylist': True,
+            'retries': 5,
+            'fragment_retries': 5,
+            'progress_hooks': [lambda d: progress_hook(d, progress_msg, is_audio, quality)],
+        }
+
+        if is_audio:
+            ydl_opts['format'] = 'bestaudio'
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }]
+        else:
+            ydl_opts['format'] = format_id
+            ydl_opts['merge_output_format'] = 'mp4'
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
                 if not info_dict:
                     raise Exception("Не удалось получить информацию о видео")
 
-                # Основная информация о видео
-                title = info_dict.get('title', 'YouTube Video')
-                uploader = info_dict.get('uploader', 'Unknown')
-                duration = info_dict.get('duration', 0)
-                minutes = duration // 60
-                seconds = duration % 60
-                thumbnail = info_dict.get('thumbnail')
-
-                # Получение всех форматов
-                formats = info_dict.get('formats', [])
-
-                # Сортировка форматов по категориям
-                video_formats = []  # Только видео форматы (для соединения с аудио через FFmpeg)
-                audio_formats = []  # Только аудио форматы
-                mixed_formats = []  # Форматы с видео+аудио
-                resolutions = set()  # Для отслеживания уникальных разрешений
-
-                # Обработка всех форматов
-                for fmt in formats:
-                    if not isinstance(fmt, dict):
-                        continue
-
-                    vcodec = fmt.get('vcodec', 'none')
-                    acodec = fmt.get('acodec', 'none')
-                    filesize = fmt.get('filesize') or fmt.get('approximate_filesize') or 0
-                    ext = fmt.get('ext', '')
-                    format_id = fmt.get('format_id', '')
-                    format_note = fmt.get('format_note', '')
-
-                    # Пропускаем некорректные форматы
-                    if not ext or (vcodec == 'none' and acodec == 'none'):
-                        continue
-
-                    # Форматы с видео и аудио одновременно
-                    if vcodec != 'none' and acodec != 'none':
-                        height = fmt.get('height', 0) or 0
-                        width = fmt.get('width', 0) or 0
-                        fps = fmt.get('fps', 0) or 0
-                        tbr = fmt.get('tbr', 0) or 0  # Битрейт
-
-                        if height > 0 or width > 0:
-                            resolution = f"{height}p"
-                            if fps and fps > 30:
-                                resolution += f"{int(fps)}"
-
-                            format_info = {
-                                'format_id': format_id,
-                                'height': height,
-                                'width': width,
-                                'fps': fps,
-                                'extension': ext,
-                                'filesize': filesize,
-                                'tbr': tbr,
-                                'resolution': resolution,
-                                'has_audio': True,
-                                'format_note': format_note,
-                                'type': 'mixed'
-                            }
-                            mixed_formats.append(format_info)
-                            resolutions.add(resolution)
-
-                    # Форматы только с видео
-                    elif vcodec != 'none' and (acodec == 'none' or acodec == 'NA'):
-                        height = fmt.get('height', 0) or 0
-                        width = fmt.get('width', 0) or 0
-                        fps = fmt.get('fps', 0) or 0
-                        tbr = fmt.get('tbr', 0) or 0
-
-                        if height > 0 or width > 0:
-                            resolution = f"{height}p"
-                            if fps and fps > 30:
-                                resolution += f"{int(fps)}"
-
-                            format_info = {
-                                'format_id': format_id,
-                                'height': height,
-                                'width': width,
-                                'fps': fps,
-                                'extension': ext,
-                                'filesize': filesize,
-                                'tbr': tbr,
-                                'resolution': resolution,
-                                'has_audio': False,
-                                'format_note': format_note,
-                                'type': 'video'
-                            }
-                            video_formats.append(format_info)
-
-                    # Форматы только с аудио
-                    elif acodec != 'none' and (vcodec == 'none' or vcodec == 'NA'):
-                        abr = fmt.get('abr', 0) or 0
-                        asr = fmt.get('asr', 0) or 0
-                        tbr = fmt.get('tbr', 0) or 0
-
-                        audio_formats.append({
-                            'format_id': format_id,
-                            'extension': ext,
-                            'filesize': filesize,
-                            'abr': abr,
-                            'asr': asr,
-                            'tbr': tbr,
-                            'format_note': format_note,
-                            'type': 'audio'
-                        })
-
-                # Сортировка форматов по качеству (высокое -> низкое)
-                video_formats.sort(key=lambda x: (x.get('height', 0) or 0, x.get('tbr', 0) or 0), reverse=True)
-                audio_formats.sort(key=lambda x: (x.get('abr', 0) or 0, x.get('tbr', 0) or 0), reverse=True)
-                mixed_formats.sort(key=lambda x: (x.get('height', 0) or 0, x.get('tbr', 0) or 0), reverse=True)
-
-                # Создание кнопок для выбора качества видео
-                markup = InlineKeyboardBuilder()
-
-                # Добавление автоматических опций (для лучшего качества)
-                auto_options = []
-
-                # Вариант: лучшее видео + лучшее аудио (для FFmpeg)
-                if ffmpeg_available and video_formats and audio_formats:
-                    auto_options.append({
-                        'format_id': 'bestvideo+bestaudio',
-                        'label': 'Лучшее качество (видео+аудио)',
-                        'type': 'auto',
-                        'quality': 'best'
-                    })
-
-                # Вариант: смешанный формат (если есть)
-                if mixed_formats:
-                    auto_options.append({
-                        'format_id': mixed_formats[0]['format_id'],
-                        'label': f"Лучшее готовое качество ({mixed_formats[0].get('resolution', 'HD')})",
-                        'type': 'mixed',
-                        'quality': mixed_formats[0].get('resolution', '')
-                    })
-
-                # Вариант: только аудио MP3
-                if audio_formats:
-                    auto_options.append({
-                        'format_id': 'bestaudio',
-                        'label': 'Аудио MP3',
-                        'type': 'audio',
-                        'quality': 'best'
-                    })
-
-                # Добавление автоматических опций как кнопок
-                for idx, opt in enumerate(auto_options):
-                    markup.button(
-                        text=f"🚀 {opt['label']}",
-                        callback_data=f"ytdl:{opt['format_id']}:{opt['type']}:{opt['quality']}:{idx}"
-                    )
-
-                # Функция для добавления форматов с уникальными разрешениями
-                def add_formats_by_resolution(formats_list, format_type, max_count=10):
-                    added_count = 0
-                    added_resolutions = set()
-
-                    for idx, fmt in enumerate(formats_list):
-                        resolution = fmt.get('resolution', '')
-
-                        # Добавляем только уникальные разрешения
-                        if resolution and resolution not in added_resolutions and added_count < max_count:
-                            added_resolutions.add(resolution)
-
-                            # Подготовка данных для кнопки
-                            ext = fmt.get('extension', '')
-                            tbr = fmt.get('tbr', 0) or 0
-                            filesize = fmt.get('filesize', 0) or 0
-                            format_note = fmt.get('format_note', '')
-
-                            # Текст для размера файла
-                            size_text = ""
-                            if filesize > 0:
-                                size_mb = filesize / (1024 * 1024)
-                                if size_mb > 0:
-                                    size_text = f" ~{size_mb:.1f}MB"
-
-                            # Создание текста кнопки
-                            if format_type == 'mixed':
-                                audio_text = "🔊"
-                                icon = "🎬"
-                            else:
-                                audio_text = "🔇"
-                                icon = "🎬"
-
-                            format_details = f"{ext}"
-                            if tbr > 0:
-                                format_details += f", {int(tbr)}kbps"
-                            if format_note:
-                                format_details += f", {format_note}"
-
-                            button_text = f"{icon} {resolution} {audio_text} [{format_details}]{size_text}"
-
-                            # Добавление кнопки
-                            markup.button(
-                                text=button_text,
-                                callback_data=f"ytdl:{fmt['format_id']}:{format_type}:{resolution}:{len(auto_options) + added_count}"
-                            )
-
-                            added_count += 1
-
-                    return added_count
-
-                # Добавление кнопок для разных типов форматов
-                if ffmpeg_available:
-                    # Если доступен FFmpeg, показываем форматы с лучшим видео для объединения
-                    added = add_formats_by_resolution(video_formats, 'video', 5)
-
-                # Всегда показываем смешанные форматы (видео+аудио)
-                added_mixed = add_formats_by_resolution(mixed_formats, 'mixed', 10)
-
-                # Добавление кнопки для лучшего аудио
-                if audio_formats and ffmpeg_available:
-                    best_audio = audio_formats[0]
-                    abr = best_audio.get('abr', 0) or 0
-
-                    markup.button(
-                        text=f"🎵 Аудио MP3 [{int(abr)}kbps]",
-                        callback_data=f"ytdl:{best_audio['format_id']}:audio:best:{len(auto_options) + added + added_mixed}"
-                    )
-
-                # Установка одноколоночного макета
-                markup.adjust(1)
-
-                # Сохранение информации в состоянии
-                await state.update_data(
-                    url=clean_url,
-                    title=title,
-                    uploader=uploader,
-                    duration=duration,
-                    temp_dir=temp_dir,
-                    ffmpeg_available=ffmpeg_available
-                )
-
-                # Отображение информации о видео и опций для скачивания
-                ffmpeg_note = ""
-                if not ffmpeg_available:
-                    ffmpeg_note = "\n\n⚠️ <b>FFmpeg не установлен на сервере</b>. Для лучшего качества рекомендуется установить FFmpeg."
-
-                await status_message.edit_text(
-                    f"🎥 <b>{html.escape(title)}</b>\n"
-                    f"👤 {html.escape(uploader)}\n"
-                    f"⏱ {minutes}:{seconds:02d}{ffmpeg_note}\n\n"
-                    f"<b>Выберите формат для скачивания:</b>",
-                    reply_markup=markup.as_markup(),
-                    parse_mode="HTML"
-                )
-
-        except Exception as e:
-            logger.error(f"Ошибка при получении форматов: {e}")
-            logger.exception("Детальная ошибка:")
-
-            # Информирование пользователя об ошибке
-            await status_message.edit_text(
-                f"❌ <b>Ошибка при получении форматов видео</b>\n\n"
-                f"Не удалось получить список форматов. Пожалуйста, проверьте ссылку или попробуйте позже.",
-                parse_mode="HTML"
-            )
-
-    except Exception as e:
-        logger.error(f"Ошибка обработчика YouTube: {str(e)}")
-        logger.exception("Детальная ошибка обработчика YouTube:")
-        await status_message.edit_text("❗ Ошибка при получении информации о видео")
-
-
-@client_bot_router.callback_query(lambda c: c.data.startswith("ytdl:"))
-async def process_youtube_download(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.answer("⏳ Начинаю загрузку...")
-
-        # Разбор данных callback
-        parts = callback.data.split(":")
-        if len(parts) != 5:
-            await callback.message.answer("❌ Некорректный формат запроса")
-            return
-
-        _, format_id, media_type, quality, idx = parts
-        is_audio = media_type == 'audio'
-        is_mixed = media_type == 'mixed'
-        is_video = media_type == 'video'
-        is_auto = media_type == 'auto'
-
-        # Получение данных из состояния
-        data = await state.get_data()
-        url = data.get('url')
-        title = data.get('title', 'YouTube Video')
-        ffmpeg_available = data.get('ffmpeg_available', False)
-
-        if not url:
-            await callback.message.answer("❌ Ошибка: данные о видео не найдены")
-            return
-
-        # Создание временной директории
-        temp_dir = data.get('temp_dir') or "/tmp/youtube_downloads"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Отображение прогресса
-        progress_msg = await callback.message.answer(
-            f"⏳ Загружаю {'аудио' if is_audio else 'видео'} из YouTube...\n"
-            f"{'🎵 Аудио формат' if is_audio else f'🎬 Качество: {quality}'}"
-        )
-
-        # Создание уникального имени файла
-        timestamp = int(time.time())
-        user_id = callback.from_user.id
-        output_filename = f"yt_{timestamp}_{user_id}"
-        output_path = os.path.join(temp_dir, output_filename)
-
-        # Настройка параметров загрузки
-        ydl_opts = {
-            'outtmpl': f"{output_path}.%(ext)s",
-            'noplaylist': True,
-            'quiet': False,  # Включаем вывод для отладки
-            'retries': 5,  # Увеличиваем количество попыток загрузки
-            'fragment_retries': 5,
-            'ignoreerrors': False,  # Останавливаемся при ошибках
-        }
-
-        # Настройка формата в зависимости от выбора и доступности FFmpeg
-        if is_audio:
-            if ffmpeg_available:
-                ydl_opts['format'] = format_id
-                ydl_opts['postprocessors'] = [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }]
-            else:
-                # Прямая загрузка аудио без обработки
-                ydl_opts['format'] = format_id
-        elif is_auto or is_video:
-            if ffmpeg_available:
-                if format_id == 'bestvideo+bestaudio':
-                    ydl_opts['format'] = 'bestvideo+bestaudio/best'
-                else:
-                    # Для отдельного видео формата, ищем лучший аудио
-                    ydl_opts['format'] = f"{format_id}+bestaudio/best"
-            else:
-                # Без FFmpeg используем лучший смешанный формат
-                ydl_opts['format'] = 'best'
-        else:
-            # Для смешанных форматов просто скачиваем их напрямую
-            ydl_opts['format'] = format_id
-
-        # Запись информации в лог
-        logger.info(f"Загрузка с форматом: {ydl_opts['format']}, тип: {media_type}")
-
-        try:
-            # Обновление сообщения о прогрессе
-            await progress_msg.edit_text(
-                f"⏳ Загружаю {'аудио' if is_audio else 'видео'} из YouTube...\n"
-                f"Это может занять некоторое время. Пожалуйста, подождите."
-            )
-
-            # Создание объекта прогресса для отслеживания загрузки
-            last_update_time = time.time()
-            progress_data = {"percent": 0, "speed": "0 KiB/s", "eta": "?"}
-
-            # Функция для обновления прогресса
-            def progress_hook(d):
-                nonlocal last_update_time
-
-                if d['status'] == 'downloading':
-                    # Обновляем данные прогресса
-                    progress_data["percent"] = d.get('_percent_str', '?')
-                    progress_data["speed"] = d.get('_speed_str', '?')
-                    progress_data["eta"] = d.get('_eta_str', '?')
-
-                    # Обновляем сообщение не чаще, чем раз в 3 секунды
-                    current_time = time.time()
-                    if current_time - last_update_time > 3:
-                        last_update_time = current_time
-                        # Создаем задачу для обновления сообщения
-                        asyncio.create_task(
-                            progress_msg.edit_text(
-                                f"⏳ Загружаю {'аудио' if is_audio else 'видео'} из YouTube...\n"
-                                f"Прогресс: {progress_data['percent']}\n"
-                                f"Скорость: {progress_data['speed']}\n"
-                                f"Осталось: {progress_data['eta']}"
-                            )
-                        )
-
-            # Добавляем функцию обновления прогресса
-            ydl_opts['progress_hooks'] = [progress_hook]
-
-            # Загрузка файла в отдельном потоке
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
-
-                if not info_dict:
-                    raise Exception("Не удалось получить информацию о видео при загрузке")
-
-                # Получение пути к загруженному файлу
                 downloaded_path = ydl.prepare_filename(info_dict)
+                for ext in ['.mp4', '.mp3', '.webm', '.mkv']:
+                    if os.path.exists(downloaded_path.replace('.%(ext)s', ext)):
+                        downloaded_path = downloaded_path.replace('.%(ext)s', ext)
+                        break
 
-                # Проверка изменений расширения
                 if not os.path.exists(downloaded_path):
-                    base_path = os.path.splitext(downloaded_path)[0]
-
-                    # Проверка разных расширений
-                    for ext in ['.mp4', '.webm', '.mkv', '.mov', '.3gp', '.mp3', '.m4a', '.ogg', '.opus']:
-                        if os.path.exists(f"{base_path}{ext}"):
-                            downloaded_path = f"{base_path}{ext}"
-                            break
-
-                # Проверка наличия файла
-                if not os.path.exists(downloaded_path):
-                    # Список содержимого директории для отладки
-                    logger.error(
-                        f"Загруженный файл не найден. Файлы в директории: {os.listdir(os.path.dirname(downloaded_path))}")
                     raise FileNotFoundError(f"Загруженный файл не найден: {downloaded_path}")
 
-                # Получение размера файла
                 file_size = os.path.getsize(downloaded_path)
                 logger.info(f"Загрузка завершена: {downloaded_path}, размер: {file_size / (1024 * 1024):.2f} MB")
 
-                # Проверка, не превышает ли файл лимит Telegram
-                if file_size > 50 * 1024 * 1024:  # 50 MB лимит
-                    if ffmpeg_available:
-                        await progress_msg.edit_text("📦 Файл слишком большой, применяю сжатие...")
-
-                        # Сжатие большого видео до размера, подходящего для Telegram
-                        compressed_path = await compress_large_video(
-                            downloaded_path,
-                            os.path.join(temp_dir, f"compressed_{os.path.basename(downloaded_path)}"),
-                            target_size_mb=45
-                        )
-
-                        if compressed_path and os.path.exists(compressed_path):
-                            # Успешно сжали видео
-                            compressed_size = os.path.getsize(compressed_path)
-                            logger.info(f"Видео сжато: {compressed_size / (1024 * 1024):.2f} MB")
-
-                            # Если все еще слишком большое
-                            if compressed_size > 50 * 1024 * 1024:
-                                await progress_msg.edit_text(
-                                    "❌ Видео слишком большое даже после сжатия.\n"
-                                    "Попробуйте выбрать формат с более низким качеством."
-                                )
-                                return
-
-                            # Используем сжатый файл
-                            await send_downloaded_file(
-                                bot,
-                                callback.message.chat.id,
-                                compressed_path,
-                                title,
-                                info_dict,
-                                is_audio,
-                                True,  # сжатое
-                                progress_msg
-                            )
-                        else:
-                            # Не удалось сжать видео
-                            await progress_msg.edit_text(
-                                "❌ Не удалось сжать видео.\n"
-                                "Попробуйте выбрать формат с более низким качеством."
-                            )
+                me = await bot.get_me()
+                if file_size > 50 * 1024 * 1024:
+                    await progress_msg.edit_text("📦 Файл слишком большой, сжимаю...")
+                    compressed_path = await compress_large_video(downloaded_path, os.path.join(temp_dir, f"compressed_{timestamp}_{user_id}.mp4"))
+                    if compressed_path and os.path.getsize(compressed_path) <= 50 * 1024 * 1024:
+                        await send_downloaded_file(bot, callback.message.chat.id, compressed_path, title, info_dict, is_audio, True, progress_msg, me.username)
                     else:
-                        await progress_msg.edit_text(
-                            "❌ Файл слишком большой для отправки в Telegram (>50MB).\n"
-                            "Установите FFmpeg для возможности сжатия больших видео.\n"
-                            "Попробуйте выбрать формат с меньшим размером."
-                        )
+                        await progress_msg.edit_text("❌ Не удалось сжать файл до нужного размера")
                 else:
-                    # Файл достаточно мал для прямой отправки
-                    await send_downloaded_file(
-                        bot,
-                        callback.message.chat.id,
-                        downloaded_path,
-                        title,
-                        info_dict,
-                        is_audio,
-                        False,  # не сжатое
-                        progress_msg
-                    )
+                    await send_downloaded_file(bot, callback.message.chat.id, downloaded_path, title, info_dict, is_audio, False, progress_msg, me.username)
 
-                # Очистка состояния после успешной операции
                 await state.clear()
 
-        except Exception as download_error:
-            logger.error(f"Ошибка загрузки: {str(download_error)}")
-            logger.exception("Детальная ошибка загрузки:")
-
-            # Предоставление пользователю понятного сообщения об ошибке
-            error_msg = str(download_error).lower()
-
+        except Exception as e:
+            logger.error(f"Ошибка загрузки: {str(e)}")
+            error_msg = str(e).lower()
             if "ffmpeg is not installed" in error_msg:
-                await progress_msg.edit_text(
-                    "❌ Ошибка: FFmpeg не установлен на сервере.\n"
-                    "Установите FFmpeg для поддержки объединения видео и аудио.\n"
-                    "Попробуйте выбрать формат, не требующий FFmpeg."
-                )
+                await progress_msg.edit_text("❌ FFmpeg не установлен. Невозможно обработать аудио или видео")
             elif "http error 429" in error_msg:
-                await progress_msg.edit_text("❌ Слишком много запросов к YouTube. Пожалуйста, попробуйте позже.")
+                await progress_msg.edit_text("❌ Слишком много запросов. Попробуйте позже")
             elif "http error 403" in error_msg:
-                await progress_msg.edit_text("❌ Доступ запрещен. Возможно, видео имеет ограничения.")
+                await progress_msg.edit_text("❌ Видео ограничено")
             elif "age verification" in error_msg:
-                await progress_msg.edit_text("❌ Видео имеет возрастные ограничения.")
-            elif "private video" in error_msg or "not available" in error_msg:
-                await progress_msg.edit_text("❌ Видео недоступно (приватное или было удалено).")
+                await progress_msg.edit_text("❌ Видео имеет возрастные ограничения")
+            elif "private video" in error_msg:
+                await progress_msg.edit_text("❌ Видео приватное или удалено")
             else:
-                await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(download_error)[:100]}...")
+                await progress_msg.edit_text(f"❌ Ошибка загрузки: {str(e)[:100]}...")
 
     except Exception as e:
-        logger.error(f"Ошибка обработки выбора формата: {str(e)}")
-        logger.exception("Детальная ошибка выбора формата:")
+        logger.error(f"Ошибка обработки запроса: {str(e)}")
         await callback.message.answer("❌ Ошибка при обработке запроса")
 
+# Progress hook
+async def progress_hook(d, progress_msg, is_audio, quality):
+    if d['status'] == 'downloading':
+        percent = d.get('_percent_str', '0%').strip()
+        speed = d.get('_speed_str', 'N/A')
+        eta = d.get('_eta_str', 'N/A')
+        await progress_msg.edit_text(
+            f"⏳ Загружаю {'аудио' if is_audio else 'видео'}...\n"
+            f"Качество: {quality}\nПрогресс: {percent}\nСкорость: {speed}\nОсталось: {eta}"
+        )
 
+# Katta videolarni siqish
 async def compress_large_video(input_path, output_path, target_size_mb=45):
-    """
-    Сжимает видео до указанного размера с использованием FFmpeg
-
-    Args:
-        input_path: Путь к входному видео
-        output_path: Путь для сохранения сжатого видео
-        target_size_mb: Целевой размер в мегабайтах
-
-    Returns:
-        Путь к сжатому видео или None при ошибке
-    """
     try:
-        # Получаем информацию о длительности видео
         probe_cmd = [
-            'ffprobe',
-            '-v', 'error',
-            '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1',
-            input_path
+            'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1', input_path
         ]
-
-        process = await asyncio.create_subprocess_exec(
-            *probe_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
+        process = await asyncio.create_subprocess_exec(*probe_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
+        duration = float(stdout.decode().strip()) if process.returncode == 0 else 60
 
-        if process.returncode != 0:
-            logger.error(f"Ошибка при получении информации о видео: {stderr.decode()}")
-            return None
-
-        try:
-            duration = float(stdout.decode().strip())
-        except (ValueError, TypeError):
-            logger.error(f"Не удалось получить длительность: {stdout.decode()}")
-            duration = 60  # Используем значение по умолчанию
-
-        if duration <= 0:
-            duration = 60  # Защита от некорректной длительности
-
-        # Рассчитываем битрейт для целевого размера
-        # Размер в битах = (размер в байтах) * 8
         target_size_bits = target_size_mb * 8 * 1024 * 1024
-        bitrate = int(target_size_bits / duration)
+        bitrate = max(300000, min(int(target_size_bits / duration), 2000000))
 
-        # Убедимся, что битрейт в разумных пределах
-        min_bitrate = 300000  # 300 Kbps
-        max_bitrate = 2000000  # 2 Mbps
-        bitrate = max(min_bitrate, min(bitrate, max_bitrate))
-
-        # Получение разрешения исходного видео
-        resolution_cmd = [
-            'ffprobe',
-            '-v', 'error',
-            '-select_streams', 'v:0',
-            '-show_entries', 'stream=width,height',
-            '-of', 'csv=s=x:p=0',
-            input_path
-        ]
-
-        process = await asyncio.create_subprocess_exec(
-            *resolution_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
-        stdout, stderr = await process.communicate()
-
-        if process.returncode == 0:
-            try:
-                width, height = map(int, stdout.decode().strip().split('x'))
-
-                # Определение нового разрешения в зависимости от битрейта
-                if bitrate < 500000:  # < 500 Kbps - для очень больших файлов
-                    # Уменьшаем до 480p
-                    scale = f"scale=min(854,iw):min(480,ih):force_original_aspect_ratio=decrease"
-                elif bitrate < 1000000:  # < 1 Mbps
-                    # Уменьшаем до 720p
-                    scale = f"scale=min(1280,iw):min(720,ih):force_original_aspect_ratio=decrease"
-                else:
-                    # Оставляем текущее разрешение
-                    scale = f"scale=min({width},iw):min({height},ih):force_original_aspect_ratio=decrease"
-            except Exception as e:
-                logger.error(f"Ошибка определения разрешения: {e}")
-                # По умолчанию масштабируем до 720p
-                scale = "scale=min(1280,iw):min(720,ih):force_original_aspect_ratio=decrease"
-        else:
-            logger.error(f"Ошибка получения разрешения: {stderr.decode()}")
-            # По умолчанию масштабируем до 720p
-            scale = "scale=min(1280,iw):min(720,ih):force_original_aspect_ratio=decrease"
-
-        # Создаем команду для сжатия
         compress_cmd = [
-            'ffmpeg',
-            '-i', input_path,
-            '-c:v', 'libx264',  # Используем кодек H.264
-            '-preset', 'medium',  # Баланс между скоростью и качеством
-            '-crf', '28',  # Высокое сжатие
-            '-maxrate', f'{bitrate}',
-            '-bufsize', f'{bitrate * 2}',
-            '-vf', scale,
-            '-c:a', 'aac',  # Аудио кодек AAC
-            '-b:a', '128k',  # Битрейт аудио
-            '-movflags', '+faststart',  # Оптимизация для веб
-            '-y',  # Перезаписывать существующий файл
-            output_path
+            'ffmpeg', '-i', input_path, '-c:v', 'libx264', '-preset', 'fast', '-crf', '30',
+            '-maxrate', f'{bitrate}', '-bufsize', f'{bitrate * 2}', '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart', '-y', output_path
         ]
-
-        # Запускаем сжатие
-        process = await asyncio.create_subprocess_exec(
-            *compress_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
+        process = await asyncio.create_subprocess_exec(*compress_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
 
-        if process.returncode != 0:
-            logger.error(f"Ошибка при сжатии видео: {stderr.decode()}")
-
-            # Если первая попытка не удалась, пробуем более простую команду
-            simple_compress_cmd = [
-                'ffmpeg',
-                '-i', input_path,
-                '-c:v', 'libx264',
-                '-crf', '35',  # Очень высокое сжатие
-                '-preset', 'faster',
-                '-vf', 'scale=640:360',  # 360p для гарантированного уменьшения
-                '-c:a', 'aac',
-                '-b:a', '96k',
-                '-y',
-                output_path
-            ]
-
-            process = await asyncio.create_subprocess_exec(
-                *simple_compress_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            stdout, stderr = await process.communicate()
-
-            if process.returncode != 0:
-                logger.error(f"Ошибка при второй попытке сжатия: {stderr.decode()}")
-                return None
-
-        # Проверяем результат
-        if os.path.exists(output_path):
-            return output_path
-        else:
-            logger.error("Выходной файл не создан")
-            return None
-
+        return output_path if os.path.exists(output_path) else None
     except Exception as e:
-        logger.error(f"Ошибка при сжатии видео: {e}")
-        logger.exception("Детальная ошибка сжатия:")
+        logger.error(f"Ошибка сжатия: {e}")
         return None
 
-
-async def send_downloaded_file(bot, chat_id, file_path, title, info_dict, is_audio, is_compressed, progress_msg):
-    """
-    Отправляет скачанный файл пользователю
-
-    Args:
-        bot: Экземпляр бота
-        chat_id: ID чата для отправки
-        file_path: Путь к файлу
-        title: Название видео
-        info_dict: Информация о видео
-        is_audio: Является ли файл аудио
-        is_compressed: Был ли файл сжат
-        progress_msg: Сообщение о прогрессе для обновления
-    """
+# Yuklangan faylni yuborish
+async def send_downloaded_file(bot, chat_id, file_path, title, info_dict, is_audio, is_compressed, progress_msg, username):
     try:
-        # Обновляем сообщение о прогрессе
         await progress_msg.edit_text("📤 Отправляю файл...")
+        caption = f"{'🎵' if is_audio else '🎥'} {title}{' (Сжато)' if is_compressed else ''}\nСкачано через @{username}"
 
-        # Получаем информацию о боте
-        me = await bot.get_me()
-
-        # Подготовка подписи для файла
-        compressed_note = " (сжатое)" if is_compressed else ""
-        caption = f"{'🎵' if is_audio else '🎥'} {title}{compressed_note}\nСкачано через @{me.username}"
-
-        # Отправка файла в зависимости от типа
-        if is_audio or file_path.lower().endswith(('.mp3', '.m4a', '.ogg', '.opus')):
-            # Подготовка метаданных для аудио
-            audio_performer = info_dict.get('uploader', '') or info_dict.get('channel', '')
-            audio_title = title
-
-            # Отправка аудио
+        if is_audio:
             await bot.send_audio(
-                chat_id=chat_id,
-                audio=FSInputFile(file_path),
-                caption=caption,
-                title=audio_title,
-                performer=audio_performer,
-                duration=info_dict.get('duration')
+                chat_id=chat_id, audio=FSInputFile(file_path), caption=caption,
+                title=title, performer=info_dict.get('uploader', ''), duration=info_dict.get('duration')
             )
         else:
-            # Отправка видео с поддержкой стриминга
             await bot.send_video(
-                chat_id=chat_id,
-                video=FSInputFile(file_path),
-                caption=caption,
-                supports_streaming=True,
-                duration=info_dict.get('duration'),
-                width=info_dict.get('width'),
-                height=info_dict.get('height')
+                chat_id=chat_id, video=FSInputFile(file_path), caption=caption,
+                supports_streaming=True, duration=info_dict.get('duration'),
+                width=info_dict.get('width'), height=info_dict.get('height')
             )
 
-        # Удаляем сообщение о прогрессе
         await progress_msg.delete()
-
     except Exception as e:
-        logger.error(f"Ошибка при отправке файла: {e}")
-        await progress_msg.edit_text(f"❌ Не удалось отправить файл: {str(e)[:100]}...")
+        logger.error(f"Ошибка отправки файла: {e}")
+        await progress_msg.edit_text(f"❌ Ошибка при отправке: {str(e)[:100]}...")
     finally:
-        # Очистка файла
-        try:
-            if os.path.exists(file_path):
+        if os.path.exists(file_path):
+            try:
                 os.remove(file_path)
                 logger.info(f"Удален временный файл: {file_path}")
-        except Exception as e:
-            logger.error(f"Ошибка при удалении файла: {e}")
-
-@client_bot_router.callback_query(lambda c: c.data.startswith("dl_"))
-async def download_youtube_content(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    await callback.answer("⏳ Начинаю загрузку...")
-
-    try:
-        # Parse callback data
-        parts = callback.data.split(":")
-        if len(parts) != 2:
-            await callback.message.answer("❌ Некорректный формат запроса")
-            return
-
-        mode, url = parts
-        is_audio = mode == "dl_audio"
-
-        # Create secure temp directory
-        temp_dir = "/tmp/youtube_downloads"
-        os.makedirs(temp_dir, exist_exist=True)
-
-        try:
-            os.chmod(temp_dir, 0o777)
-        except Exception as e:
-            logger.warning(f"Could not set permissions on temp dir: {e}")
-
-        # Show progress message
-        progress_msg = await callback.message.answer(
-            f"⏳ {'Загружаю аудио' if is_audio else 'Загружаю видео'}...\n"
-            f"Это может занять несколько минут."
-        )
-
-        try:
-            # Set format based on mode
-            format_id = 'bestaudio' if is_audio else 'bestvideo+bestaudio/best'
-
-            # Configure download options
-            ydl_opts = {
-                'format': format_id,
-                'outtmpl': os.path.join(temp_dir, f'temp_{int(time.time())}_{callback.from_user.id}.%(ext)s'),
-                'noplaylist': True,
-                'quiet': True,
-                'retries': 3,
-                'fragment_retries': 3,
-            }
-
-            # Add audio post-processing if needed
-            if is_audio:
-                ydl_opts['postprocessors'] = [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }]
-
-            # Store URL in state
-            await state.update_data(url=url)
-
-            # Download the file
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
-
-                if not info:
-                    raise Exception("Could not get video info")
-
-                # Get the output path
-                video_path = ydl.prepare_filename(info)
-
-                # Check for file extension changes
-                if not os.path.exists(video_path):
-                    base_path = os.path.splitext(video_path)[0]
-
-                    if is_audio:
-                        # Check if mp3 exists
-                        if os.path.exists(f"{base_path}.mp3"):
-                            video_path = f"{base_path}.mp3"
-                    else:
-                        # Check common video extensions
-                        for ext in ['.mp4', '.webm', '.mkv']:
-                            if os.path.exists(f"{base_path}{ext}"):
-                                video_path = f"{base_path}{ext}"
-                                break
-
-                if not os.path.exists(video_path):
-                    raise FileNotFoundError(f"Downloaded file not found: {video_path}")
-                title = info.get('title', 'Видео')
-                # Get file size
-                file_size = os.path.getsize(video_path)
-                me = await bot.get_me()
-
-                # Check if file is too large for Telegram
-                if file_size > 50 * 1024 * 1024:  # 50 MB limit
-                    # Use our compression function for large files
-                    success = await handle_large_video_download(
-                        bot=bot,
-                        chat_id=callback.message.chat.id,
-                        video_path=video_path,
-                        title=title,
-                        username=me.username,
-                        progress_msg=progress_msg
-                    )
-
-                    if success:
-                        # If compression was successful, clean up and finish
-                        await state.clear()
-                        return
-                    else:
-                        # If compression failed, show error message
-                        await progress_msg.edit_text(
-                            "❌ Не удалось обработать видео из-за его большого размера.\n"
-                            "Попробуйте выбрать вариант с более низким качеством."
-                        )
-                        return
-
-                await progress_msg.edit_text("📤 Отправляю файл...")
-
-                # Get bot username
-                me = await bot.get_me()
-
-                # Get video title
-                title = info.get('title', 'Видео')
-
-                try:
-                    # Send file based on type
-                    if is_audio:
-                        await bot.send_audio(
-                            chat_id=callback.message.chat.id,
-                            audio=FSInputFile(video_path),
-                            caption=f"🎵 {title}\nСкачано через @{me.username}",
-                            title=title,
-                            performer=info.get('uploader', '')
-                        )
-                    else:
-                        await bot.send_video(
-                            chat_id=callback.message.chat.id,
-                            video=FSInputFile(video_path),
-                            caption=f"🎥 {title}\nСкачано через @{me.username}",
-                            supports_streaming=True
-                        )
-                finally:
-                    # Always clean up
-                    if os.path.exists(video_path):
-                        os.remove(video_path)
-
-                # Clean up and finish
-                await progress_msg.delete()
-                await state.clear()
-
-        except Exception as e:
-            logger.error(f"Download error: {str(e)}")
-            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)[:100]}...")
-
-    except Exception as e:
-        logger.error(f"Callback error: {str(e)}")
-        await callback.message.answer("❌ Произошла ошибка при обработке запроса")
-
-
-
-
-@client_bot_router.message(DownloaderBotFilter())
-@client_bot_router.message(Download.download)
-async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
-    if not message.text:
-        await message.answer("❗ Отправьте ссылку на видео")
-        return
-
-    url = message.text.strip()
-    me = await bot.get_me()
-
-    if 'tiktok.com' in url:
-        await handle_tiktok(message, url, me, bot, state)
-    elif 'instagram.com' in url or 'instagr.am' in url or 'inst.ae' in url:
-        await handle_instagram(message, url, me, bot)
-    elif 'youtube.com' in url or 'youtu.be' in url:
-        await handle_youtube(message, url, me, bot, state)
-    else:
-        await message.answer("❗ Отправьте ссылку на видео с YouTube, Instagram или TikTok")
-
-
-
-async def handle_format_selection(callback_query: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    url = data.get('url')
-    formats = data.get('formats')
-    # Parse callback data (e.g., "format:232:video:720p:3")
-    callback_parts = callback_query.data.split(':')
-    selected_index = int(callback_parts[-1])  # Last part is the index
-    selected_format = formats[selected_index]
-
-    status_message = await callback_query.message.edit_text("⏳ Скачиваю видео...")
-
-    try:
-        file_path, info = await download_video(url, selected_format['format_id'], state)
-        await status_message.edit_text(f"✅ Видео скачано: {file_path}")
-        with open(file_path, 'rb') as video:
-            await callback_query.message.answer_document(video)
-    except Exception as e:
-        logger.error(f"Download error: {str(e)}")
-        await status_message.edit_text("❗ Ошибка при скачивании")
-
-class DownloaderBotFilter(Filter):
-    async def __call__(self, message: types.Message, bot: Bot) -> bool:
-        bot_db = await shortcuts.get_bot(bot)
-        return shortcuts.have_one_module(bot_db, "download")
-
-
-
-@client_bot_router.callback_query(lambda c: c.data.startswith("yt_"))
-async def youtube_format_selected(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """
-    Handle YouTube download format selection for fallback options
-    """
-    await callback.answer("⏳ Начинаю загрузку...")
-
-    try:
-        # Parse callback data
-        parts = callback.data.split(":")
-        if len(parts) != 2:
-            await callback.message.answer("❌ Некорректный формат запроса")
-            return
-
-        format_type, url = parts
-
-        # Set up temp directory
-        temp_dir = "/tmp/youtube_downloads"
-        try:
-            os.makedirs(temp_dir, exist_ok=True)
-            os.chmod(temp_dir, 0o777)
-        except Exception as e:
-            logger.error(f"Error creating temp directory: {e}")
-            temp_dir = "/var/tmp"
-
-        # Show progress message
-        progress_msg = await callback.message.answer("⏳ Начинаю загрузку...")
-
-        # Create a unique filename
-        timestamp = int(time.time())
-        file_id = f"{timestamp}_{callback.from_user.id}"
-        output_template = os.path.join(temp_dir, f"{file_id}.%(ext)s")
-
-        # Configure options based on format type
-        ydl_opts = {
-            'outtmpl': output_template,
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-        }
-
-        if format_type == "yt_best":
-            ydl_opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-            format_name = "высоком качестве"
-            is_audio = False
-        elif format_type == "yt_medium":
-            ydl_opts['format'] = 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
-            format_name = "среднем качестве"
-            is_audio = False
-        elif format_type == "yt_low":
-            ydl_opts['format'] = 'worstvideo[ext=mp4]+worstaudio[ext=m4a]/worst[ext=mp4]/worst'
-            format_name = "низком качестве"
-            is_audio = False
-        elif format_type == "yt_audio":
-            ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio'
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }]
-            format_name = "аудио формате"
-            is_audio = True
-        else:
-            await callback.message.answer("❌ Неизвестный формат")
-            return
-
-        await progress_msg.edit_text(f"⏳ Загружаю в {format_name}...")
-
-        try:
-            # Download the file
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
-
-                if not info:
-                    raise Exception("Could not get video info")
-
-                # Get the output path
-                video_path = ydl.prepare_filename(info)
-                title = info.get('title', 'Video')
-
-                # Check for file extension changes
-                if not os.path.exists(video_path):
-                    base_path = os.path.splitext(video_path)[0]
-
-                    if is_audio:
-                        # Check if mp3 exists
-                        if os.path.exists(f"{base_path}.mp3"):
-                            video_path = f"{base_path}.mp3"
-                    else:
-                        # Check common video extensions
-                        for ext in ['.mp4', '.webm', '.mkv']:
-                            if os.path.exists(f"{base_path}{ext}"):
-                                video_path = f"{base_path}{ext}"
-                                break
-
-                if not os.path.exists(video_path):
-                    logger.error(f"Files in temp dir: {os.listdir(temp_dir)}")
-                    raise FileNotFoundError(f"Downloaded file not found at {video_path}")
-
-                # Get file size
-                file_size = os.path.getsize(video_path)
-                logger.info(f"Downloaded file: {video_path}, size: {file_size / 1024 / 1024:.2f} MB")
-                me = await bot.get_me()
-                # Check if file is too large
-                if file_size > 50 * 1024 * 1024:  # 50 MB limit
-                    # Use our compression function for large files
-                    success = await handle_large_video_download(
-                        bot=bot,
-                        chat_id=callback.message.chat.id,
-                        video_path=video_path,
-                        title=title,
-                        username=me.username,
-                        progress_msg=progress_msg
-                    )
-
-                    if success:
-                        # If compression was successful, clean up and finish
-                        await state.clear()
-                        return
-                    else:
-                        # If compression failed, show error message
-                        await progress_msg.edit_text(
-                            "❌ Не удалось обработать видео из-за его большого размера.\n"
-                            "Попробуйте выбрать вариант с более низким качеством."
-                        )
-                        return
-
-                await progress_msg.edit_text("📤 Отправляю файл...")
-
-                # Get bot name
-                me = await bot.get_me()
-
-                try:
-                    # Send file based on type
-                    if is_audio:
-                        await bot.send_audio(
-                            chat_id=callback.message.chat.id,
-                            audio=FSInputFile(video_path),
-                            caption=f"🎵 {title}\nСкачано через @{me.username}",
-                            title=title
-                        )
-                    else:
-                        await bot.send_video(
-                            chat_id=callback.message.chat.id,
-                            video=FSInputFile(video_path),
-                            caption=f"🎥 {title}\nСкачано через @{me.username}",
-                            supports_streaming=True
-                        )
-                finally:
-                    # Clean up
-                    if os.path.exists(video_path):
-                        try:
-                            os.remove(video_path)
-                        except Exception as e:
-                            logger.error(f"Error removing file: {e}")
-
-                # Delete progress message and clear state
-                await progress_msg.delete()
-                await state.clear()
-
-        except Exception as e:
-            logger.error(f"Download error: {str(e)}")
-            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)[:100]}...")
-
-    except Exception as e:
-        logger.error(f"Format selection error: {str(e)}")
-        await callback.message.answer("❌ Ошибка при обработке запроса")
-
-
-@client_bot_router.callback_query(lambda c: c.data.startswith("format:"))
-async def process_format_selection(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.answer("⏳ Начинаю загрузку...")
-
-        # Parse callback data
-        parts = callback.data.split(":")
-        if len(parts) != 5:
-            await callback.message.answer("❌ Некорректный формат запроса")
-            return
-
-        _, format_id, media_type, quality, idx = parts
-        is_audio = media_type == 'audio'
-        is_auto = media_type == 'auto'
-        is_mixed = media_type == 'mixed'  # Format already contains both audio and video
-
-        # Get data from state
-        data = await state.get_data()
-        url = data.get('url')
-        title = data.get('title', 'YouTube Video')
-        ffmpeg_available = data.get('ffmpeg_available', False)
-
-        if not url:
-            await callback.message.answer("❌ Ошибка: данные о видео не найдены")
-            return
-
-        # Create a secure temporary directory
-        temp_dir = data.get('temp_dir') or "/tmp/youtube_downloads"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Show progress message
-        progress_msg = await callback.message.answer(
-            f"⏳ Загружаю {'аудио' if is_audio else 'видео'} из YouTube...\n"
-            f"{'🎵 Аудио формат' if is_audio else f'🎬 Качество: {quality}'}"
-        )
-
-        # Create unique filename based on timestamp and user ID
-        timestamp = int(time.time())
-        user_id = callback.from_user.id
-        output_filename = f"yt_{timestamp}_{user_id}"
-        output_path = os.path.join(temp_dir, output_filename)
-
-        # Configure download options
-        ydl_opts = {
-            'outtmpl': f"{output_path}.%(ext)s",
-            'noplaylist': True,
-            'quiet': False,  # Enable output for debugging
-            'ignoreerrors': True,  # Continue even with errors
-        }
-
-        # Set format based on selection and ffmpeg availability
-        if is_audio:
-            # Audio-only configuration
-            if ffmpeg_available:
-                ydl_opts['format'] = format_id
-                ydl_opts['postprocessors'] = [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }]
-            else:
-                # Direct download without ffmpeg processing
-                ydl_opts['format'] = format_id
-                # No postprocessors if ffmpeg is not available
-        elif is_auto:
-            # Automatic best quality
-            if ffmpeg_available:
-                ydl_opts['format'] = 'bestvideo+bestaudio/best'
-            else:
-                # Fall back to best available format that doesn't need merging
-                ydl_opts['format'] = 'best'
-        elif is_mixed:
-            # Already combined format, just download directly
-            ydl_opts['format'] = format_id
-        else:
-            # Specific video format
-            ydl_opts['format'] = format_id
-
-        # Add format note to log
-        logger.info(f"Download with format: {ydl_opts['format']}, is_audio: {is_audio}, is_auto: {is_auto}")
-
-        try:
-            # Update progress message
-            await progress_msg.edit_text(
-                f"⏳ Загружаю {'аудио' if is_audio else 'видео'} из YouTube...\n"
-                f"Это может занять некоторое время. Пожалуйста, подождите."
-            )
-
-            # Download the file in a separate thread
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
-
-                if not info_dict:
-                    raise Exception("Failed to extract video info during download")
-
-                # Get downloaded file path
-                downloaded_path = ydl.prepare_filename(info_dict)
-
-                # Check extension changes
-                if not os.path.exists(downloaded_path):
-                    base_path = os.path.splitext(downloaded_path)[0]
-
-                    # Look for file with different extensions
-                    possible_extensions = []
-                    if is_audio and ffmpeg_available:
-                        possible_extensions = ['.mp3', '.m4a', '.webm']
-                    else:
-                        possible_extensions = ['.mp4', '.webm', '.mkv', '.mov', '.3gp']
-
-                    for ext in possible_extensions:
-                        if os.path.exists(f"{base_path}{ext}"):
-                            downloaded_path = f"{base_path}{ext}"
-                            break
-
-                # Verify download
-                if not os.path.exists(downloaded_path):
-                    # List directory contents for debugging
-                    logger.error(
-                        f"Downloaded file not found. Files in directory: {os.listdir(os.path.dirname(downloaded_path))}")
-                    raise FileNotFoundError(f"Downloaded file not found: {downloaded_path}")
-
-                # Get file size
-                file_size = os.path.getsize(downloaded_path)
-                logger.info(f"Download complete: {downloaded_path}, size: {file_size / (1024 * 1024):.2f} MB")
-
-                # Check if the file is too large for Telegram
-                if file_size > 50 * 1024 * 1024:  # 50 MB limit
-                    await progress_msg.edit_text("📦 Файл слишком большой, применяю сжатие...")
-
-                    if ffmpeg_available:
-                        # Use compression function for large files if ffmpeg is available
-                        me = await bot.get_me()
-                        success = await handle_large_video_download(
-                            bot=bot,
-                            chat_id=callback.message.chat.id,
-                            video_path=downloaded_path,
-                            title=title,
-                            username=me.username,
-                            progress_msg=progress_msg
-                        )
-
-                        if not success:
-                            await progress_msg.edit_text(
-                                "❌ Не удалось сжать видео до требуемого размера.\n"
-                                "Попробуйте выбрать вариант с более низким качеством."
-                            )
-                            return
-                    else:
-                        # Can't compress without ffmpeg
-                        await progress_msg.edit_text(
-                            "❌ Файл слишком большой для отправки в Telegram (>50MB).\n"
-                            "Невозможно сжать видео, так как FFmpeg не установлен на сервере.\n"
-                            "Пожалуйста, выберите формат с меньшим размером."
-                        )
-                        return
-                else:
-                    # File is small enough to send directly
-                    await progress_msg.edit_text("📤 Отправляю файл...")
-
-                    # Get bot information
-                    me = await bot.get_me()
-
-                    try:
-                        # Send based on file type
-                        if is_audio or downloaded_path.endswith(('.mp3', '.m4a')):
-                            # Prepare audio metadata
-                            audio_performer = info_dict.get('uploader', '') or info_dict.get('channel', '')
-
-                            # Send audio file
-                            await bot.send_audio(
-                                chat_id=callback.message.chat.id,
-                                audio=FSInputFile(downloaded_path),
-                                caption=f"🎵 {title}\nСкачано через @{me.username}",
-                                title=title,
-                                performer=audio_performer,
-                                duration=info_dict.get('duration')
-                            )
-                        else:
-                            # Send video file with streaming support
-                            await bot.send_video(
-                                chat_id=callback.message.chat.id,
-                                video=FSInputFile(downloaded_path),
-                                caption=f"🎥 {title}\nСкачано через @{me.username}",
-                                supports_streaming=True,
-                                duration=info_dict.get('duration'),
-                                width=info_dict.get('width'),
-                                height=info_dict.get('height')
-                            )
-
-                        # Delete progress message after successful send
-                        await progress_msg.delete()
-                    except Exception as send_error:
-                        logger.error(f"Error sending file: {send_error}")
-                        await progress_msg.edit_text(f"❌ Ошибка при отправке: {str(send_error)[:100]}...")
-                    finally:
-                        # Always clean up the downloaded file
-                        if os.path.exists(downloaded_path):
-                            try:
-                                os.remove(downloaded_path)
-                                logger.info(f"Removed temporary file: {downloaded_path}")
-                            except Exception as e:
-                                logger.error(f"Error removing temporary file: {e}")
-
-                # Clear state after successful operation
-                await state.clear()
-
-        except Exception as download_error:
-            logger.error(f"Download error: {str(download_error)}")
-            logger.exception("Download detailed error:")
-
-            # Provide user-friendly error message
-            error_msg = str(download_error).lower()
-
-            if "ffmpeg is not installed" in error_msg:
-                await progress_msg.edit_text(
-                    "❌ Ошибка: FFmpeg не установлен на сервере.\n"
-                    "Невозможно объединить видео и аудио.\n"
-                    "Пожалуйста, выберите формат, который не требует объединения."
-                )
-            elif "http error 429" in error_msg:
-                await progress_msg.edit_text("❌ Слишком много запросов к YouTube. Пожалуйста, попробуйте позже.")
-            elif "http error 403" in error_msg:
-                await progress_msg.edit_text("❌ Доступ запрещен. Возможно, видео имеет ограничения.")
-            elif "age verification" in error_msg:
-                await progress_msg.edit_text("❌ Видео имеет возрастные ограничения.")
-            elif "private video" in error_msg or "not available" in error_msg:
-                await progress_msg.edit_text("❌ Видео недоступно (приватное или было удалено).")
-            elif "ffmpeg" in error_msg:
-                await progress_msg.edit_text("❌ Ошибка обработки видео. Проблема с ffmpeg.")
-            else:
-                await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(download_error)[:100]}...")
-
-    except Exception as e:
-        logger.error(f"Format selection handler error: {str(e)}")
-        logger.exception("Format selection detailed error:")
-        await callback.message.answer("❌ Ошибка при обработке запроса")
-
-
-@client_bot_router.callback_query(lambda c: c.data.startswith("yt_"))
-async def youtube_simple_format_selected(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """
-    Handles YouTube download with simplified format options
-    """
-    await callback.answer("⏳ Начинаю загрузку...")
-
-    try:
-        # Parse callback data
-        parts = callback.data.split(":")
-        if len(parts) != 2:
-            await callback.message.answer("❌ Некорректный формат запроса")
-            return
-
-        format_type, url = parts
-
-        # Create secure temporary directory
-        temp_dir = "/tmp/youtube_downloads"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Try to set proper permissions
-        try:
-            os.chmod(temp_dir, 0o777)
-        except Exception as e:
-            logger.warning(f"Could not set permissions on temp dir: {e}")
-
-        # Show progress message
-        progress_msg = await callback.message.answer("⏳ Начинаю загрузку...")
-
-        # Create unique filename
-        timestamp = int(time.time())
-        file_id = f"{timestamp}_{callback.from_user.id}"
-        output_template = os.path.join(temp_dir, f"{file_id}.%(ext)s")
-
-        # Configure options based on format type
-        ydl_opts = {
-            'outtmpl': output_template,
-            'noplaylist': True,
-            'quiet': False,
-            'progress_hooks': [lambda d: logger.debug(f"Download progress: {d.get('_percent_str', 'unknown')}")],
-        }
-
-        # Set format-specific options
-        if format_type == "yt_best":
-            ydl_opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-            format_name = "высоком качестве"
-            is_audio = False
-        elif format_type == "yt_medium":
-            ydl_opts['format'] = 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
-            format_name = "среднем качестве"
-            is_audio = False
-        elif format_type == "yt_low":
-            ydl_opts['format'] = 'worstvideo[ext=mp4]+worstaudio[ext=m4a]/worst[ext=mp4]/worst'
-            format_name = "низком качестве"
-            is_audio = False
-        elif format_type == "yt_audio":
-            ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio'
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }]
-            format_name = "аудио формате"
-            is_audio = True
-        else:
-            await callback.message.answer("❌ Неизвестный формат")
-            return
-
-        await progress_msg.edit_text(f"⏳ Загружаю в {format_name}...")
-
-        try:
-            # Run download in a separate thread to avoid blocking
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
-
-                if not info:
-                    raise Exception("Could not get video info")
-
-                # Get the output path
-                video_path = ydl.prepare_filename(info)
-
-                # Handle title for caption
-                title = info.get('title', 'YouTube Video')
-
-                # Check if the file exists with expected or different extension
-                if not os.path.exists(video_path):
-                    base_path = os.path.splitext(video_path)[0]
-
-                    if is_audio:
-                        # Check for MP3 file
-                        if os.path.exists(f"{base_path}.mp3"):
-                            video_path = f"{base_path}.mp3"
-                    else:
-                        # Check for video files with common extensions
-                        for ext in ['.mp4', '.webm', '.mkv', '.mov']:
-                            if os.path.exists(f"{base_path}{ext}"):
-                                video_path = f"{base_path}{ext}"
-                                break
-
-                # Verify file exists
-                if not os.path.exists(video_path):
-                    logger.error(
-                        f"Downloaded file not found. Directory contents: {os.listdir(os.path.dirname(video_path))}")
-                    raise FileNotFoundError(f"Downloaded file not found: {video_path}")
-
-                # Get file size and bot information
-                file_size = os.path.getsize(video_path)
-                me = await bot.get_me()
-
-                # Handle large files
-                if file_size > 50 * 1024 * 1024:  # 50 MB limit
-                    await progress_msg.edit_text("📦 Файл слишком большой, применяю сжатие...")
-
-                    # Use compression function
-                    success = await handle_large_video_download(
-                        bot=bot,
-                        chat_id=callback.message.chat.id,
-                        video_path=video_path,
-                        title=title,
-                        username=me.username,
-                        progress_msg=progress_msg
-                    )
-
-                    if not success:
-                        await progress_msg.edit_text(
-                            "❌ Не удалось сжать видео до требуемого размера.\n"
-                            "Попробуйте выбрать вариант с более низким качеством."
-                        )
-                        return
-                else:
-                    # File is small enough to send directly
-                    await progress_msg.edit_text("📤 Отправляю файл...")
-
-                    try:
-                        # Send based on file type
-                        if is_audio:
-                            # Send audio file
-                            await bot.send_audio(
-                                chat_id=callback.message.chat.id,
-                                audio=FSInputFile(video_path),
-                                caption=f"🎵 {title}\nСкачано через @{me.username}",
-                                title=title,
-                                performer=info.get('uploader', '')
-                            )
-                        else:
-                            # Send video file
-                            await bot.send_video(
-                                chat_id=callback.message.chat.id,
-                                video=FSInputFile(video_path),
-                                caption=f"🎥 {title}\nСкачано через @{me.username}",
-                                supports_streaming=True
-                            )
-                    finally:
-                        # Clean up downloaded file
-                        if os.path.exists(video_path):
-                            try:
-                                os.remove(video_path)
-                                logger.info(f"Removed file: {video_path}")
-                            except Exception as e:
-                                logger.error(f"Error removing file: {e}")
-
-                # Delete progress message and clear state
-                await progress_msg.delete()
-                await state.clear()
-
-        except Exception as e:
-            logger.error(f"Download error: {str(e)}")
-            logger.exception("Detailed error:")
-            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)[:100]}...")
-
-    except Exception as e:
-        logger.error(f"Simple format handler error: {str(e)}")
-        logger.exception("Simple format handler detailed error:")
-        await callback.message.answer("❌ Ошибка при обработке запроса")
-
-class InstagramDownloader:
-    def __init__(self):
-        self.ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'max_filesize': 50000000,
-            'format': 'best',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Origin': 'https://www.instagram.com',
-                'Referer': 'https://www.instagram.com/',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-                'Connection': 'keep-alive',
-            }
-        }
-
-    async def download_with_yt_dlp(self, url):
-        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
-
-    async def download_with_api(self, url):
-        # API endpoints for different Instagram content types
-        api_endpoints = [
-            "https://api.instagram.com/oembed/?url={}",
-            "https://www.instagram.com/api/v1/media/{}/info/",
-            "https://www.instagram.com/p/{}/?__a=1&__d=1"
-        ]
-
-        # Extract media ID from URL
-        media_id = re.search(r'/p/([^/]+)', url)
-        if not media_id:
-            media_id = re.search(r'/reel/([^/]+)', url)
-        if not media_id:
-            return None
-
-        media_id = media_id.group(1)
-
-        async with aiohttp.ClientSession() as session:
-            for endpoint in api_endpoints:
-                try:
-                    formatted_url = endpoint.format(url if '{}' in endpoint else media_id)
-                    async with session.get(formatted_url) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if 'video_url' in data:
-                                return {'url': data['video_url'], 'ext': 'mp4'}
-                            elif 'thumbnail_url' in data:
-                                return {'url': data['thumbnail_url'], 'ext': 'jpg'}
-                except Exception as e:
-                    logger.error(f"API endpoint error: {e}")
-                    continue
-        return None
-
-
-
-async def handle_instagram(message: Message, url: str, me, bot: Bot):
+            except Exception as e:
+                logger.error(f"Ошибка удаления файла: {e}")
+
+# Instagram handler
+async def handle_instagram(message: types.Message, url: str, me, bot: Bot):
     try:
         await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
         ydl_opts = {
@@ -4249,7 +2095,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                         await bot.send_video(
                                             chat_id=message.chat.id,
                                             video=entry['url'],
-                                            caption=f"📹 Instagram video\nСкачано через @{me.username}"
+                                            caption=f"📹 Instagram видео\nСкачано через @{me.username}"
                                         )
                                     else:
                                         await bot.send_photo(
@@ -4259,11 +2105,10 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                         )
                                     sent_count += 1
                                 except Exception as item_error:
-                                    logger.error(f"Error sending carousel item: {item_error}")
+                                    logger.error(f"Ошибка отправки элемента карусели: {item_error}")
                                     continue
 
                         if sent_count > 0:
-                            await shortcuts.add_to_analitic_data(me.username, url)
                             await progress_msg.delete()
                         else:
                             raise Exception("Не удалось загрузить элементы карусели")
@@ -4275,22 +2120,19 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                             await bot.send_video(
                                 chat_id=message.chat.id,
                                 video=info['url'],
-                                caption=f"📹 Instagram video\nСкачано через @{me.username}"
+                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
                             )
-                            # await state.set_state(Download.download)
                         else:
                             await bot.send_photo(
                                 chat_id=message.chat.id,
                                 photo=info['url'],
                                 caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                             )
-                            # await state.set_state(Download.download)
 
-                        await shortcuts.add_to_analitic_data(me.username, url)
                         await progress_msg.delete()
 
                 except Exception as extract_error:
-                    logger.error(f"Instagram extraction error: {str(extract_error)}")
+                    logger.error(f"Ошибка извлечения Instagram: {str(extract_error)}")
                     await progress_msg.edit_text("🔄 Пробую альтернативный способ загрузки...")
 
                     try:
@@ -4305,17 +2147,14 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                         await bot.send_video(
                                             chat_id=message.chat.id,
                                             video=FSInputFile(media_path),
-                                            caption=f"📹 Instagram video (Низкое качество)\nСкачано через @{me.username}"
+                                            caption=f"📹 Instagram видео (Низкое качество)\nСкачано через @{me.username}"
                                         )
-                                        # await state.set_state(Download.download)
                                     else:
                                         await bot.send_photo(
                                             chat_id=message.chat.id,
                                             photo=FSInputFile(media_path),
                                             caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
                                         )
-                                        # await state.set_state(Download.download)
-                                    await shortcuts.add_to_analitic_data(me.username, url)
                                     await progress_msg.delete()
                                 finally:
                                     if os.path.exists(media_path):
@@ -4324,22 +2163,22 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                 raise FileNotFoundError("Файл не найден после загрузки")
 
                     except Exception as low_quality_error:
-                        logger.error(f"Low quality download error: {str(low_quality_error)}")
+                        logger.error(f"Ошибка загрузки низкого качества: {str(low_quality_error)}")
                         await progress_msg.edit_text("❌ Не удалось загрузить медиа")
 
         except Exception as e:
-            logger.error(f"Instagram download error: {str(e)}")
+            logger.error(f"Ошибка загрузки Instagram: {str(e)}")
             await progress_msg.edit_text("❌ Ошибка при скачивании. Возможно пост недоступен или защищен.")
 
     except Exception as e:
-        logger.error(f"Instagram handler error: {str(e)}")
+        logger.error(f"Ошибка обработки Instagram: {str(e)}")
         if 'progress_msg' in locals():
             await progress_msg.edit_text("❌ Произошла ошибка")
         else:
             await message.answer("❌ Произошла ошибка")
 
-
-async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMContext):
+# TikTok handler
+async def handle_tiktok(message: types.Message, url: str, me, bot: Bot, state: FSMContext):
     try:
         ydl_opts = {
             'format': 'mp4',
@@ -4353,31 +2192,138 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMConte
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                # Получаем информацию о видео без скачивания
                 info = ydl.extract_info(url, download=False)
                 if info and 'url' in info:
                     try:
                         await bot.send_video(
                             chat_id=message.chat.id,
                             video=info['url'],
-                            caption=f"📹 TikTok video\nСкачано через @{me.username}",
+                            caption=f"📹 TikTok видео\nСкачано через @{me.username}",
                         )
                         await state.set_state(Download.download)
-                        await shortcuts.add_to_analitic_data(me.username, url)
                         return
                     except Exception:
-
-                        await download_and_send_video(message, url, ydl_opts, me, bot, "TikTok",state)
+                        await download_and_send_video(message, url, ydl_opts, me, bot, "TikTok", state)
                 else:
                     await message.answer("❌ Не удалось получить ссылку на видео")
 
             except Exception as e:
-                logger.error(f"TikTok processing error: {e}")
+                logger.error(f"Ошибка обработки TikTok: {e}")
                 await message.answer("❌ Ошибка при скачивании из TikTok")
 
     except Exception as e:
-        logger.error(f"TikTok handler error: {e}")
+        logger.error(f"Ошибка обработки TikTok: {e}")
         await message.answer("❌ Ошибка при обработке TikTok видео")
+
+# Download and send video
+async def download_and_send_video(message: types.Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str, state: FSMContext):
+    progress_msg = await message.answer(f"⏳ Загружаю видео из {platform}...")
+    temp_file = None
+    compressed_file = None
+
+    try:
+        temp_dir = "/tmp/youtube_downloads"
+        os.makedirs(temp_dir, exist_ok=True)
+
+        final_opts = {
+            'format': 'mp4',
+            'merge_output_format': 'mp4',
+            'outtmpl': os.path.join(temp_dir, f'temp_{int(time.time())}_{message.from_user.id}.%(ext)s'),
+            'noplaylist': True,
+            'geo_bypass': True,
+            'retries': 3,
+            'fragment_retries': 3,
+            'verbose': True,
+            **ydl_opts
+        }
+
+        logger.info(f"Загрузка видео из {platform} с URL: {url}")
+
+        with yt_dlp.YoutubeDL(final_opts) as ydl:
+            info_dict = await asyncio.to_thread(ydl.extract_info, url, download=True)
+            if not info_dict:
+                await progress_msg.edit_text(f"❌ Не удалось получить информацию о видео из {platform}")
+                return
+
+            video_path = ydl.prepare_filename(info_dict)
+            if not os.path.exists(video_path):
+                base_path = video_path.rsplit('.', 1)[0]
+                for ext in ['.mp4', '.webm', '.mkv', '.mov']:
+                    if os.path.exists(base_path + ext):
+                        video_path = base_path + ext
+                        break
+
+            if not os.path.exists(video_path):
+                raise FileNotFoundError(f"Загруженный файл не найден: {video_path}")
+
+            file_size = os.path.getsize(video_path)
+            if file_size == 0:
+                raise ValueError("Загруженный файл пустой")
+
+            temp_file = video_path
+            title = info_dict.get('title', f"{platform} видео")
+            duration = info_dict.get('duration')
+            duration_str = f" ({duration // 60}:{duration % 60:02d})" if duration else ""
+
+            MAX_SIZE = 50 * 1024 * 1024
+            if file_size <= MAX_SIZE:
+                await progress_msg.edit_text("📤 Отправляю видео...")
+                video = FSInputFile(video_path)
+                await bot.send_chat_action(message.chat.id, "upload_video")
+                await bot.send_video(
+                    chat_id=message.chat.id,
+                    video=video,
+                    caption=f"📹 {title}{duration_str}\nСкачано через @{me.username}",
+                    supports_streaming=True
+                )
+                await state.set_state(Download.download)
+                await progress_msg.delete()
+            else:
+                await progress_msg.edit_text(f"📦 Файл слишком большой ({file_size / (1024 * 1024):.1f} МБ), сжимаю...")
+                compressed_path = os.path.join(temp_dir, f"compressed_{os.path.basename(video_path)}")
+                compressed_file = compressed_path
+
+                compressed_path = await compress_large_video(video_path, compressed_path)
+                if compressed_path and os.path.getsize(compressed_path) <= MAX_SIZE:
+                    await progress_msg.edit_text("📤 Отправляю сжатое видео...")
+                    await bot.send_video(
+                        chat_id=message.chat.id,
+                        video=FSInputFile(compressed_path),
+                        caption=f"📹 {title}{duration_str} (Сжатое)\nСкачано через @{me.username}",
+                        supports_streaming=True
+                    )
+                    await state.set_state(Download.download)
+                    await progress_msg.delete()
+                else:
+                    await progress_msg.edit_text("❌ Не удалось сжать видео до нужного размера")
+
+    except Exception as e:
+        logger.error(f"Ошибка загрузки из {platform}: {str(e)}")
+        error_msg = str(e).lower()
+        if "http error 429" in error_msg:
+            await progress_msg.edit_text(f"❌ Слишком много запросов к {platform}. Попробуйте позже.")
+        elif "http error 403" in error_msg:
+            await progress_msg.edit_text(f"❌ Доступ запрещен. Возможно, видео ограничено.")
+        elif "age verification" in error_msg:
+            await progress_msg.edit_text(f"❌ Видео имеет возрастные ограничения.")
+        elif "private video" in error_msg or "not available" in error_msg:
+            await progress_msg.edit_text(f"❌ Видео недоступно (приватное или удалено).")
+        else:
+            await progress_msg.edit_text(f"❌ Ошибка при загрузке из {platform}: {str(e)[:100]}...")
+
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+                logger.info(f"Удален временный файл: {temp_file}")
+            except Exception as e:
+                logger.error(f"Ошибка удаления файла: {e}")
+        if compressed_file and os.path.exists(compressed_file):
+            try:
+                os.remove(compressed_file)
+                logger.info(f"Удален сжатый файл: {compressed_file}")
+            except Exception as e:
+                logger.error(f"Ошибка удаления файла: {e}")
 
 
 
