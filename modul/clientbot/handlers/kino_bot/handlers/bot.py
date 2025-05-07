@@ -2730,15 +2730,34 @@ async def download_youtube_content(callback: CallbackQuery, state: FSMContext, b
 
                 if not os.path.exists(video_path):
                     raise FileNotFoundError(f"Downloaded file not found: {video_path}")
-
+                title = info.get('title', 'Видео')
                 # Get file size
                 file_size = os.path.getsize(video_path)
+                me = await bot.get_me()
 
                 # Check if file is too large for Telegram
                 if file_size > 50 * 1024 * 1024:  # 50 MB limit
-                    await progress_msg.edit_text("⚠️ Файл слишком большой для отправки в Telegram (>50MB)")
-                    os.remove(video_path)
-                    return
+                    # Use our compression function for large files
+                    success = await handle_large_video_download(
+                        bot=bot,
+                        chat_id=callback.message.chat.id,
+                        video_path=video_path,
+                        title=title,
+                        username=me.username,
+                        progress_msg=progress_msg
+                    )
+
+                    if success:
+                        # If compression was successful, clean up and finish
+                        await state.clear()
+                        return
+                    else:
+                        # If compression failed, show error message
+                        await progress_msg.edit_text(
+                            "❌ Не удалось обработать видео из-за его большого размера.\n"
+                            "Попробуйте выбрать вариант с более низким качеством."
+                        )
+                        return
 
                 await progress_msg.edit_text("📤 Отправляю файл...")
 
@@ -2935,12 +2954,30 @@ async def youtube_format_selected(callback: CallbackQuery, state: FSMContext, bo
                 # Get file size
                 file_size = os.path.getsize(video_path)
                 logger.info(f"Downloaded file: {video_path}, size: {file_size / 1024 / 1024:.2f} MB")
-
+                me = await bot.get_me()
                 # Check if file is too large
                 if file_size > 50 * 1024 * 1024:  # 50 MB limit
-                    await progress_msg.edit_text("⚠️ Файл слишком большой для отправки в Telegram (>50MB)")
-                    os.remove(video_path)
-                    return
+                    # Use our compression function for large files
+                    success = await handle_large_video_download(
+                        bot=bot,
+                        chat_id=callback.message.chat.id,
+                        video_path=video_path,
+                        title=title,
+                        username=me.username,
+                        progress_msg=progress_msg
+                    )
+
+                    if success:
+                        # If compression was successful, clean up and finish
+                        await state.clear()
+                        return
+                    else:
+                        # If compression failed, show error message
+                        await progress_msg.edit_text(
+                            "❌ Не удалось обработать видео из-за его большого размера.\n"
+                            "Попробуйте выбрать вариант с более низким качеством."
+                        )
+                        return
 
                 await progress_msg.edit_text("📤 Отправляю файл...")
 
@@ -3078,16 +3115,34 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                     # List directory contents for debugging
                     logger.error(f"Files in temp dir: {os.listdir(temp_dir)}")
                     raise FileNotFoundError(f"Downloaded file not found: {video_path}")
-
+                me = await bot.get_me()
                 # Get file size for logging
                 file_size = os.path.getsize(video_path)
                 logger.info(f"Downloaded file: {video_path}, size: {file_size / 1024 / 1024:.2f} MB")
-
+                title = info.get('title', 'YouTube Video')
                 # Check if file is too large
                 if file_size > 50 * 1024 * 1024:  # 50 MB limit
-                    await progress_msg.edit_text("⚠️ Файл слишком большой для отправки в Telegram (>50MB)")
-                    os.remove(video_path)
-                    return
+                    # Use our compression function for large files
+                    success = await handle_large_video_download(
+                        bot=bot,
+                        chat_id=callback.message.chat.id,
+                        video_path=video_path,
+                        title=title,
+                        username=me.username,
+                        progress_msg=progress_msg
+                    )
+
+                    if success:
+                        # If compression was successful, clean up and finish
+                        await state.clear()
+                        return
+                    else:
+                        # If compression failed, show error message
+                        await progress_msg.edit_text(
+                            "❌ Не удалось обработать видео из-за его большого размера.\n"
+                            "Попробуйте выбрать вариант с более низким качеством."
+                        )
+                        return
 
                 await progress_msg.edit_text("📤 Отправляю файл...")
 
