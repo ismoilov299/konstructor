@@ -1748,13 +1748,6 @@ client_bot_router.message.register(bot_start_cancel, F.text == ("Я не хоч�
 client_bot_router.message.register(bot_start_lets_leo, F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 
 
-import asyncio
-import os
-import time
-from pytube import YouTube
-from aiogram import types
-from aiogram.types import FSInputFile, CallbackQuery
-from aiogram.fsm.context import FSMContext
 
 @sync_to_async
 def create_task_model(client, url):
@@ -1785,166 +1778,223 @@ def get_best_formats(formats):
     audio_format = None
     seen_qualities = set()
 
+    # Log the total number of formats found
+    logger.debug(f"Total formats found: {len(formats)}")
+
     for fmt in formats:
         if not isinstance(fmt, dict):
             continue
 
+        # Add more detailed logging
+        logger.debug(
+            f"Format: {fmt.get('format_id')} - vcodec: {fmt.get('vcodec')} - acodec: {fmt.get('acodec')} - ext: {fmt.get('ext')} - height: {fmt.get('height')}")
+
         vcodec = fmt.get('vcodec', 'none')
         acodec = fmt.get('acodec', 'none')
 
-        if vcodec != 'none':
+        # Only add video formats with real height values
+        if vcodec != 'none' and vcodec != 'NA':
             height = fmt.get('height', 0)
-            if height and height not in seen_qualities:
+            if height and height not in seen_qualities and height > 0:
                 seen_qualities.add(height)
                 video_formats.append(fmt)
+                logger.debug(f"Added video format: {fmt.get('format_id')} - {height}p")
 
+        # Only select audio formats with no video
         if acodec != 'none' and vcodec == 'none':
-            if audio_format is None or (fmt.get('abr', 0) or 0) > (audio_format.get('abr', 0) or 0):
+            if not audio_format or (fmt.get('abr', 0) or 0) > (audio_format.get('abr', 0) or 0):
                 audio_format = fmt
                 logger.debug(f"Found better audio format: {fmt.get('format_id')} - {fmt.get('abr')}kbps")
 
+    # Sort video formats by height (resolution) in descending order
     video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
-
-    if audio_format:
-        logger.debug(
-            f"Best audio format: {audio_format.get('format_id')} - {audio_format.get('abr')}kbps - {audio_format.get('ext')}")
-    else:
-        logger.debug("No audio format found")
+    logger.debug(f"Final video formats count: {len(video_formats)}")
 
     return video_formats, audio_format
 
 
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
-        if format_id.startswith("pytube_"):
-            data = await state.get_data()
-            streams = data.get('pytube_streams', [])
-            format_parts = format_id.split(":")
+        download_dir = "/var/www/downloads"
+        os.makedirs(download_dir, exist_ok=True)
 
-            if len(format_parts) != 2:
-                raise ValueError(f"Invalid format_id: {format_id}")
+        timestamp = int(time.time())
+        output_filename = f"video_{timestamp}.mp4"
+        output_file = os.path.join(download_dir, output_filename)
 
-            stream_type = format_parts[0]  # pytube_video yoki pytube_audio
-            index = int(format_parts[1])
+        logger.info(f"Starting download for format {format_id} to {output_file}")
 
-            if index >= len(streams):
-                raise ValueError(f"Stream index out of range: {index}")
+        # Check for ffmpeg
+        ffmpeg_exists = False
+        try:
+            process = await asyncio.create_subprocess_exec(
+                'which', 'ffmpeg',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            ffmpeg_exists = (process.returncode == 0)
+            logger.info(f"FFMPEG {'is' if ffmpeg_exists else 'is not'} available: {stdout.decode().strip()}")
+        except Exception as e:
+            logger.error(f"Error checking ffmpeg: {e}")
 
-            selected_stream = streams[index]
+        # Configure yt-dlp options
+        ydl_opts = {
+            'outtmpl': output_file,
+            'verbose': True,
+            'progress': True,
+            'retries': 5,
+            'fragment_retries': 5,
+            'ignoreerrors': False,
+            'continuedl': True,
+            'nooverwrites': False,
+        }
 
-            download_dir = "/var/www/downloads"
-            os.makedirs(download_dir, exist_ok=True)
-
-            timestamp = int(time.time())
-            is_audio = "audio" in stream_type
-
-            if is_audio:
-                output_filename = f"audio_{timestamp}.mp3"
-                output_file = os.path.join(download_dir, output_filename)
-
-                temp_output = output_file.replace('.mp3', '.mp4')
-                await asyncio.to_thread(selected_stream.download,
-                                        output_path=os.path.dirname(temp_output),
-                                        filename=os.path.basename(temp_output))
-
-                if os.path.exists(temp_output):
-                    os.rename(temp_output, output_file)
+        # Set format based on ffmpeg availability
+        if ffmpeg_exists:
+            if format_id.lower() == 'audio':
+                ydl_opts['format'] = 'bestaudio'
+                ydl_opts['postprocessors'] = [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }]
+                output_file = output_file.replace('.mp4', '.mp3')
             else:
-                output_filename = f"video_{timestamp}.mp4"
-                output_file = os.path.join(download_dir, output_filename)
-                await asyncio.to_thread(selected_stream.download,
-                                        output_path=os.path.dirname(output_file),
-                                        filename=os.path.basename(output_file))
-
-            if not os.path.exists(output_file):
-                raise FileNotFoundError(f"Downloaded file not found: {output_file}")
-
-            logger.info(f"File downloaded successfully: {output_file}")
-
-            info = {
-                'title': data.get('title', 'Video'),
-                'author': data.get('author', 'Unknown'),
-                'resolution': selected_stream.resolution if not is_audio else 'audio',
-                'is_audio': is_audio
-            }
-
-            return output_file, info
-
-        else:
-
-            download_dir = "/var/www/downloads"
-            os.makedirs(download_dir, exist_ok=True)
-
-            timestamp = int(time.time())
-            output_filename = f"video_{timestamp}.mp4"
-            output_file = os.path.join(download_dir, output_filename)
-
-            ffmpeg_exists = False
-            try:
-                process = await asyncio.create_subprocess_exec(
-                    'which', 'ffmpeg',
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                await process.communicate()
-                ffmpeg_exists = (process.returncode == 0)
-                logger.info(f"FFMPEG {'is' if ffmpeg_exists else 'is not'} available")
-            except Exception as e:
-                logger.error(f"Error checking ffmpeg: {e}")
-
-            ydl_opts = {
-                'outtmpl': output_file,
-                'quiet': False,
-                'verbose': True,
-                'no_warnings': False,
-                'retries': 5,
-                'fragment_retries': 5,
-                'continuedl': True,
-            }
-
-            if ffmpeg_exists:
                 ydl_opts['format'] = format_id
+        else:
+            logger.warning("FFMPEG not found. Using single format mode.")
+            if format_id.lower() == 'audio':
+                ydl_opts['format'] = 'bestaudio'
             else:
-                logger.warning("FFMPEG not found. Using best single format instead.")
-                if '+' in format_id:
-                    format_id = format_id.split('+')[0]
                 ydl_opts['format'] = 'best'
 
-            logger.info(f"Starting download with format: {ydl_opts['format']}")
+        logger.info(f"Download options: {ydl_opts}")
 
+        # Use a semaphore to limit concurrent downloads
+        async with asyncio.Semaphore(2):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: ydl.extract_info(url, download=True)
+                # Run the download in a separate thread
+                info = await asyncio.to_thread(
+                    ydl.extract_info, url, download=True
                 )
 
                 if not info:
-                    raise Exception("Could not get video info")
+                    raise Exception("Failed to extract video info")
 
-                output_path = ydl.prepare_filename(info)
-                logger.info(f"Download completed. Output file: {output_path}")
+                logger.info(f"Download complete for {info.get('title')}")
 
-                if not os.path.exists(output_path):
-                    possible_extensions = ['.mp4', '.webm', '.mkv', '.mp3']
-                    found = False
+                # Get the actual output path (yt-dlp might modify it)
+                actual_output = ydl.prepare_filename(info)
 
-                    for ext in possible_extensions:
-                        test_path = output_path.rsplit('.', 1)[0] + ext
+                # Check if file exists with potential different extensions
+                if not os.path.exists(actual_output):
+                    base_name = os.path.splitext(actual_output)[0]
+                    for ext in ['.mp4', '.webm', '.mkv', '.mp3', '.m4a']:
+                        test_path = f"{base_name}{ext}"
                         if os.path.exists(test_path):
-                            output_path = test_path
-                            found = True
-                            logger.info(f"Found file with different extension: {output_path}")
+                            actual_output = test_path
+                            logger.info(f"Found file with different extension: {actual_output}")
                             break
+                    else:
+                        # List all files in directory to help debug
+                        logger.error(f"Files in directory: {os.listdir(os.path.dirname(actual_output))}")
+                        raise FileNotFoundError(f"Downloaded file not found: {actual_output}")
 
-                    if not found:
-                        raise FileNotFoundError(f"Downloaded file not found: {output_path}")
+                # Verify file size
+                file_size = os.path.getsize(actual_output)
+                logger.info(f"Downloaded file size: {file_size} bytes")
 
-                return output_path, info
+                if file_size == 0:
+                    raise Exception("Downloaded file is empty")
+
+                return actual_output, info
 
     except Exception as e:
         logger.error(f"Download error: {str(e)}")
         logger.exception("Detailed error:")
         raise
+
+
+@client_bot_router.callback_query(lambda c: c.data.startswith("dl_"))
+async def download_youtube_content(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await callback.answer("⏳ Начинаю загрузку...")
+
+    try:
+        # Parse callback data
+        parts = callback.data.split(":")
+        if len(parts) != 2:
+            await callback.message.answer("❌ Некорректный формат запроса")
+            return
+
+        mode, url = parts
+        is_audio = mode == "dl_audio"
+
+        # Show progress message
+        progress_msg = await callback.message.answer(
+            f"⏳ {'Загружаю аудио' if is_audio else 'Загружаю видео'}...\n"
+            f"Это может занять несколько минут."
+        )
+
+        try:
+            # Set format based on mode
+            format_id = 'bestaudio' if is_audio else 'bestvideo+bestaudio/best'
+
+            # Store URL in state
+            await state.update_data(url=url)
+
+            # Download the file
+            file_path, info = await download_video(url, format_id, state)
+
+            if not os.path.exists(file_path):
+                raise FileNotFoundError("Файл не найден после загрузки")
+
+            # Get file size
+            file_size = os.path.getsize(file_path)
+
+            # Check if file is too large for Telegram
+            if file_size > 50 * 1024 * 1024:  # 50MB limit
+                await progress_msg.edit_text("⚠️ Файл слишком большой для отправки в Telegram (>50MB)")
+                os.remove(file_path)
+                return
+
+            await progress_msg.edit_text("📤 Отправляю файл...")
+
+            # Get bot username
+            me = await bot.get_me()
+
+            # Get video title
+            title = info.get('title', 'Видео')
+
+            # Send file based on type
+            if is_audio:
+                await bot.send_audio(
+                    chat_id=callback.message.chat.id,
+                    audio=FSInputFile(file_path),
+                    caption=f"🎵 {title}\nСкачано через @{me.username}",
+                    title=title,
+                    performer=info.get('uploader', '')
+                )
+            else:
+                await bot.send_video(
+                    chat_id=callback.message.chat.id,
+                    video=FSInputFile(file_path),
+                    caption=f"🎥 {title}\nСкачано через @{me.username}",
+                    supports_streaming=True
+                )
+
+            # Clean up
+            os.remove(file_path)
+            await progress_msg.delete()
+            await state.clear()
+
+        except Exception as e:
+            logger.error(f"Download error: {str(e)}")
+            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)[:100]}...")
+
+    except Exception as e:
+        logger.error(f"Callback error: {str(e)}")
+        await callback.message.answer("❌ Произошла ошибка при обработке запроса")
 
 async def handle_format_selection(callback_query: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -1996,78 +2046,53 @@ async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: 
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
     try:
-        # Pytube yordamida videoni yuklab olish ma'lumotlarini olish
-        yt = await asyncio.to_thread(YouTube, url)
+        # Clean the URL (remove parameters)
+        clean_url = url.split('&')[0] if '&' in url else url
+        logger.info(f"Processing YouTube URL: {clean_url}")
 
-        title = yt.title
-        author = yt.author
-        length = yt.length
+        # Simple button interface for better reliability
+        markup = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🎥 Скачать видео", callback_data=f"dl_video:{clean_url}")],
+            [types.InlineKeyboardButton(text="🎵 Скачать аудио", callback_data=f"dl_audio:{clean_url}")]
+        ])
 
-        # Video va audio formatlarini olish
-        video_streams = yt.streams.filter(progressive=True).order_by('resolution').desc()
-        audio_streams = yt.streams.filter(only_audio=True).order_by('abr').desc()
+        # Try to get video info (but don't fail if it doesn't work)
+        try:
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                info = ydl.extract_info(clean_url, download=False)
+                title = info.get('title', 'YouTube Video')
+                duration = info.get('duration', 0)
+                uploader = info.get('uploader', '')
 
-        builder = types.InlineKeyboardBuilder()
-        valid_formats = []
+                minutes = duration // 60
+                seconds = duration % 60
 
-        # Video formatlarini qo'shish
-        for stream in video_streams[:3]:
-            resolution = stream.resolution
-            filesize = stream.filesize
-            filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize else ""
+                await status_message.edit_text(
+                    f"🎥 {title}\n"
+                    f"👤 {uploader}\n"
+                    f"⏱ {minutes}:{seconds:02d}\n\n"
+                    f"Выберите формат для скачивания:",
+                    reply_markup=markup
+                )
 
-            valid_formats.append(stream)
-            builder.button(
-                text=f"🎥 {resolution}{filesize_text}",
-                callback_data=FormatCallback(
-                    format_id=f"pytube_video:{len(valid_formats) - 1}",
-                    type='video',
-                    quality=resolution or "HD",
-                    index=len(valid_formats) - 1
-                ).pack()
-            )
+                # Save info to state
+                await state.update_data(
+                    title=title,
+                    duration=duration,
+                    uploader=uploader
+                )
 
-        # Audio formatini qo'shish
-        if audio_streams:
-            best_audio = audio_streams[0]
-            bitrate = best_audio.abr
-            filesize = best_audio.filesize
-            filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize else ""
-
-            valid_formats.append(best_audio)
-            builder.button(
-                text=f"🎵 MP3 {bitrate}{filesize_text}",
-                callback_data=FormatCallback(
-                    format_id=f"pytube_audio:{len(valid_formats) - 1}",
-                    type='audio',
-                    quality='audio',
-                    index=len(valid_formats) - 1
-                ).pack()
-            )
-
-        builder.adjust(2)  # Har qatorda 2 ta button
-
-        if valid_formats:
-            await state.update_data(
-                url=url,
-                pytube_streams=valid_formats,  # Pytube stream obyektlarini saqlash
-                title=title,
-                author=author
-            )
-
+        except Exception as e:
+            logger.error(f"Error getting video info: {e}")
             await status_message.edit_text(
-                f"🎥 {title}\n"
-                f"👤 {author}\n"
-                f"⏱ {length // 60}:{length % 60:02}\n\n"
-                f"Выберите формат для скачивания:",
-                reply_markup=builder.as_markup()
+                "🎥 YouTube Video\n\n"
+                "Выберите формат для скачивания:",
+                reply_markup=markup
             )
-        else:
-            await status_message.edit_text("❗ Не найдены подходящие форматы")
 
     except Exception as e:
         logger.error(f"YouTube handler error: {str(e)}")
-        await status_message.edit_text("❗ Ошибка при получении форматов")
+        await status_message.edit_text("❗ Ошибка при получении информации о видео")
 
 
 @client_bot_router.callback_query(FormatCallback.filter())
