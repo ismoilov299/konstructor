@@ -2578,18 +2578,28 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
         os.makedirs(temp_dir, exist_ok=True)
 
         # Проверка FFmpeg
+        # Проверка FFmpeg
         ffmpeg_available = False
         try:
             process = await asyncio.create_subprocess_exec(
-                'which', 'ffmpeg',
+                'ffmpeg', '-version',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
             ffmpeg_available = process.returncode == 0
-            logger.info(f"FFmpeg доступен: {ffmpeg_available}")
+
+            if ffmpeg_available:
+                # Логирование информации о версии FFmpeg
+                version_info = stdout.decode().split('\n')[0] if stdout else "Версия не определена"
+                logger.info(f"FFmpeg доступен: {version_info}")
+            else:
+                logger.warning("FFmpeg не найден или вернул ошибку")
         except Exception as e:
             logger.warning(f"Ошибка при проверке FFmpeg: {e}")
+
+        # Обновляем состояние с верным статусом FFmpeg
+        await state.update_data(ffmpeg_available=ffmpeg_available)
 
         # Конфигурация для получения форматов
         ydl_opts = {
