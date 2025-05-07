@@ -2276,124 +2276,73 @@ async def handle_large_video_download(bot, chat_id, video_path, title, username,
     Returns:
         bool: True if successful, False otherwise
     """
-    file_size = os.path.getsize(video_path)
-
-    # Send directly if under 50MB
-    if file_size <= 50 * 1024 * 1024:
-        if progress_msg:
-            await progress_msg.edit_text("📤 Отправляю видео...")
-
-        await bot.send_video(
-            chat_id=chat_id,
-            video=FSInputFile(video_path),
-            caption=f"📹 {title}\nСкачано через @{username}",
-            supports_streaming=True
-        )
-        return True
-
-    # File is too large, compress it
-    if progress_msg:
-        await progress_msg.edit_text("📦 Файл слишком большой, сжимаю видео...")
-
-    # Create temp directory if it doesn't exist
-    temp_dir = os.path.dirname(video_path)
-    compressed_path = os.path.join(temp_dir, f"compressed_{os.path.basename(video_path)}")
-
     try:
-        # Get video duration
-        duration_cmd = [
-            'ffprobe',
-            '-v', 'error',
-            '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1',
-            video_path
-        ]
+        # First check if the input file actually exists
+        if not os.path.exists(video_path):
+            logger.error(f"Input video file does not exist: {video_path}")
+            if progress_msg:
+                await progress_msg.edit_text("❌ Исходный файл видео не найден")
+            return False
 
-        process = await asyncio.create_subprocess_exec(
-            *duration_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        file_size = os.path.getsize(video_path)
 
-        stdout, stderr = await process.communicate()
+        # Send directly if under 50MB
+        if file_size <= 50 * 1024 * 1024:
+            if progress_msg:
+                await progress_msg.edit_text("📤 Отправляю видео...")
 
-        if process.returncode != 0:
-            logger.error(f"Error getting video duration: {stderr.decode()}")
-            raise Exception("Не удалось определить длительность видео")
+            await bot.send_video(
+                chat_id=chat_id,
+                video=FSInputFile(video_path),
+                caption=f"📹 {title}\nСкачано через @{username}",
+                supports_streaming=True
+            )
+            return True
+
+        # File is too large, compress it
+        if progress_msg:
+            await progress_msg.edit_text("📦 Файл слишком большой, сжимаю видео...")
+
+        # Create temp directory if it doesn't exist
+        temp_dir = os.path.dirname(video_path)
+        if not os.path.exists(temp_dir):
+            # If directory doesn't exist, create it
+            os.makedirs(temp_dir, exist_ok=True)
+
+        # Create output path for compressed video
+        compressed_path = os.path.join(temp_dir, f"compressed_{os.path.basename(video_path)}")
+
+        # Make sure ffmpeg is installed
+        try:
+            process = await asyncio.create_subprocess_exec(
+                'which', 'ffmpeg',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            if process.returncode != 0:
+                logger.error("FFmpeg not found on the system")
+                if progress_msg:
+                    await progress_msg.edit_text("❌ FFmpeg не найден на сервере")
+                return False
+        except Exception as e:
+            logger.error(f"Error checking for FFmpeg: {str(e)}")
+            if progress_msg:
+                await progress_msg.edit_text("❌ Ошибка проверки FFmpeg")
+            return False
 
         try:
-            duration = float(stdout.decode().strip())
-        except (ValueError, TypeError):
-            logger.error("Invalid duration value received")
-            duration = 60  # Default to 60 seconds if duration can't be determined
-
-        # Calculate target bitrate for a ~45MB file (leaving margin)
-        target_size_bits = 45 * 8 * 1024 * 1024
-        target_bitrate = int(target_size_bits / duration) if duration > 0 else 500000
-
-        # Ensure reasonable bitrate range
-        target_bitrate = max(300000, min(target_bitrate, 2000000))
-
-        # Compress the video with FFmpeg
-        compress_cmd = [
-            'ffmpeg',
-            '-i', video_path,
-            '-c:v', 'libx264',
-            '-preset', 'fast',  # Use 'fast' preset for speed
-            '-crf', '30',  # Use higher CRF value for smaller file size
-            '-maxrate', f'{target_bitrate}',
-            '-bufsize', f'{target_bitrate * 2}',
-            '-movflags', '+faststart',  # Optimize for web streaming
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-y',  # Overwrite output file
-            compressed_path
-        ]
-
-        if progress_msg:
-            await progress_msg.edit_text("📦 Сжимаю видео... Это может занять несколько минут")
-
-        process = await asyncio.create_subprocess_exec(
-            *compress_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            error_output = stderr.decode()
-            logger.error(f"Error compressing video: {error_output}")
-            raise Exception("Ошибка сжатия видео. Попробуйте другой формат.")
-
-        # Check if compression was successful and file exists
-        if not os.path.exists(compressed_path):
-            raise FileNotFoundError("Сжатый файл не найден")
-
-        # Check final file size
-        compressed_size = os.path.getsize(compressed_path)
-
-        # If still too big, adjust quality and try again
-        if compressed_size > 50 * 1024 * 1024:
-            if progress_msg:
-                await progress_msg.edit_text("📦 Файл всё ещё слишком большой, оптимизирую...")
-
-            # Try more aggressive compression
-            retry_compress_cmd = [
-                'ffmpeg',
-                '-i', video_path,
-                '-c:v', 'libx264',
-                '-preset', 'medium',
-                '-crf', '35',  # Much higher CRF for smaller size
-                '-vf', 'scale=854:480',  # Reduce resolution to 480p
-                '-c:a', 'aac',
-                '-b:a', '96k',
-                '-y',
-                compressed_path
+            # Get video duration
+            duration_cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                video_path
             ]
 
             process = await asyncio.create_subprocess_exec(
-                *retry_compress_cmd,
+                *duration_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -2401,48 +2350,194 @@ async def handle_large_video_download(bot, chat_id, video_path, title, username,
             stdout, stderr = await process.communicate()
 
             if process.returncode != 0:
-                logger.error(f"Error during second compression attempt: {stderr.decode()}")
-                raise Exception("Не удалось сжать видео до требуемого размера")
+                stderr_output = stderr.decode()
+                logger.error(f"Error getting video duration: {stderr_output}")
+                # Try to continue with default duration
+                duration = 60  # Default to 60 seconds
+            else:
+                try:
+                    duration = float(stdout.decode().strip())
+                    if duration <= 0:
+                        duration = 60  # Default if invalid duration
+                except (ValueError, TypeError):
+                    logger.error("Invalid duration value received")
+                    duration = 60  # Default to 60 seconds
 
-            # Check if second compression was successful
-            if not os.path.exists(compressed_path):
-                raise FileNotFoundError("Сжатый файл не найден после повторной попытки")
+            # Calculate target bitrate for a ~45MB file (leaving margin)
+            target_size_bits = 45 * 8 * 1024 * 1024
+            target_bitrate = int(target_size_bits / duration)
 
-            compressed_size = os.path.getsize(compressed_path)
+            # Ensure reasonable bitrate range
+            target_bitrate = max(300000, min(target_bitrate, 2000000))
 
-            # If still too big after second attempt
-            if compressed_size > 50 * 1024 * 1024:
+            # First compression attempt - moderate quality
+            if progress_msg:
+                await progress_msg.edit_text("📦 Сжимаю видео... Это может занять несколько минут")
+
+            # Log all commands for debugging
+            compress_cmd = [
+                'ffmpeg',
+                '-i', video_path,
+                '-c:v', 'libx264',
+                '-preset', 'fast',
+                '-crf', '30',
+                '-maxrate', f'{target_bitrate}',
+                '-bufsize', f'{target_bitrate * 2}',
+                '-movflags', '+faststart',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-y',
+                compressed_path
+            ]
+
+            logger.info(f"Running compression command: {' '.join(compress_cmd)}")
+
+            process = await asyncio.create_subprocess_exec(
+                *compress_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                stderr_output = stderr.decode()
+                logger.error(f"Error compressing video: {stderr_output}")
+
+                # Try with simpler options if first attempt failed
+                simple_compress_cmd = [
+                    'ffmpeg',
+                    '-i', video_path,
+                    '-vcodec', 'libx264',
+                    '-crf', '35',
+                    '-acodec', 'aac',
+                    '-y',
+                    compressed_path
+                ]
+
+                logger.info(f"Trying simpler compression: {' '.join(simple_compress_cmd)}")
+
                 if progress_msg:
-                    await progress_msg.edit_text("⚠️ Не удалось сжать видео до требуемого размера")
+                    await progress_msg.edit_text("📦 Пробую альтернативный метод сжатия...")
+
+                process = await asyncio.create_subprocess_exec(
+                    *simple_compress_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+
+                stdout, stderr = await process.communicate()
+
+                if process.returncode != 0:
+                    stderr_output = stderr.decode()
+                    logger.error(f"Error with simple compression: {stderr_output}")
+                    if progress_msg:
+                        await progress_msg.edit_text("❌ Не удалось сжать видео")
+                    return False
+
+            # Check if compression was successful and file exists
+            if not os.path.exists(compressed_path):
+                logger.error(f"Compressed file not found at: {compressed_path}")
+                if progress_msg:
+                    await progress_msg.edit_text("❌ Сжатый файл не найден")
                 return False
 
-        # Send the compressed video
-        if progress_msg:
-            await progress_msg.edit_text("📤 Отправляю сжатое видео...")
+            # Check final file size
+            compressed_size = os.path.getsize(compressed_path)
+            logger.info(f"Compressed file size: {compressed_size / (1024 * 1024):.1f} MB")
 
-        await bot.send_video(
-            chat_id=chat_id,
-            video=FSInputFile(compressed_path),
-            caption=f"📹 {title} (Сжатое видео)\nРазмер исходного файла: {file_size / (1024 * 1024):.1f} МБ\nСкачано через @{username}",
-            supports_streaming=True
-        )
+            # If still too big, try more aggressive compression
+            if compressed_size > 50 * 1024 * 1024:
+                if progress_msg:
+                    await progress_msg.edit_text("📦 Файл всё ещё слишком большой, применяю сильное сжатие...")
 
-        return True
+                # More aggressive compression with lower resolution
+                aggressive_compress_cmd = [
+                    'ffmpeg',
+                    '-i', video_path,
+                    '-vcodec', 'libx264',
+                    '-vf', 'scale=640:360',  # 360p resolution
+                    '-crf', '40',  # Very high compression
+                    '-preset', 'faster',
+                    '-acodec', 'aac',
+                    '-b:a', '96k',
+                    '-y',
+                    compressed_path
+                ]
+
+                logger.info(f"Running aggressive compression: {' '.join(aggressive_compress_cmd)}")
+
+                process = await asyncio.create_subprocess_exec(
+                    *aggressive_compress_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+
+                stdout, stderr = await process.communicate()
+
+                if process.returncode != 0:
+                    stderr_output = stderr.decode()
+                    logger.error(f"Error with aggressive compression: {stderr_output}")
+                    if progress_msg:
+                        await progress_msg.edit_text("❌ Не удалось сжать видео до требуемого размера")
+                    return False
+
+                # Check if file exists after aggressive compression
+                if not os.path.exists(compressed_path):
+                    logger.error("Compressed file not found after aggressive compression")
+                    if progress_msg:
+                        await progress_msg.edit_text("❌ Сжатый файл не найден")
+                    return False
+
+                compressed_size = os.path.getsize(compressed_path)
+                logger.info(f"Aggressively compressed file size: {compressed_size / (1024 * 1024):.1f} MB")
+
+                # If still too big after aggressive compression
+                if compressed_size > 50 * 1024 * 1024:
+                    if progress_msg:
+                        await progress_msg.edit_text(
+                            f"⚠️ Не удалось сжать видео достаточно сильно\n"
+                            f"Размер файла: {compressed_size / (1024 * 1024):.1f} МБ > 50 МБ"
+                        )
+                    return False
+
+            # Send the compressed video
+            if progress_msg:
+                await progress_msg.edit_text("📤 Отправляю сжатое видео...")
+
+            await bot.send_video(
+                chat_id=chat_id,
+                video=FSInputFile(compressed_path),
+                caption=f"📹 {title} (Сжатое видео)\n"
+                        f"Исходный размер: {file_size / (1024 * 1024):.1f} МБ\n"
+                        f"Скачано через @{username}",
+                supports_streaming=True
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Video compression error: {str(e)}")
+            if progress_msg:
+                await progress_msg.edit_text(f"❌ Ошибка при обработке видео: {str(e)[:100]}...")
+            return False
 
     except Exception as e:
-        logger.error(f"Video compression error: {str(e)}")
+        logger.error(f"General error in handle_large_video_download: {str(e)}")
         if progress_msg:
-            await progress_msg.edit_text(f"❌ Ошибка при обработке видео: {str(e)[:100]}...")
+            await progress_msg.edit_text(f"❌ Произошла ошибка при обработке видео: {str(e)[:100]}...")
         return False
 
     finally:
         # Clean up files
         try:
-            if os.path.exists(video_path):
+            if 'video_path' in locals() and os.path.exists(video_path):
                 os.remove(video_path)
+                logger.info(f"Removed original file: {video_path}")
 
-            if os.path.exists(compressed_path):
+            if 'compressed_path' in locals() and os.path.exists(compressed_path):
                 os.remove(compressed_path)
+                logger.info(f"Removed compressed file: {compressed_path}")
         except Exception as e:
             logger.error(f"Error cleaning up files: {e}")
 
