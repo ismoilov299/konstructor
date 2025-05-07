@@ -2044,7 +2044,7 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
     """
-    Handle YouTube videos by showing available formats and audio option
+    Handle YouTube videos with proper temp directory management
     """
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
@@ -2052,6 +2052,16 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
         # Clean the URL to improve compatibility
         clean_url = url.split('&')[0] if '&' in url else url
         logger.info(f"Processing YouTube URL: {clean_url}")
+
+        # Create a custom temporary directory with appropriate permissions
+        temp_dir = "/tmp/youtube_downloads"
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # Make sure directory has proper permissions
+        try:
+            os.chmod(temp_dir, 0o777)
+        except Exception as e:
+            logger.warning(f"Could not set permissions on temp dir: {e}")
 
         # Configure options to extract available formats
         ydl_opts = {
@@ -2140,7 +2150,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 markup = InlineKeyboardBuilder()
 
                 # Add video format buttons
-                for fmt in video_formats:
+                for idx, fmt in enumerate(video_formats):
                     resolution = fmt['resolution']
                     size_text = ""
                     if fmt['filesize']:
@@ -2150,7 +2160,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     button_text = f"🎬 {resolution}{size_text}"
                     markup.button(
                         text=button_text,
-                        callback_data=f"format:{fmt['format_id']}:video:{resolution}:0"
+                        callback_data=f"format:{fmt['format_id']}:video:{resolution}:{idx}"
                     )
 
                 # Add audio button at the end
@@ -2163,7 +2173,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 
                     markup.button(
                         text=f"🎵 Аудио {abr_text}{size_text}",
-                        callback_data=f"format:{audio_format['format_id']}:audio:audio:0"
+                        callback_data=f"format:{audio_format['format_id']}:audio:audio:{len(video_formats)}"
                     )
 
                 # Set single column layout
@@ -2175,7 +2185,8 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     title=title,
                     uploader=uploader,
                     duration=duration,
-                    formats=video_formats + ([audio_format] if audio_format else [])
+                    formats=video_formats + ([audio_format] if audio_format else []),
+                    temp_dir=temp_dir
                 )
 
                 # Display video information and format options
@@ -2198,6 +2209,9 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             markup.button(text="🎬 Низкое качество", callback_data=f"yt_low:{clean_url}")
             markup.button(text="🎵 Аудио", callback_data=f"yt_audio:{clean_url}")
             markup.adjust(1)
+
+            # Store temp dir in state for fallback options too
+            await state.update_data(temp_dir=temp_dir)
 
             await status_message.edit_text(
                 f"🎥 YouTube видео\n\n"
