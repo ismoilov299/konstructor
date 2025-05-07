@@ -1777,7 +1777,7 @@ def update_download_analytics(bot_username, domain):
 
 
 
-# Router va FSM
+
 
 
 class Download(StatesGroup):
@@ -1786,7 +1786,7 @@ class Download(StatesGroup):
 # Bot filtri
 class DownloaderBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
-        return True  # Agar maxsus modul cheklovlari bo'lsa, bu yerni o'zgartiring
+        return True
 
 # Formatlarni tanlash
 def get_best_formats(formats):
@@ -1805,12 +1805,10 @@ def get_best_formats(formats):
         if vcodec != 'none' and height and height not in seen_qualities and height in [360, 720, 1080]:
             seen_qualities.add(height)
             video_formats.append(fmt)
-            logger.debug(f"Добавлен видео формат: {fmt.get('format_id')} - {height}p")
 
         if acodec != 'none' and vcodec == 'none':
             if not audio_format or fmt.get('abr', 0) > audio_format.get('abr', 0):
                 audio_format = fmt
-                logger.debug(f"Найден лучший аудио формат: {fmt.get('format_id')} - {fmt.get('abr')}kbps")
 
     video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
     return video_formats, audio_format
@@ -1834,7 +1832,7 @@ async def download_handler(message: types.Message, state: FSMContext, bot: Bot):
         await handle_youtube(message, url, me, bot, state)
     else:
         await message.answer("❗ Отправьте ссылку на видео с YouTube, Instagram или TikTok")
-from uuid import uuid4
+
 # YouTube handler
 async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: FSMContext):
     status_message = await message.answer("⏳ Получаю информацию о видео...")
@@ -1860,10 +1858,10 @@ async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: 
             video_formats, audio_format = get_best_formats(formats)
 
             markup = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🚀 1080p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=1080]+bestaudio:video:1080p:{uuid4()}")],
-                [InlineKeyboardButton(text="🚀 720p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=720]+bestaudio:video:720p:{uuid4()}")],
-                [InlineKeyboardButton(text="🚀 360p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=360]+bestaudio:video:360p:{uuid4()}")],
-                [InlineKeyboardButton(text="🎵 Аудио MP3", callback_data=f"ytdl:bestaudio:audio:best:{uuid4()}")]
+                [InlineKeyboardButton(text="🚀 1080p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=1080]+bestaudio:video:1080p")],
+                [InlineKeyboardButton(text="🚀 720p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=720]+bestaudio:video:720p")],
+                [InlineKeyboardButton(text="🚀 360p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=360]+bestaudio:video:360p")],
+                [InlineKeyboardButton(text="🎵 Аудио MP3", callback_data=f"ytdl:bestaudio:audio:best")]
             ])
 
             await state.update_data(url=clean_url, title=title, duration=duration)
@@ -1884,11 +1882,11 @@ async def process_youtube_download(callback: types.CallbackQuery, state: FSMCont
 
     try:
         parts = callback.data.split(":")
-        if len(parts) != 5:
+        if len(parts) != 4:
             await callback.message.answer("❌ Некорректный формат запроса")
             return
 
-        _, format_id, media_type, quality, _ = parts
+        _, format_id, media_type, quality = parts
         is_audio = media_type == 'audio'
 
         data = await state.get_data()
@@ -2133,8 +2131,7 @@ async def handle_instagram(message: types.Message, url: str, me, bot: Bot):
 
                 except Exception as extract_error:
                     logger.error(f"Ошибка извлечения Instagram: {str(extract_error)}")
-                    await progress_msg.edit_text("🔄 Пробую альтернативный способ загрузки...")
-
+                    await progress_msg.edit_text("🔄 Пробую альтернативный способ...")
                     try:
                         ydl_opts['format'] = 'worst'
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl_low:
@@ -2168,7 +2165,7 @@ async def handle_instagram(message: types.Message, url: str, me, bot: Bot):
 
         except Exception as e:
             logger.error(f"Ошибка загрузки Instagram: {str(e)}")
-            await progress_msg.edit_text("❌ Ошибка при скачивании. Возможно пост недоступен или защищен.")
+            await progress_msg.edit_text("❌ Ошибка при скачивании. Возможно, пост недоступен.")
 
     except Exception as e:
         logger.error(f"Ошибка обработки Instagram: {str(e)}")
@@ -2198,7 +2195,7 @@ async def handle_tiktok(message: types.Message, url: str, me, bot: Bot, state: F
                         await bot.send_video(
                             chat_id=message.chat.id,
                             video=info['url'],
-                            caption=f"📹 TikTok видео\nСкачано через @{me.username}",
+                            caption=f"📹 TikTok видео\nСкачано через @{me.username}"
                         )
                         await state.set_state(Download.download)
                         return
@@ -2233,7 +2230,6 @@ async def download_and_send_video(message: types.Message, url: str, ydl_opts: di
             'geo_bypass': True,
             'retries': 3,
             'fragment_retries': 3,
-            'verbose': True,
             **ydl_opts
         }
 
@@ -2324,7 +2320,6 @@ async def download_and_send_video(message: types.Message, url: str, ydl_opts: di
                 logger.info(f"Удален сжатый файл: {compressed_file}")
             except Exception as e:
                 logger.error(f"Ошибка удаления файла: {e}")
-
 
 
 
