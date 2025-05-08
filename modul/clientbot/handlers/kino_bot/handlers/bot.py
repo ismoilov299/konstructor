@@ -2059,8 +2059,9 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("⏳ Начинаю загрузку...")
 
+        # Get data from state
         data = await state.get_data()
-        url = data.get('url')
+        url = data.get('youtube_url')  # Get URL from state
         formats = data.get('formats', [])
         title = data.get('title', 'Video')
 
