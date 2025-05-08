@@ -1773,7 +1773,7 @@ def update_download_analytics(bot_username, domain):
     DownloadAnalyticsModel.objects.filter(id=analytics.id).update(count=F('count') + 1)
 
 
-async def get_best_formats(formats):
+def get_best_formats(formats):
     """Get the best video and audio formats, prioritizing formats that don't need merging"""
     video_formats = []
     audio_format = None
@@ -1846,8 +1846,8 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             title = info.get('title', 'Video')
             formats = info.get('formats', [])
 
-            # First try to get complete formats that don't need ffmpeg
-            video_formats, audio_format = await get_best_formats(formats)
+            # Now properly call the function without await
+            video_formats, audio_format = get_best_formats(formats)
             builder = InlineKeyboardBuilder()
             valid_formats = []
 
