@@ -1773,11 +1773,14 @@ def update_download_analytics(bot_username, domain):
     DownloadAnalyticsModel.objects.filter(id=analytics.id).update(count=F('count') + 1)
 
 
-def get_best_formats(formats):
+async def get_best_formats(formats):
+    """Get the best video and audio formats, prioritizing formats that don't need merging"""
     video_formats = []
     audio_format = None
     seen_qualities = set()
 
+    # First, find formats that contain both video and audio (no merging needed)
+    complete_formats = []
     for fmt in formats:
         if not isinstance(fmt, dict):
             continue
@@ -1785,7 +1788,28 @@ def get_best_formats(formats):
         vcodec = fmt.get('vcodec', 'none')
         acodec = fmt.get('acodec', 'none')
 
-        if vcodec != 'none':
+        # This is a complete format with both video and audio
+        if vcodec != 'none' and acodec != 'none':
+            height = fmt.get('height', 0)
+            if height and height not in seen_qualities:
+                seen_qualities.add(height)
+                complete_formats.append(fmt)
+
+    # If we have complete formats, use them
+    if complete_formats:
+        complete_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
+        return complete_formats, audio_format
+
+    # Otherwise, fall back to separate video and audio formats
+    seen_qualities = set()
+    for fmt in formats:
+        if not isinstance(fmt, dict):
+            continue
+
+        vcodec = fmt.get('vcodec', 'none')
+        acodec = fmt.get('acodec', 'none')
+
+        if vcodec != 'none' and acodec == 'none':
             height = fmt.get('height', 0)
             if height and height not in seen_qualities:
                 seen_qualities.add(height)
@@ -1798,6 +1822,112 @@ def get_best_formats(formats):
     video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
 
     return video_formats, audio_format
+
+
+async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
+    status_message = await message.answer("⏳ Получаю информацию о видео...")
+
+    try:
+        # Store the URL in state
+        await state.update_data(youtube_url=url)
+
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = await asyncio.get_event_loop().run_in_executor(
+                executor,
+                lambda: ydl.extract_info(url, download=False)
+            )
+
+            title = info.get('title', 'Video')
+            formats = info.get('formats', [])
+
+            # First try to get complete formats that don't need ffmpeg
+            video_formats, audio_format = await get_best_formats(formats)
+            builder = InlineKeyboardBuilder()
+            valid_formats = []
+
+            # Add video formats
+            for fmt in video_formats:
+                if not fmt.get('format_id'):
+                    continue
+
+                height = fmt.get('height', 0)
+                quality_text = f"{height}p" if height else fmt.get('format_note', 'Medium')
+
+                # Check if this format has both audio and video
+                vcodec = fmt.get('vcodec', 'none')
+                acodec = fmt.get('acodec', 'none')
+                format_text = "🎬 " if vcodec != 'none' and acodec != 'none' else "🎥 "
+
+                filesize = fmt.get('filesize', 0)
+                if not filesize:
+                    filesize = fmt.get('filesize_approx', 0)
+
+                filesize_text = ""
+                if filesize > 0:
+                    size_mb = filesize / (1024 * 1024)
+                    if size_mb > 1024:
+                        filesize_text = f" ({size_mb / 1024:.1f} GB)"
+                    else:
+                        filesize_text = f" ({size_mb:.1f} MB)"
+
+                valid_formats.append(fmt)
+                builder.button(
+                    text=f"{format_text}{quality_text}{filesize_text}",
+                    callback_data=FormatCallback(
+                        format_id=fmt['format_id'],
+                        type='video',
+                        quality=str(quality_text),
+                        index=len(valid_formats) - 1
+                    ).pack()
+                )
+
+            # Add audio format
+            if audio_format and audio_format.get('format_id'):
+                valid_formats.append(audio_format)
+                audio_size = audio_format.get('filesize', 0)
+                if not audio_size:
+                    audio_size = audio_format.get('filesize_approx', 0)
+
+                audio_size_text = ""
+                if audio_size > 0:
+                    size_mb = audio_size / (1024 * 1024)
+                    if size_mb > 1024:
+                        audio_size_text = f" ({size_mb / 1024:.1f} GB)"
+                    else:
+                        audio_size_text = f" ({size_mb:.1f} MB)"
+
+                builder.button(
+                    text=f"🎵 Аудио{audio_size_text}",
+                    callback_data=FormatCallback(
+                        format_id=audio_format['format_id'],
+                        type='audio',
+                        quality='audio',
+                        index=len(valid_formats) - 1
+                    ).pack()
+                )
+
+            builder.adjust(2)
+
+            if valid_formats:
+                await state.update_data(formats=valid_formats, title=title)
+                await status_message.edit_text(
+                    f"🎥 {title}\n\n"
+                    f"Выберите формат:\n"
+                    f"(🎬 = Видео+Аудио, 🎥 = Только Видео)",
+                    reply_markup=builder.as_markup()
+                )
+            else:
+                await status_message.edit_text("❗ Не найдены подходящие форматы")
+
+    except Exception as e:
+        logger.error(f"YouTube handler error: {str(e)}")
+        await status_message.edit_text("❗ Ошибка при получении форматов")
 
 
 async def download_video(url: str, format_id: str, state: FSMContext, progress_msg=None):
@@ -1845,14 +1975,33 @@ async def download_video(url: str, format_id: str, state: FSMContext, progress_m
             except Exception as e:
                 logger.error(f"Progress hook error: {e}")
 
-        ydl_opts = {
-            'format': f"{format_id}+bestaudio/best",
-            'outtmpl': os.path.join(download_dir, '%(title)s-%(id)s.%(ext)s'),
-            'retries': 3,
-            'fragment_retries': 3,
-            'merge_output_format': 'mp4',
-            'progress_hooks': [progress_hook],
-        }
+        # Check if ffmpeg is available, if not, use a format that doesn't require merging
+        try:
+            ffmpeg_path = "/usr/bin/ffmpeg"
+            subprocess.run([ffmpeg_path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            logger.info("ffmpeg is installed and available")
+
+            # If ffmpeg is available, use the specified format
+            ydl_opts = {
+                'format': f"{format_id}+bestaudio/best",
+                'outtmpl': os.path.join(download_dir, '%(title)s-%(id)s.%(ext)s'),
+                'retries': 3,
+                'fragment_retries': 3,
+                'merge_output_format': 'mp4',
+                'progress_hooks': [progress_hook],
+            }
+
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            logger.warning("ffmpeg not found - downloading single format without merging")
+
+            # No ffmpeg, use a simpler format that doesn't require merging
+            ydl_opts = {
+                'format': format_id,  # Just download the specific format without merging
+                'outtmpl': os.path.join(download_dir, '%(title)s-%(id)s.%(ext)s'),
+                'retries': 3,
+                'fragment_retries': 3,
+                'progress_hooks': [progress_hook],
+            }
 
         # Initialize download message
         if progress_msg:
