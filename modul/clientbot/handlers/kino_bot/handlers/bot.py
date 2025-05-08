@@ -1800,7 +1800,8 @@ def get_best_formats(formats):
 
     return video_formats, audio_format
 
-async def download_video(url: str, format_id: str, state: FSMContext):
+
+async def download_video(url: str, format_id: str, state: FSMContext, progress_msg=None):
     try:
         # Create download directory with proper permissions
         download_dir = "/var/www/downloads"
@@ -1819,6 +1820,62 @@ async def download_video(url: str, format_id: str, state: FSMContext):
             logger.error(f"ffmpeg not found at {ffmpeg_path}")
             raise Exception("ffmpeg is required for merging audio and video")
 
+        # Create a progress hook for updating download progress
+        last_update_time = [time.time()]
+        last_percent = [0]
+
+        async def yt_progress_hook(d):
+            if d['status'] == 'downloading':
+                percent = d.get('_percent_str', '0%').strip()
+                percent_num = float(percent.replace('%', '')) if percent.replace('%', '').replace('.', '',
+                                                                                                  1).isdigit() else 0
+                downloaded = d.get('downloaded_bytes', 0)
+                total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
+                speed = d.get('_speed_str', 'N/A')
+                eta = d.get('_eta_str', 'N/A')
+
+                # Log to terminal at most every 2 seconds or at 10% intervals
+                current_time = time.time()
+                if (current_time - last_update_time[0] >= 2 or
+                        abs(percent_num - last_percent[0]) >= 10 or
+                        percent_num >= 100):
+                    logger.info(f"Download progress: {percent} | Speed: {speed} | ETA: {eta}")
+                    last_update_time[0] = current_time
+                    last_percent[0] = percent_num
+
+                    # Update message to user if progress_msg is provided
+                    if progress_msg:
+                        try:
+                            # Format size in MB or GB
+                            size_text = ""
+                            if total > 0:
+                                downloaded_mb = downloaded / (1024 * 1024)
+                                total_mb = total / (1024 * 1024)
+                                if total_mb > 1024:
+                                    downloaded_gb = downloaded_mb / 1024
+                                    total_gb = total_mb / 1024
+                                    size_text = f"{downloaded_gb:.1f} GB / {total_gb:.1f} GB"
+                                else:
+                                    size_text = f"{downloaded_mb:.1f} MB / {total_mb:.1f} MB"
+
+                            asyncio.create_task(
+                                progress_msg.edit_text(
+                                    f"⏳ Загрузка: {percent}\n"
+                                    f"📦 Размер: {size_text}\n"
+                                    f"⚡ Скорость: {speed}\n"
+                                    f"⏱ Осталось: {eta}"
+                                )
+                            )
+                        except Exception as e:
+                            logger.error(f"Error updating progress message: {e}")
+
+            elif d['status'] == 'finished':
+                if progress_msg:
+                    asyncio.create_task(progress_msg.edit_text("📥 Загрузка завершена! Обрабатываю видео..."))
+                logger.info("Download finished, now post-processing...")
+
+        progress_hooks = [lambda d: asyncio.run_coroutine_threadsafe(yt_progress_hook(d), asyncio.get_event_loop())]
+
         ydl_opts = {
             'format': f"{format_id}+bestaudio/best",
             'quiet': False,
@@ -1835,11 +1892,18 @@ async def download_video(url: str, format_id: str, state: FSMContext):
                 'key': 'FFmpegVideoConvertor',
                 'preferedformat': 'mp4',
             }],
+            'progress_hooks': progress_hooks,
         }
+
         with YoutubeDL(ydl_opts) as ydl:
             # Route yt-dlp logs to your logger
             ydl.params['logger'] = logger
 
+            # Initialize download
+            if progress_msg:
+                await progress_msg.edit_text("⏳ Начинаю загрузку...")
+
+            # Extract info and download
             info = await asyncio.get_event_loop().run_in_executor(
                 executor,
                 lambda: ydl.extract_info(url, download=True)
@@ -1852,18 +1916,32 @@ async def download_video(url: str, format_id: str, state: FSMContext):
             logger.debug(f"Expected output file: {output_file}")
 
             if not os.path.exists(output_file):
-                raise Exception(f"Downloaded file does not exist: {output_file}")
+                # Sometimes the extension changes during post-processing
+                base_output_file = os.path.splitext(output_file)[0]
+                possible_files = [f for f in os.listdir(os.path.dirname(output_file))
+                                  if f.startswith(os.path.basename(base_output_file))]
+
+                if possible_files:
+                    output_file = os.path.join(os.path.dirname(output_file), possible_files[0])
+                else:
+                    raise Exception(f"Downloaded file does not exist: {output_file}")
+
             if os.path.getsize(output_file) == 0:
                 raise Exception(f"Downloaded file is empty: {output_file}")
 
-            # Debug: Log downloaded formats
-            downloaded_formats = info.get('requested_formats', [info])
-            logger.debug(f"Downloaded formats: {downloaded_formats}")
+            logger.info(f"Download completed successfully: {output_file}")
+
+            # Update progress message
+            if progress_msg:
+                await progress_msg.edit_text("✅ Загрузка завершена! Отправляю файл...")
 
             return output_file, info
 
     except Exception as e:
         logger.error(f"Download error: {str(e)}")
+        # Update progress message with error
+        if progress_msg:
+            await progress_msg.edit_text(f"❌ Ошибка загрузки: {str(e)}")
         raise
 
 async def handle_format_selection(callback_query: CallbackQuery, state: FSMContext):
@@ -2060,7 +2138,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
 async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext, bot):
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.answer("⏳ Начинаю загрузку...")
+        await callback.answer("⏳ Начинаю процесс загрузки...")
 
         # Get data from state
         data = await state.get_data()
@@ -2073,26 +2151,41 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
             return
 
         selected_format = formats[callback_data.index]
+
+        # Create progress message
         progress_msg = await callback.message.answer(
-            f"⏳ Загружаю {title}\n"
+            f"⏳ Подготовка к загрузке {title}...\n"
             f"Формат: {callback_data.quality}"
         )
 
         try:
-            # Assuming download_video is async def download_video(url, format_id, state):
-            file_path, info = await download_video(url, selected_format['format_id'], state)
+            # Pass the progress_msg to download_video
+            file_path, info = await download_video(url, selected_format['format_id'], state, progress_msg)
 
             if not os.path.exists(file_path):
                 raise FileNotFoundError("Файл не найден после загрузки")
 
-            await progress_msg.edit_text("📤 Отправляю файл...")
-
             try:
+                # Update progress message
+                await progress_msg.edit_text("📤 Отправляю файл...")
+
                 me = await bot.get_me()
                 caption = f"🎥 {title}"
                 if callback_data.type == 'video':
                     caption += f" ({callback_data.quality})"
                 caption += f"\nСкачано через @{me.username}"
+
+                # Get file size
+                file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
+                if file_size > 1024:
+                    size_text = f"{file_size / 1024:.1f} GB"
+                else:
+                    size_text = f"{file_size:.1f} MB"
+
+                caption += f"\n📦 Размер: {size_text}"
+
+                # Log final result
+                logger.info(f"Sending file to user: {file_path} ({size_text})")
 
                 if callback_data.type == 'video':
                     await bot.send_video(
@@ -2108,16 +2201,21 @@ async def process_format_selection(callback: CallbackQuery, callback_data: Forma
                         caption=caption,
                         title=title
                     )
+
+                # Delete progress message after successful file send
+                await progress_msg.delete()
+
             finally:
+                # Clean up the file regardless of success or failure
                 if os.path.exists(file_path):
                     os.remove(file_path)
+                    logger.info(f"Cleaned up file: {file_path}")
 
-            await progress_msg.delete()
             await state.clear()
 
         except Exception as e:
             logger.error(f"Download error: {str(e)}")
-            await progress_msg.edit_text(f"❌ Ошибка при загрузке")
+            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)}")
 
     except Exception as e:
         logger.error(f"Format selection error: {str(e)}")
