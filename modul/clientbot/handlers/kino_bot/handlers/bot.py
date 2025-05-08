@@ -1788,8 +1788,21 @@ class DownloaderBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
         return True
 
+# FFmpeg mavjudligini tekshirish
+async def check_ffmpeg():
+    try:
+        process = await asyncio.create_subprocess_exec(
+            'ffmpeg', '-version',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        return process.returncode == 0
+    except Exception:
+        return False
+
 # Formatlarni tanlash
-def get_best_formats(formats):
+def get_best_formats(formats, ffmpeg_available):
     video_formats = []
     audio_format = None
     seen_qualities = set()
@@ -1802,7 +1815,12 @@ def get_best_formats(formats):
         acodec = fmt.get('acodec', 'none')
         height = fmt.get('height', 0)
 
-        if vcodec != 'none' and height and height not in seen_qualities and height in [360, 720, 1080]:
+        # FFmpeg yo'q bo'lsa, faqat video+audio birlashgan formatlarni tanlaymiz
+        if not ffmpeg_available and vcodec != 'none' and acodec != 'none' and height and height not in seen_qualities and height in [360, 720, 1080]:
+            seen_qualities.add(height)
+            video_formats.append(fmt)
+        # FFmpeg bo'lsa, alohida video formatlarni ham qo'shamiz
+        elif ffmpeg_available and vcodec != 'none' and height and height not in seen_qualities and height in [360, 720, 1080]:
             seen_qualities.add(height)
             video_formats.append(fmt)
 
@@ -1838,6 +1856,7 @@ async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: 
     status_message = await message.answer("⏳ Получаю информацию о видео...")
     try:
         clean_url = url.split('&')[0] if '&' in url else url
+        ffmpeg_available = await check_ffmpeg()
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -1855,16 +1874,26 @@ async def handle_youtube(message: types.Message, url: str, me, bot: Bot, state: 
             duration_str = f"{duration // 60}:{duration % 60:02d}" if duration else ""
 
             formats = info_dict.get('formats', [])
-            video_formats, audio_format = get_best_formats(formats)
+            video_formats, audio_format = get_best_formats(formats, ffmpeg_available)
 
-            markup = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🚀 1080p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=1080]+bestaudio:video:1080p")],
-                [InlineKeyboardButton(text="🚀 720p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=720]+bestaudio:video:720p")],
-                [InlineKeyboardButton(text="🚀 360p (Видео + Аудио)", callback_data=f"ytdl:bestvideo[height<=360]+bestaudio:video:360p")],
-                [InlineKeyboardButton(text="🎵 Аудио MP3", callback_data=f"ytdl:bestaudio:audio:best")]
-            ])
+            markup = InlineKeyboardMarkup(inline_keyboard=[])
+            if video_formats:
+                for fmt in video_formats:
+                    height = fmt.get('height', 0)
+                    if height == 1080:
+                        markup.inline_keyboard.append([InlineKeyboardButton(text="🚀 1080p (Видео + Аудио)", callback_data=f"ytdl:{fmt['format_id']}:video:1080p")])
+                    elif height == 720:
+                        markup.inline_keyboard.append([InlineKeyboardButton(text="🚀 720p (Видео + Аудио)", callback_data=f"ytdl:{fmt['format_id']}:video:720p")])
+                    elif height == 360:
+                        markup.inline_keyboard.append([InlineKeyboardButton(text="🚀 360p (Видео + Аудио)", callback_data=f"ytdl:{fmt['format_id']}:video:360p")])
+            if audio_format and ffmpeg_available:
+                markup.inline_keyboard.append([InlineKeyboardButton(text="🎵 Аудио MP3", callback_data=f"ytdl:bestaudio:audio:best")])
 
-            await state.update_data(url=clean_url, title=title, duration=duration)
+            if not markup.inline_keyboard:
+                await status_message.edit_text("❌ Нет доступных форматов для этого видео")
+                return
+
+            await state.update_data(url=clean_url, title=title, duration=duration, ffmpeg_available=ffmpeg_available)
             await status_message.edit_text(
                 f"🎥 <b>{title}</b>\n⏱ {duration_str}\n\nВыберите качество:",
                 reply_markup=markup
@@ -1892,6 +1921,7 @@ async def process_youtube_download(callback: types.CallbackQuery, state: FSMCont
         data = await state.get_data()
         url = data.get('url')
         title = data.get('title', 'YouTube Video')
+        ffmpeg_available = data.get('ffmpeg_available', False)
 
         if not url:
             await callback.message.answer("❌ Данные о видео не найдены")
@@ -1917,7 +1947,7 @@ async def process_youtube_download(callback: types.CallbackQuery, state: FSMCont
             'progress_hooks': [lambda d: progress_hook(d, progress_msg, is_audio, quality)],
         }
 
-        if is_audio:
+        if is_audio and ffmpeg_available:
             ydl_opts['format'] = 'bestaudio'
             ydl_opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
@@ -1948,12 +1978,15 @@ async def process_youtube_download(callback: types.CallbackQuery, state: FSMCont
 
                 me = await bot.get_me()
                 if file_size > 50 * 1024 * 1024:
-                    await progress_msg.edit_text("📦 Файл слишком большой, сжимаю...")
-                    compressed_path = await compress_large_video(downloaded_path, os.path.join(temp_dir, f"compressed_{timestamp}_{user_id}.mp4"))
-                    if compressed_path and os.path.getsize(compressed_path) <= 50 * 1024 * 1024:
-                        await send_downloaded_file(bot, callback.message.chat.id, compressed_path, title, info_dict, is_audio, True, progress_msg, me.username)
+                    if ffmpeg_available:
+                        await progress_msg.edit_text("📦 Файл слишком большой, сжимаю...")
+                        compressed_path = await compress_large_video(downloaded_path, os.path.join(temp_dir, f"compressed_{timestamp}_{user_id}.mp4"))
+                        if compressed_path and os.path.getsize(compressed_path) <= 50 * 1024 * 1024:
+                            await send_downloaded_file(bot, callback.message.chat.id, compressed_path, title, info_dict, is_audio, True, progress_msg, me.username)
+                        else:
+                            await progress_msg.edit_text("❌ Не удалось сжать файл до нужного размера. Попробуйте выбрать меньшее качество.")
                     else:
-                        await progress_msg.edit_text("❌ Не удалось сжать файл до нужного размера")
+                        await progress_msg.edit_text("❌ Файл слишком большой (>50 МБ). Выберите меньшее качество, так как FFmpeg не установлен.")
                 else:
                     await send_downloaded_file(bot, callback.message.chat.id, downloaded_path, title, info_dict, is_audio, False, progress_msg, me.username)
 
@@ -1963,15 +1996,15 @@ async def process_youtube_download(callback: types.CallbackQuery, state: FSMCont
             logger.error(f"Ошибка загрузки: {str(e)}")
             error_msg = str(e).lower()
             if "ffmpeg is not installed" in error_msg:
-                await progress_msg.edit_text("❌ FFmpeg не установлен. Невозможно обработать аудио или видео")
+                await progress_msg.edit_text("❌ FFmpeg не установлен. Попробуйте выбрать другое качество.")
             elif "http error 429" in error_msg:
-                await progress_msg.edit_text("❌ Слишком много запросов. Попробуйте позже")
+                await progress_msg.edit_text("❌ Слишком много запросов. Попробуйте позже.")
             elif "http error 403" in error_msg:
-                await progress_msg.edit_text("❌ Видео ограничено")
+                await progress_msg.edit_text("❌ Видео ограничено.")
             elif "age verification" in error_msg:
-                await progress_msg.edit_text("❌ Видео имеет возрастные ограничения")
+                await progress_msg.edit_text("❌ Видео имеет возрастные ограничения.")
             elif "private video" in error_msg:
-                await progress_msg.edit_text("❌ Видео приватное или удалено")
+                await progress_msg.edit_text("❌ Видео приватное или удалено.")
             else:
                 await progress_msg.edit_text(f"❌ Ошибка загрузки: {str(e)[:100]}...")
 
@@ -2217,6 +2250,7 @@ async def download_and_send_video(message: types.Message, url: str, ydl_opts: di
     progress_msg = await message.answer(f"⏳ Загружаю видео из {platform}...")
     temp_file = None
     compressed_file = None
+    ffmpeg_available = await check_ffmpeg()
 
     try:
         temp_dir = "/tmp/youtube_downloads"
@@ -2275,23 +2309,26 @@ async def download_and_send_video(message: types.Message, url: str, ydl_opts: di
                 await state.set_state(Download.download)
                 await progress_msg.delete()
             else:
-                await progress_msg.edit_text(f"📦 Файл слишком большой ({file_size / (1024 * 1024):.1f} МБ), сжимаю...")
-                compressed_path = os.path.join(temp_dir, f"compressed_{os.path.basename(video_path)}")
-                compressed_file = compressed_path
+                if ffmpeg_available:
+                    await progress_msg.edit_text(f"📦 Файл слишком большой ({file_size / (1024 * 1024):.1f} МБ), сжимаю...")
+                    compressed_path = os.path.join(temp_dir, f"compressed_{os.path.basename(video_path)}")
+                    compressed_file = compressed_path
 
-                compressed_path = await compress_large_video(video_path, compressed_path)
-                if compressed_path and os.path.getsize(compressed_path) <= MAX_SIZE:
-                    await progress_msg.edit_text("📤 Отправляю сжатое видео...")
-                    await bot.send_video(
-                        chat_id=message.chat.id,
-                        video=FSInputFile(compressed_path),
-                        caption=f"📹 {title}{duration_str} (Сжатое)\nСкачано через @{me.username}",
-                        supports_streaming=True
-                    )
-                    await state.set_state(Download.download)
-                    await progress_msg.delete()
+                    compressed_path = await compress_large_video(video_path, compressed_path)
+                    if compressed_path and os.path.getsize(compressed_path) <= MAX_SIZE:
+                        await progress_msg.edit_text("📤 Отправляю сжатое видео...")
+                        await bot.send_video(
+                            chat_id=message.chat.id,
+                            video=FSInputFile(compressed_path),
+                            caption=f"📹 {title}{duration_str} (Сжатое)\nСкачано через @{me.username}",
+                            supports_streaming=True
+                        )
+                        await state.set_state(Download.download)
+                        await progress_msg.delete()
+                    else:
+                        await progress_msg.edit_text("❌ Не удалось сжать видео до нужного размера")
                 else:
-                    await progress_msg.edit_text("❌ Не удалось сжать видео до нужного размера")
+                    await progress_msg.edit_text("❌ Файл слишком большой (>50 МБ). FFmpeg не установлен, выберите меньший формат.")
 
     except Exception as e:
         logger.error(f"Ошибка загрузки из {platform}: {str(e)}")
@@ -2320,8 +2357,3 @@ async def download_and_send_video(message: types.Message, url: str, ydl_opts: di
                 logger.info(f"Удален сжатый файл: {compressed_file}")
             except Exception as e:
                 logger.error(f"Ошибка удаления файла: {e}")
-
-
-
-
-
