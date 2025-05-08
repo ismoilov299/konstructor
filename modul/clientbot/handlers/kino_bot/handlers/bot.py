@@ -44,7 +44,8 @@ from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_ac
     change_price, change_min_amount, get_actual_min_amount, status_declined, status_accepted, check_ban, \
     get_user_info_db, changebalance_db, addbalance_db, ban_unban_db
 from modul.clientbot.keyboards import reply_kb
-from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bot_by_token, get_users, users_count
+from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bot_by_token, get_users, users_count, \
+    executor
 from modul.loader import client_bot_router
 from modul.models import UserTG, AdminInfo, User, ClientBotUser
 from typing import Union, List
@@ -76,11 +77,9 @@ class Download(StatesGroup):
 
 # Callback data
 class FormatCallback(CallbackData, prefix="format"):
-    format_id: str
-    type: str
+    """Callback data for format selection"""
     quality: str
-    index: int
-executor = ThreadPoolExecutor(max_workers=4)
+    url: str
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
@@ -1798,85 +1797,6 @@ def get_best_formats(formats):
 
     return video_formats, audio_format
 
-
-# async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
-#     status_message = await message.answer("⏳ Получаю информацию о видео...")
-#
-#     try:
-#         base_opts = {
-#             'quiet': True,
-#             'no_warnings': True,
-#             'noplaylist': True,
-#             'encoding': 'utf-8',
-#             'extract_flat': False,
-#         }
-#
-#         with yt_dlp.YoutubeDL(base_opts) as ydl:
-#             info = await asyncio.get_event_loop().run_in_executor(
-#                 executor,
-#                 lambda: ydl.extract_info(url, download=False)
-#             )
-#
-#             formats = info.get('formats', [])
-#             title = info.get('title', 'Video').encode('utf-8', 'replace').decode('utf-8')
-#
-#             video_formats, audio_format = get_best_formats(formats)
-#             builder = InlineKeyboardBuilder()
-#             valid_formats = []
-#
-#             for fmt in video_formats:
-#                 if not fmt.get('format_id'):
-#                     continue
-#
-#                 height = fmt.get('height', 0)
-#                 quality_text = f"{height}p" if height else "Medium"
-#
-#                 filesize = fmt.get('filesize', 0)
-#                 filesize_text = f" ({filesize // (1024 * 1024)}MB)" if filesize > 0 else ""
-#
-#                 valid_formats.append(fmt)
-#                 builder.button(
-#                     text=f"🎥 {quality_text}{filesize_text}",
-#                     callback_data=FormatCallback(
-#                         format_id=fmt['format_id'],
-#                         type='video',
-#                         quality=str(height),
-#                         index=len(valid_formats) - 1
-#                     ).pack()
-#                 )
-#
-#             if audio_format and audio_format.get('format_id'):
-#                 valid_formats.append(audio_format)
-#                 audio_size = audio_format.get('filesize', 0)
-#                 audio_size_text = f" ({audio_size // (1024 * 1024)}MB)" if audio_size > 0 else ""
-#
-#                 builder.button(
-#                     text=f"🎵 Аудио{audio_size_text}",
-#                     callback_data=FormatCallback(
-#                         format_id=audio_format['format_id'],
-#                         type='audio',
-#                         quality='audio',
-#                         index=len(valid_formats) - 1
-#                     ).pack()
-#                 )
-#
-#             builder.adjust(2)
-#
-#             if valid_formats:
-#                 await state.update_data(url=url, formats=valid_formats, title=title)
-#                 await status_message.edit_text(
-#                     f"🎥 {title}\n\n"
-#                     f"Выберите формат:",
-#                     reply_markup=builder.as_markup()
-#                 )
-#             else:
-#                 await status_message.edit_text("❗ Не найдены подходящие форматы")
-#
-#     except Exception as e:
-#         logger.error(f"YouTube handler error: {str(e)}")
-#         await status_message.edit_text("❗ Ошибка при получении форматов")
-
-
 async def download_video(url: str, format_id: str, state: FSMContext):
     try:
         # Create download directory with proper permissions
@@ -1986,7 +1906,64 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
     elif 'youtube.com' in url or 'youtu.be' in url:
         await handle_youtube(message, url, me, bot, state)
     else:
-        await message.answer("❗ Отправьте ссылку на видео с YouTube, Instagram или TikTok")
+        await message.answe
+
+
+COOKIES_FILE = "/tmp/youtube_cookies.txt"
+
+
+def create_youtube_cookies_file():
+    """Create a basic YouTube cookies file if one doesn't exist"""
+    if os.path.exists(COOKIES_FILE):
+        return
+
+    # These are just minimal cookies to help avoid bot detection
+    # They don't provide full authentication but help reduce detection
+    basic_cookies = [
+        {
+            "domain": ".youtube.com",
+            "expirationDate": time.time() + 3600 * 24 * 365,
+            "name": "CONSENT",
+            "value": "YES+cb",
+            "path": "/",
+            "httpOnly": False,
+            "secure": True
+        },
+        {
+            "domain": ".youtube.com",
+            "expirationDate": time.time() + 3600 * 24 * 365,
+            "name": "VISITOR_INFO1_LIVE",
+            "value": "y_GfyCBHGcU",
+            "path": "/",
+            "httpOnly": True,
+            "secure": True
+        },
+        {
+            "domain": ".youtube.com",
+            "expirationDate": time.time() + 3600 * 24 * 365,
+            "name": "PREF",
+            "value": "f4=4000000&tz=Europe%2FMoscow",
+            "path": "/",
+            "httpOnly": False,
+            "secure": True
+        }
+    ]
+
+    try:
+        with open(COOKIES_FILE, 'w') as f:
+            for cookie in basic_cookies:
+                domain = cookie["domain"]
+                flag = "TRUE" if cookie.get("httpOnly", False) else "FALSE"
+                path = cookie.get("path", "/")
+                secure = "TRUE" if cookie.get("secure", False) else "FALSE"
+                expiry = int(cookie.get("expirationDate", time.time() + 3600 * 24 * 365))
+                name = cookie["name"]
+                value = cookie["value"]
+                f.write(f"{domain}\tTRUE\t{path}\t{secure}\t{expiry}\t{name}\t{value}\n")
+        logger.info(f"Created basic YouTube cookies file at {COOKIES_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to create cookies file: {e}")
+
 
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
