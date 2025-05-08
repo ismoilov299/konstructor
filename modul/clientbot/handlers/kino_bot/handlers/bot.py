@@ -1968,11 +1968,13 @@ def create_youtube_cookies_file():
         logger.error(f"Failed to create cookies file: {e}")
 
 
-
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
     status_message = await message.answer("⏳ Получаю информацию о видео...")
 
     try:
+        # First, store the URL in the state
+        await state.update_data(youtube_url=url)
+
         base_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -2014,8 +2016,8 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                         format_id=fmt['format_id'],
                         type='video',
                         quality=str(quality_text),
-                        index=len(valid_formats) - 1,
-                        url=url  # Added the URL parameter
+                        index=len(valid_formats) - 1
+                        # URL is now stored in state, not in callback data
                     ).pack()
                 )
 
@@ -2031,15 +2033,16 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                         format_id=audio_format['format_id'],
                         type='audio',
                         quality='audio',
-                        index=len(valid_formats) - 1,
-                        url=url  # Added the URL parameter
+                        index=len(valid_formats) - 1
+                        # URL is now stored in state, not in callback data
                     ).pack()
                 )
 
             builder.adjust(2)
 
             if valid_formats:
-                await state.update_data(url=url, formats=valid_formats, title=title)
+                # Store all necessary data in state
+                await state.update_data(formats=valid_formats, title=title)
                 await status_message.edit_text(
                     f"🎥 {title}\n\n"
                     f"Выберите формат:",
