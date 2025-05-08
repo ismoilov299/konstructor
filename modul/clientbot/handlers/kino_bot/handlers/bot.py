@@ -71,15 +71,18 @@ class AddChannelSponsorForm(StatesGroup):
 class SendMessagesForm(StatesGroup):
     message = State()
 
-class Download(StatesGroup):
-    download = State()
+# class Download(StatesGroup):
+#     download = State()
 
 
 # Callback data
 class FormatCallback(CallbackData, prefix="format"):
     """Callback data for format selection"""
     quality: str
-    url: str
+    format_id: str  # Added to match what's being used
+    type: str  # Changed from optional to required
+    index: int  # Added to match what's being used
+    url: str = ""  # Added the required url field with a default empty string
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
@@ -2011,7 +2014,8 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                         format_id=fmt['format_id'],
                         type='video',
                         quality=str(quality_text),
-                        index=len(valid_formats) - 1
+                        index=len(valid_formats) - 1,
+                        url=url  # Added the URL parameter
                     ).pack()
                 )
 
@@ -2027,7 +2031,8 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                         format_id=audio_format['format_id'],
                         type='audio',
                         quality='audio',
-                        index=len(valid_formats) - 1
+                        index=len(valid_formats) - 1,
+                        url=url  # Added the URL parameter
                     ).pack()
                 )
 
