@@ -3,7 +3,7 @@ import subprocess
 import time
 import traceback
 from contextlib import suppress
-
+import shutil
 from aiogram import Bot, F, html
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart, CommandObject, Filter, BaseFilter, command
