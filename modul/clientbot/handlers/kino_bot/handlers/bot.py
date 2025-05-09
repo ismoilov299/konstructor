@@ -2402,224 +2402,437 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
     progress_msg = await message.answer("⏳ Загружаю медиа из Instagram...")
 
     try:
-        # Clean up URL - remove tracking parameters
+        # Очистка URL от параметров трекинга
         if '?' in url:
             url = url.split('?')[0]
 
-        # Check if URL is valid Instagram URL
-        if not any(domain in url for domain in ['instagram.com', 'instagr.am', 'instagram']):
-            await progress_msg.edit_text("❌ Это не похоже на ссылку Instagram")
+        logger.info(f"Обработка Instagram URL: {url}")
+
+        # Извлечение shortcode из URL
+        import re
+        match = re.search(r'/(p|reel|tv)/([^/]+)', url)
+        if not match:
+            await progress_msg.edit_text("❌ Неверная ссылка Instagram")
             return
 
-        logger.info(f"Processing Instagram URL: {url}")
+        post_type = match.group(1)  # 'p' or 'reel' or 'tv'
+        shortcode = match.group(2)
 
-        # Create temp directory for files if it doesn't exist
-        temp_dir = "/var/www/downloads"
-        os.makedirs(temp_dir, exist_ok=True)
+        logger.info(f"Instagram shortcode: {shortcode}, type: {post_type}")
 
-        # Generate unique ID for this request
-        import hashlib
-        import time
-        request_id = hashlib.md5(f"{url}_{time.time()}".encode()).hexdigest()[:10]
-
-        # Try multiple download approaches
-
-        # Approach 1: Direct instaloader method (using Python subprocess)
-        await progress_msg.edit_text("🔍 Загружаю через instaloader (метод 1/3)...")
-
+        # Попытка извлечь медиа напрямую через API
         try:
-            # Check if instaloader is installed
-            instaloader_present = False
-            try:
-                subprocess.run(["instaloader", "--version"], capture_output=True, text=True, check=True)
-                instaloader_present = True
-            except (subprocess.SubprocessError, FileNotFoundError):
-                logger.info("Instaloader not found, skipping method 1")
+            await progress_msg.edit_text("🔍 Извлечение медиа из Instagram...")
 
-            if instaloader_present:
-                # Extract shortcode from URL
-                import re
-                match = re.search(r'/(p|reel)/([^/]+)', url)
-                if not match:
-                    logger.warning(f"Could not extract shortcode from URL: {url}")
-                else:
-                    shortcode = match.group(2)
-                    output_dir = os.path.join(temp_dir, f"insta_{request_id}")
-                    os.makedirs(output_dir, exist_ok=True)
+            import aiohttp
+            import json
 
-                    # Try to download using instaloader
-                    cmd = [
-                        "instaloader",
-                        "--no-metadata-json",
-                        "--no-captions",
-                        "--no-video-thumbnails",
-                        "--login", "anonymous",
-                        f"--dirname-pattern={output_dir}",
-                        f"--filename-pattern={shortcode}",
-                        f"-- -{shortcode}"  # Format for downloading by shortcode
-                    ]
+            # Сохраним результаты здесь
+            media_urls = []
 
-                    try:
-                        process = await asyncio.create_subprocess_exec(
-                            *cmd,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
-                        stdout, stderr = await process.communicate()
+            # Метод 1: Прямой запрос к мобильному Instagram API
+            headers_mobile = {
+                "User-Agent": "Instagram 123.0.0.21.114 Android (28/9; 480dpi; 1080x2137; HUAWEI; MAR-LX1M; HWMAR; kirin710; en_US)",
+                "Accept": "*/*",
+                "Accept-Language": "en-US",
+                "Accept-Encoding": "gzip, deflate",
+                "X-IG-Capabilities": "3brTvw==",
+                "X-IG-Connection-Type": "WIFI",
+                "X-IG-App-ID": "567067343352427",
+                "Cookie": "ig_direct_region_hint=ATN; ds_user_id=12345678901; mid=YSHp-gALAAHUFS7LYeDT0gxtc8py"
+            }
 
-                        if process.returncode == 0:
-                            # Find downloaded files
-                            files = os.listdir(output_dir)
+            api_urls = [
+                f"https://i.instagram.com/api/v1/media/{shortcode}/info/",
+                f"https://www.instagram.com/p/{shortcode}/?__a=1&__d=dis",
+                f"https://www.instagram.com/api/v1/media/{shortcode}/info/",
+                f"https://i.instagram.com/api/v1/oembed/?url=https://www.instagram.com/p/{shortcode}/",
+                f"https://www.instagram.com/graphql/query/?query_hash=b3055c01b4b222b8a47dc12b090e4e64&variables={{\"shortcode\":\"{shortcode}\"}}"
+            ]
 
-                            if files:
-                                success = await send_instagram_files(message, output_dir, files, me, bot)
-                                if success:
-                                    await shortcuts.add_to_analitic_data(me.username, url)
-                                    await progress_msg.delete()
-                                    # Clean up
-                                    shutil.rmtree(output_dir, ignore_errors=True)
-                                    return
-                    except Exception as e:
-                        logger.error(f"Instaloader error: {e}")
-        except Exception as e:
-            logger.error(f"Approach 1 error: {e}")
+            for api_url in api_urls:
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(api_url, headers=headers_mobile, timeout=5) as response:
+                            if response.status == 200:
+                                json_data = await response.text()
 
-        # Approach 2: Gallery-dl method (external tool)
-        await progress_msg.edit_text("🔍 Загружаю через gallery-dl (метод 2/3)...")
+                                # Подробный лог для отладки
+                                with open(f"/tmp/instagram_response_{shortcode}.json", "w") as f:
+                                    f.write(json_data)
+                                logger.info(f"Успешный ответ от {api_url}")
 
-        try:
-            # Check if gallery-dl is installed
-            gallery_dl_present = False
-            try:
-                subprocess.run(["gallery-dl", "--version"], capture_output=True, text=True, check=True)
-                gallery_dl_present = True
-            except (subprocess.SubprocessError, FileNotFoundError):
-                logger.info("Gallery-dl not found, skipping method 2")
+                                # Пытаемся разобрать JSON
+                                try:
+                                    data = json.loads(json_data)
 
-            if gallery_dl_present:
-                output_dir = os.path.join(temp_dir, f"insta_{request_id}")
-                os.makedirs(output_dir, exist_ok=True)
+                                    # Проверяем разные структуры данных Instagram
+                                    # Формат API v1
+                                    if 'items' in data and isinstance(data['items'], list) and len(data['items']) > 0:
+                                        logger.info(f"Найдены элементы в формате API v1")
+                                        for item in data['items']:
+                                            # Карусель с несколькими медиа
+                                            if 'carousel_media' in item:
+                                                for carousel_item in item['carousel_media']:
+                                                    if carousel_item.get('media_type') == 1:  # Фото
+                                                        candidates = carousel_item.get('image_versions2', {}).get(
+                                                            'candidates', [])
+                                                        if candidates and len(candidates) > 0:
+                                                            media_urls.append(('photo', candidates[0].get('url')))
+                                                    elif carousel_item.get('media_type') == 2:  # Видео
+                                                        videos = carousel_item.get('video_versions', [])
+                                                        if videos and len(videos) > 0:
+                                                            media_urls.append(('video', videos[0].get('url')))
+                                            # Одиночное фото
+                                            elif 'image_versions2' in item:
+                                                candidates = item.get('image_versions2', {}).get('candidates', [])
+                                                if candidates and len(candidates) > 0:
+                                                    media_urls.append(('photo', candidates[0].get('url')))
+                                            # Одиночное видео
+                                            elif 'video_versions' in item:
+                                                videos = item.get('video_versions', [])
+                                                if videos and len(videos) > 0:
+                                                    media_urls.append(('video', videos[0].get('url')))
 
-                # Try to download using gallery-dl
-                cmd = [
-                    "gallery-dl",
-                    "--cookies", "none",
-                    "--dest", output_dir,
-                    url
-                ]
+                                    # Формат GraphQL API
+                                    elif 'data' in data and 'shortcode_media' in data.get('data', {}):
+                                        logger.info(f"Найдены данные в формате GraphQL")
+                                        media = data['data']['shortcode_media']
+
+                                        # Проверить тип медиа
+                                        if media.get('is_video'):
+                                            video_url = media.get('video_url')
+                                            if video_url:
+                                                media_urls.append(('video', video_url))
+                                        elif 'display_url' in media:
+                                            media_urls.append(('photo', media.get('display_url')))
+
+                                        # Проверить наличие карусели
+                                        if 'edge_sidecar_to_children' in media:
+                                            edges = media['edge_sidecar_to_children'].get('edges', [])
+                                            for edge in edges:
+                                                node = edge.get('node', {})
+                                                if node.get('is_video'):
+                                                    video_url = node.get('video_url')
+                                                    if video_url:
+                                                        media_urls.append(('video', video_url))
+                                                elif 'display_url' in node:
+                                                    media_urls.append(('photo', node.get('display_url')))
+
+                                    # Метод OEmbed
+                                    elif 'thumbnail_url' in data:
+                                        logger.info(f"Найдены данные в формате OEmbed")
+                                        media_urls.append(('photo', data.get('thumbnail_url')))
+
+                                except json.JSONDecodeError:
+                                    logger.warning(f"Не удалось разобрать JSON из {api_url}")
+
+                                    # Поиск URL через regex
+                                    try:
+                                        content = json_data
+                                        # Поиск ссылок на видео
+                                        video_urls = re.findall(r'"video_url":"([^"]+)"', content)
+                                        # Поиск ссылок на фото
+                                        photo_urls = re.findall(r'"display_url":"([^"]+)"', content) or \
+                                                     re.findall(r'"display_src":"([^"]+)"', content)
+
+                                        for url in video_urls:
+                                            clean_url = url.replace('\\u0026', '&').replace('\\/', '/')
+                                            media_urls.append(('video', clean_url))
+
+                                        for url in photo_urls:
+                                            clean_url = url.replace('\\u0026', '&').replace('\\/', '/')
+                                            media_urls.append(('photo', clean_url))
+
+                                        logger.info(
+                                            f"Найдено через regex: {len(video_urls)} видео, {len(photo_urls)} фото")
+                                    except Exception as regex_err:
+                                        logger.error(f"Ошибка при поиске через regex: {regex_err}")
+                except Exception as e:
+                    logger.error(f"Ошибка при запросе к {api_url}: {e}")
+
+            # Метод 2: Прямой scraping веб-страницы
+            if not media_urls:
+                logger.info("Попытка получить данные через scraping веб-страницы")
+                webpage_url = f"https://www.instagram.com/{post_type}/{shortcode}/"
+                headers_desktop = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Connection": "keep-alive",
+                    "Upgrade-Insecure-Requests": "1",
+                    "Pragma": "no-cache",
+                    "Cache-Control": "no-cache",
+                    "TE": "Trailers"
+                }
 
                 try:
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    stdout, stderr = await process.communicate()
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(webpage_url, headers=headers_desktop, timeout=10) as response:
+                            if response.status == 200:
+                                html_content = await response.text()
 
-                    # Check if files were downloaded
-                    files = os.listdir(output_dir)
+                                # Сохраняем HTML для отладки
+                                with open(f"/tmp/instagram_page_{shortcode}.html", "w") as f:
+                                    f.write(html_content)
 
-                    if files:
-                        success = await send_instagram_files(message, output_dir, files, me, bot)
-                        if success:
-                            await shortcuts.add_to_analitic_data(me.username, url)
-                            await progress_msg.delete()
-                            # Clean up
-                            shutil.rmtree(output_dir, ignore_errors=True)
-                            return
+                                # Поиск через различные паттерны
+                                video_urls = (
+                                        re.findall(r'"video_url":"([^"]+)"', html_content) or
+                                        re.findall(r'property="og:video" content="([^"]+)"', html_content) or
+                                        re.findall(r'<video[^>]+src="([^"]+)"', html_content)
+                                )
+
+                                image_urls = (
+                                        re.findall(r'"display_url":"([^"]+)"', html_content) or
+                                        re.findall(r'property="og:image" content="([^"]+)"', html_content) or
+                                        re.findall(r'<img[^>]+src="([^"]+)"[^>]*class="[^"]*FFVAD', html_content)
+                                )
+
+                                for url in video_urls:
+                                    clean_url = url.replace('\\u0026', '&').replace('\\/', '/')
+                                    if 'cdninstagram' in clean_url or 'fbcdn' in clean_url:
+                                        media_urls.append(('video', clean_url))
+
+                                for url in image_urls:
+                                    clean_url = url.replace('\\u0026', '&').replace('\\/', '/')
+                                    if 'cdninstagram' in clean_url or 'fbcdn' in clean_url:
+                                        media_urls.append(('photo', clean_url))
+
+                                logger.info(f"Найдено через scraping: {len(video_urls)} видео, {len(image_urls)} фото")
                 except Exception as e:
-                    logger.error(f"Gallery-dl error: {e}")
+                    logger.error(f"Ошибка при scraping веб-страницы: {e}")
+
+            # Метод 3: Использовать инстаграм сторонний API
+            if not media_urls:
+                logger.info("Попытка использовать сторонний API")
+                try:
+                    api_url = f"https://www.instagram.com/graphql/query/?query_id=17888483320059182&variables={{\"shortcode\":\"{shortcode}\",\"child_comment_count\":3,\"fetch_comment_count\":40,\"parent_comment_count\":24,\"has_threaded_comments\":true}}"
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 12_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 105.0.0.11.118 (iPhone11,8; iOS 12_3_1; en_US; en-US; scale=2.00; 828x1792; 165586599)",
+                        "Accept": "*/*",
+                        "Accept-Language": "en-US,en;q=0.5",
+                        "X-Requested-With": "XMLHttpRequest",
+                        "X-IG-App-ID": "936619743392459",
+                        "X-IG-WWW-Claim": "0",
+                        "Origin": "https://www.instagram.com",
+                        "Connection": "keep-alive",
+                        "Referer": f"https://www.instagram.com/p/{shortcode}/",
+                        "Cookie": "ig_cb=1;",
+                    }
+
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(api_url, headers=headers, timeout=10) as response:
+                            if response.status == 200:
+                                data = await response.json()
+
+                                if 'data' in data and 'shortcode_media' in data['data']:
+                                    media = data['data']['shortcode_media']
+
+                                    if media.get('is_video'):
+                                        video_url = media.get('video_url')
+                                        if video_url:
+                                            media_urls.append(('video', video_url))
+
+                                    if 'display_url' in media:
+                                        media_urls.append(('photo', media['display_url']))
+
+                                    if 'edge_sidecar_to_children' in media:
+                                        edges = media['edge_sidecar_to_children']['edges']
+                                        for edge in edges:
+                                            node = edge['node']
+                                            if node.get('is_video'):
+                                                video_url = node.get('video_url')
+                                                if video_url:
+                                                    media_urls.append(('video', video_url))
+                                            elif 'display_url' in node:
+                                                media_urls.append(('photo', node['display_url']))
+                except Exception as e:
+                    logger.error(f"Ошибка при использовании стороннего API: {e}")
+
+            # Если нашли медиа, отправляем их
+            if media_urls:
+                logger.info(f"Найдено {len(media_urls)} медиа для отправки")
+                await progress_msg.edit_text(f"📥 Найдено {len(media_urls)} медиа, отправляю...")
+
+                # Удаление дубликатов
+                unique_urls = []
+                for media_type, url in media_urls:
+                    if url not in [u for _, u in unique_urls]:
+                        unique_urls.append((media_type, url))
+
+                # Ограничение до 10 файлов (на всякий случай)
+                if len(unique_urls) > 10:
+                    unique_urls = unique_urls[:10]
+
+                # Отправка файлов
+                total_sent = 0
+                for i, (media_type, media_url) in enumerate(unique_urls):
+                    try:
+                        if media_type == 'video':
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=media_url,
+                                caption=f"📹 Instagram видео {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                            )
+                        else:
+                            await bot.send_photo(
+                                chat_id=message.chat.id,
+                                photo=media_url,
+                                caption=f"🖼 Instagram фото {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                            )
+                        total_sent += 1
+
+                        # Небольшая задержка между сообщениями
+                        await asyncio.sleep(0.5)
+                    except Exception as e:
+                        logger.error(f"Ошибка при отправке медиа {i + 1}: {e}")
+
+                if total_sent > 0:
+                    await shortcuts.add_to_analitic_data(me.username, url)
+                    await progress_msg.delete()
+                    return
+
         except Exception as e:
-            logger.error(f"Approach 2 error: {e}")
+            logger.error(f"Ошибка при использовании прямого API: {e}")
 
-        # Approach 3: youtube-dl / yt-dlp method (fallback)
-        await progress_msg.edit_text("🔍 Загружаю через yt-dlp (метод 3/3)...")
-
+        # Если не получилось, пробуем через yt-dlp напрямую
         try:
-            output_file = os.path.join(temp_dir, f"insta_{request_id}")
+            # Создаем файл с cookies
+            import tempfile
+            cookie_file = tempfile.mktemp(suffix='.txt')
+            with open(cookie_file, 'w') as f:
+                f.write("""# Netscape HTTP Cookie File
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrftoken\tc55b988dde6fa562e0bf9c25f0b84af2
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tmid\tYSHp-gALAAHUFS7LYeDT0gxtc8py
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tds_user_id\t12345678901
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tsessionid\t12345678901%3AG0Jl4XIJ48KBzj%3A29%3AAYcBbvSTYK4Fp_nAq6SmnUPYBW2BfdJvZQ9c-a3jUg
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrf\t1234567890abc
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\trur\t12345
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tigfl\t12345
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tdatr\tABCDEF12345
+""")
 
-            # Advanced yt-dlp options with cookies and headers
+            await progress_msg.edit_text("🔄 Использую альтернативный метод загрузки...")
+
+            # Настройки для yt-dlp
             ydl_opts = {
-                'format': 'best',
-                'outtmpl': f"{output_file}.%(ext)s",
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': False,
+                'format': 'best',
+                'outtmpl': f'/tmp/instagram_{shortcode}.%(ext)s',
+                'cookiefile': cookie_file,
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
+                    'User-Agent': 'Instagram 219.0.0.12.117 Android (30/11; 480dpi; 1080x2158; HUAWEI; MAR-LX1M; HWMAR; kirin710; en_US; 346138354)',
                     'Accept': '*/*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Referer': 'https://www.instagram.com/',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
                     'Origin': 'https://www.instagram.com',
-                    'x-ig-app-id': '936619743392459',
+                    'Connection': 'keep-alive',
+                    'Referer': 'https://www.instagram.com/',
+                    'X-IG-App-ID': '936619743392459',
+                    'X-IG-WWW-Claim': '0'
                 }
             }
 
-            # Create cookies file
-            cookies_file = os.path.join(temp_dir, f"cookies_{request_id}.txt")
-            with open(cookies_file, "w") as f:
-                f.write("""# Netscape HTTP Cookie File
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrftoken\tsomerandomcsrftoken
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tmid\tYf8XQgABAAHaJf3kDKq0ZiVw4YHl
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tds_user_id\t1234567890
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tsessionid\t1234567890%3A12345abcdef%3A1
-""")
-            ydl_opts['cookiefile'] = cookies_file
+            import yt_dlp
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    logger.info(f"Использую yt-dlp для загрузки {url}")
+                    info = await asyncio.get_event_loop().run_in_executor(
+                        executor,
+                        lambda: ydl.extract_info(url, download=True)
+                    )
 
-            with YoutubeDL(ydl_opts) as ydl:
-                await asyncio.get_event_loop().run_in_executor(
-                    executor,
-                    lambda: ydl.extract_info(url, download=True)
-                )
+                    # Проверяем наличие скачанного файла
+                    output_file = ydl.prepare_filename(info)
 
-                # Check for downloaded files
-                for ext in ['mp4', 'jpg', 'png', 'webp']:
-                    filepath = f"{output_file}.{ext}"
-                    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                    if os.path.exists(output_file):
+                        ext = os.path.splitext(output_file)[1].lower()
+
+                        if ext in ['.mp4', '.mov', '.webm']:
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=FSInputFile(output_file),
+                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                            )
+                        else:
+                            await bot.send_photo(
+                                chat_id=message.chat.id,
+                                photo=FSInputFile(output_file),
+                                caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                            )
+
+                        # Удаляем файлы
                         try:
-                            if ext in ['mp4']:
-                                await bot.send_video(
-                                    chat_id=message.chat.id,
-                                    video=FSInputFile(filepath),
-                                    caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                                )
-                            else:
-                                await bot.send_photo(
-                                    chat_id=message.chat.id,
-                                    photo=FSInputFile(filepath),
-                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                                )
+                            os.remove(output_file)
+                            os.remove(cookie_file)
+                        except:
+                            pass
 
-                            # Success
-                            await shortcuts.add_to_analitic_data(me.username, url)
-                            await progress_msg.delete()
+                        await progress_msg.delete()
+                        return
+            except Exception as e:
+                logger.error(f"Ошибка при использовании yt-dlp: {e}")
 
-                            # Clean up
-                            os.remove(filepath)
-                            os.remove(cookies_file)
-                            return
-                        except Exception as send_error:
-                            logger.error(f"Error sending file {filepath}: {send_error}")
-                        finally:
-                            # Clean up
-                            if os.path.exists(filepath):
-                                os.remove(filepath)
+            # Пробуем с другими параметрами
+            ydl_opts['format'] = 'bestvideo+bestaudio/best'
+            ydl_opts['http_headers'][
+                'User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36'
 
-            # Clean up cookies file
-            if os.path.exists(cookies_file):
-                os.remove(cookies_file)
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    logger.info(f"Использую yt-dlp с другими параметрами для загрузки {url}")
+                    info = await asyncio.get_event_loop().run_in_executor(
+                        executor,
+                        lambda: ydl.extract_info(url, download=True)
+                    )
+
+                    # Проверяем наличие скачанного файла
+                    output_file = ydl.prepare_filename(info)
+
+                    if os.path.exists(output_file):
+                        ext = os.path.splitext(output_file)[1].lower()
+
+                        if ext in ['.mp4', '.mov', '.webm']:
+                            await bot.send_video(
+                                chat_id=message.chat.id,
+                                video=FSInputFile(output_file),
+                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                            )
+                        else:
+                            await bot.send_photo(
+                                chat_id=message.chat.id,
+                                photo=FSInputFile(output_file),
+                                caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                            )
+
+                        # Удаляем файлы
+                        try:
+                            os.remove(output_file)
+                            os.remove(cookie_file)
+                        except:
+                            pass
+
+                        await progress_msg.delete()
+                        return
+            except Exception as e:
+                logger.error(f"Ошибка при использовании yt-dlp с другими параметрами: {e}")
+
         except Exception as e:
-            logger.error(f"Approach 3 error: {e}")
+            logger.error(f"Ошибка при использовании yt-dlp: {e}")
 
-        # If all approaches failed
+        # Если все методы не сработали
         await progress_msg.edit_text(
-            "❌ Не удалось загрузить медиа из Instagram. Instagram часто блокирует подобные загрузки. Попробуйте другой пост или позже.")
+            "❌ Не удалось загрузить медиа из Instagram. "
+            "Instagram регулярно меняет API и блокирует внешние загрузки. "
+            "Попробуйте другой пост или позже."
+        )
 
     except Exception as e:
-        logger.error(f"Instagram handler error: {e}")
+        logger.error(f"Общая ошибка при обработке Instagram: {e}")
         await progress_msg.edit_text("❌ Ошибка при скачивании из Instagram. Возможно, пост приватный или удалён.")
-
 
 async def send_instagram_files(message, directory, files, me, bot):
     """Helper function to send downloaded Instagram files"""
