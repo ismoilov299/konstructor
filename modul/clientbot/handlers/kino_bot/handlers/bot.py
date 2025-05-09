@@ -2670,29 +2670,64 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                 total_sent = 0
                 for i, (media_type, media_url) in enumerate(unique_urls):
                     try:
-                        if media_type == 'video':
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=media_url,
-                                caption=f"📹 Instagram видео {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
-                            )
+                        # Определение типа медиа по URL и типу
+                        is_video = media_type == 'video' or '.mp4' in media_url.lower() or post_type == 'reel'
+
+                        # Логирование для отладки
+                        logger.info(f"Медиа #{i + 1}: type={media_type}, url={media_url[:50]}..., is_video={is_video}")
+
+                        if is_video:
+                            try:
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=media_url,
+                                    caption=f"📹 Instagram видео {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                                )
+                                total_sent += 1
+                            except Exception as video_error:
+                                logger.error(f"Ошибка при отправке видео: {video_error}")
+                                # Если не удалось отправить как видео, пробуем как фото
+                                try:
+                                    await bot.send_photo(
+                                        chat_id=message.chat.id,
+                                        photo=media_url,
+                                        caption=f"🖼 Instagram фото {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                                    )
+                                    total_sent += 1
+                                except Exception as fallback_error:
+                                    logger.error(f"Не удалось отправить даже как фото: {fallback_error}")
                         else:
-                            await bot.send_photo(
-                                chat_id=message.chat.id,
-                                photo=media_url,
-                                caption=f"🖼 Instagram фото {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
-                            )
-                        total_sent += 1
+                            try:
+                                await bot.send_photo(
+                                    chat_id=message.chat.id,
+                                    photo=media_url,
+                                    caption=f"🖼 Instagram фото {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                                )
+                                total_sent += 1
+                            except Exception as photo_error:
+                                logger.error(f"Ошибка при отправке фото: {photo_error}")
+                                # Если не удалось отправить как фото, пробуем как видео
+                                try:
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=media_url,
+                                        caption=f"📹 Instagram видео {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                                    )
+                                    total_sent += 1
+                                except Exception as fallback_error:
+                                    logger.error(f"Не удалось отправить даже как видео: {fallback_error}")
 
                         # Небольшая задержка между сообщениями
                         await asyncio.sleep(0.5)
                     except Exception as e:
-                        logger.error(f"Ошибка при отправке медиа {i + 1}: {e}")
+                        logger.error(f"Общая ошибка при отправке медиа {i + 1}: {e}")
 
                 if total_sent > 0:
                     await shortcuts.add_to_analitic_data(me.username, url)
                     await progress_msg.delete()
                     return
+                else:
+                    logger.error("Не удалось отправить ни одного медиа файла")
 
         except Exception as e:
             logger.error(f"Ошибка при использовании прямого API: {e}")
@@ -2750,19 +2785,44 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
                     if os.path.exists(output_file):
                         ext = os.path.splitext(output_file)[1].lower()
+                        is_video = ext in ['.mp4', '.mov', '.webm'] or post_type == 'reel'
 
-                        if ext in ['.mp4', '.mov', '.webm']:
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=FSInputFile(output_file),
-                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                            )
+                        if is_video:
+                            try:
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=FSInputFile(output_file),
+                                    caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                )
+                            except Exception as video_error:
+                                logger.error(f"Ошибка при отправке через yt-dlp как видео: {video_error}")
+                                try:
+                                    await bot.send_photo(
+                                        chat_id=message.chat.id,
+                                        photo=FSInputFile(output_file),
+                                        caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                    )
+                                except Exception as fallback_error:
+                                    logger.error(f"Не удалось отправить через yt-dlp даже как фото: {fallback_error}")
+                                    raise fallback_error
                         else:
-                            await bot.send_photo(
-                                chat_id=message.chat.id,
-                                photo=FSInputFile(output_file),
-                                caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                            )
+                            try:
+                                await bot.send_photo(
+                                    chat_id=message.chat.id,
+                                    photo=FSInputFile(output_file),
+                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                )
+                            except Exception as photo_error:
+                                logger.error(f"Ошибка при отправке через yt-dlp как фото: {photo_error}")
+                                try:
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=FSInputFile(output_file),
+                                        caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                    )
+                                except Exception as fallback_error:
+                                    logger.error(f"Не удалось отправить через yt-dlp даже как видео: {fallback_error}")
+                                    raise fallback_error
 
                         # Удаляем файлы
                         try:
@@ -2794,19 +2854,46 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
                     if os.path.exists(output_file):
                         ext = os.path.splitext(output_file)[1].lower()
+                        is_video = ext in ['.mp4', '.mov', '.webm'] or post_type == 'reel'
 
-                        if ext in ['.mp4', '.mov', '.webm']:
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=FSInputFile(output_file),
-                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                            )
+                        if is_video:
+                            try:
+                                await bot.send_video(
+                                    chat_id=message.chat.id,
+                                    video=FSInputFile(output_file),
+                                    caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                )
+                            except Exception as video_error:
+                                logger.error(f"Ошибка при отправке через yt-dlp (2) как видео: {video_error}")
+                                try:
+                                    await bot.send_photo(
+                                        chat_id=message.chat.id,
+                                        photo=FSInputFile(output_file),
+                                        caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                    )
+                                except Exception as fallback_error:
+                                    logger.error(
+                                        f"Не удалось отправить через yt-dlp (2) даже как фото: {fallback_error}")
+                                    raise fallback_error
                         else:
-                            await bot.send_photo(
-                                chat_id=message.chat.id,
-                                photo=FSInputFile(output_file),
-                                caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                            )
+                            try:
+                                await bot.send_photo(
+                                    chat_id=message.chat.id,
+                                    photo=FSInputFile(output_file),
+                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                                )
+                            except Exception as photo_error:
+                                logger.error(f"Ошибка при отправке через yt-dlp (2) как фото: {photo_error}")
+                                try:
+                                    await bot.send_video(
+                                        chat_id=message.chat.id,
+                                        video=FSInputFile(output_file),
+                                        caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                                    )
+                                except Exception as fallback_error:
+                                    logger.error(
+                                        f"Не удалось отправить через yt-dlp (2) даже как видео: {fallback_error}")
+                                    raise fallback_error
 
                         # Удаляем файлы
                         try:
