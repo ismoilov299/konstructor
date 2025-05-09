@@ -2406,166 +2406,177 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
         if '?' in url:
             url = url.split('?')[0]
 
-        # Add 'www.' prefix if not present (sometimes helps with Instagram)
-        if 'instagram.com' in url and 'www.instagram.com' not in url:
-            url = url.replace('instagram.com', 'www.instagram.com')
+        # Check if URL is valid Instagram URL
+        if not any(domain in url for domain in ['instagram.com', 'instagr.am', 'instagram']):
+            await progress_msg.edit_text("❌ Это не похоже на ссылку Instagram")
+            return
 
         logger.info(f"Processing Instagram URL: {url}")
 
-        # First attempt - use improved headers
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': True,
-            'max_filesize': 45000000,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Referer': 'https://www.instagram.com/',
-                'Origin': 'https://www.instagram.com',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-                'Pragma': 'no-cache',
-                'Cache-Control': 'no-cache',
-                'x-ig-app-id': '936619743392459',  # Instagram web app ID
-            }
-        }
+        # Create temp directory for files if it doesn't exist
+        temp_dir = "/var/www/downloads"
+        os.makedirs(temp_dir, exist_ok=True)
 
-        # Attempt to extract information
-        await progress_msg.edit_text("🔍 Получаю информацию из Instagram...")
+        # Generate unique ID for this request
+        import hashlib
+        import time
+        request_id = hashlib.md5(f"{url}_{time.time()}".encode()).hexdigest()[:10]
 
-        # Direct download with cookies
+        # Try multiple download approaches
+
+        # Approach 1: Direct instaloader method (using Python subprocess)
+        await progress_msg.edit_text("🔍 Загружаю через instaloader (метод 1/3)...")
+
         try:
-            temp_cookies_file = "/tmp/instagram_cookies.txt"
+            # Check if instaloader is installed
+            instaloader_present = False
+            try:
+                subprocess.run(["instaloader", "--version"], capture_output=True, text=True, check=True)
+                instaloader_present = True
+            except (subprocess.SubprocessError, FileNotFoundError):
+                logger.info("Instaloader not found, skipping method 1")
 
-            # Basic cookies to help with retrieval
-            with open(temp_cookies_file, "w") as f:
-                f.write("""# Netscape HTTP Cookie File
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrftoken\tsomerandomcsrftoken
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tds_user_id\t1234567890
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tmid\tYf8XQgABAAHaJf3kDKq0ZiVw4YHl
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\trur\t\"LDC\\05454161479015\\0541715414127:01f7a44f25dfff7993ad98ae8e0fb321fc11eba9f4c069ebc500c53bddb66307e0509e7e\"
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tsession_id\t54161479015%3AGraFI8A4BbHn9e%3A26%3AAYc-9g8TS0XRlznxHm3Qm3uaUYA-dgM40KDM-MXY_A
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tshbid\t\"1936\\05454161479015\\0541715414127:01f716cf1cd6d4c14732735fac286a00a92a4e0ec99a6c8e5582fc8bf949099dabb6faf4\"
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tshbts\t\"1715414127\\05454161479015\\0541715414127:01f7b18258a9a7c7a74c8d1b9b35a44c59fb1bd4f0af29bcc3c8d8047d71a237e3dd3db8\"
-""")
-
-            # Update options with cookies
-            ydl_opts['cookiefile'] = temp_cookies_file
-
-            with YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.get_event_loop().run_in_executor(
-                    executor,
-                    lambda: ydl.extract_info(url, download=False)
-                )
-
-                # Handle carousel - multiple entries
-                sent_count = 0
-
-                if 'entries' in info:
-                    await progress_msg.edit_text("🔄 Загружаю карусель Instagram...")
-                    entries = info['entries']
-
-                    # Process each entry in carousel
-                    for i, entry in enumerate(entries):
-                        if 'url' in entry:
-                            await progress_msg.edit_text(f"⏳ Загрузка элемента {i + 1}/{len(entries)}...")
-
-                            try:
-                                # Determine if photo or video
-                                if entry.get('ext') in ['mp4', 'mov']:
-                                    await bot.send_video(
-                                        chat_id=message.chat.id,
-                                        video=entry['url'],
-                                        caption=f"📹 Instagram видео {i + 1}/{len(entries)}\nСкачано через @{me.username}"
-                                    )
-                                else:
-                                    await bot.send_photo(
-                                        chat_id=message.chat.id,
-                                        photo=entry['url'],
-                                        caption=f"🖼 Instagram фото {i + 1}/{len(entries)}\nСкачано через @{me.username}"
-                                    )
-                                sent_count += 1
-
-                                # Add small delay between posts
-                                await asyncio.sleep(0.5)
-
-                            except Exception as item_error:
-                                logger.error(f"Error sending carousel item {i + 1}: {item_error}")
-                                continue
-
-                    if sent_count > 0:
-                        await shortcuts.add_to_analitic_data(me.username, url)
-                        await progress_msg.delete()
-                    else:
-                        raise Exception("Не удалось загрузить элементы карусели")
-
-                # Single post
+            if instaloader_present:
+                # Extract shortcode from URL
+                import re
+                match = re.search(r'/(p|reel)/([^/]+)', url)
+                if not match:
+                    logger.warning(f"Could not extract shortcode from URL: {url}")
                 else:
-                    await progress_msg.edit_text("🔄 Загружаю медиа из Instagram...")
+                    shortcode = match.group(2)
+                    output_dir = os.path.join(temp_dir, f"insta_{request_id}")
+                    os.makedirs(output_dir, exist_ok=True)
 
-                    if info.get('ext') in ['mp4', 'mov']:
-                        await bot.send_video(
-                            chat_id=message.chat.id,
-                            video=info['url'],
-                            caption=f"📹 Instagram видео\nСкачано через @{me.username}"
+                    # Try to download using instaloader
+                    cmd = [
+                        "instaloader",
+                        "--no-metadata-json",
+                        "--no-captions",
+                        "--no-video-thumbnails",
+                        "--login", "anonymous",
+                        f"--dirname-pattern={output_dir}",
+                        f"--filename-pattern={shortcode}",
+                        f"-- -{shortcode}"  # Format for downloading by shortcode
+                    ]
+
+                    try:
+                        process = await asyncio.create_subprocess_exec(
+                            *cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
                         )
-                    else:
-                        await bot.send_photo(
-                            chat_id=message.chat.id,
-                            photo=info['url'],
-                            caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                        )
+                        stdout, stderr = await process.communicate()
 
-                    await shortcuts.add_to_analitic_data(me.username, url)
-                    await progress_msg.delete()
+                        if process.returncode == 0:
+                            # Find downloaded files
+                            files = os.listdir(output_dir)
 
-                return  # Success, return early
-
+                            if files:
+                                success = await send_instagram_files(message, output_dir, files, me, bot)
+                                if success:
+                                    await shortcuts.add_to_analitic_data(me.username, url)
+                                    await progress_msg.delete()
+                                    # Clean up
+                                    shutil.rmtree(output_dir, ignore_errors=True)
+                                    return
+                    except Exception as e:
+                        logger.error(f"Instaloader error: {e}")
         except Exception as e:
-            logger.error(f"First attempt error: {e}")
-            # Continue to second method if first fails
+            logger.error(f"Approach 1 error: {e}")
 
-        # Second attempt - download to local file
-        await progress_msg.edit_text("🔄 Пробую альтернативный способ загрузки...")
+        # Approach 2: Gallery-dl method (external tool)
+        await progress_msg.edit_text("🔍 Загружаю через gallery-dl (метод 2/3)...")
 
         try:
-            # Alternative approach - download to temp file then send
-            download_dir = "/var/www/downloads"
-            os.makedirs(download_dir, exist_ok=True)
+            # Check if gallery-dl is installed
+            gallery_dl_present = False
+            try:
+                subprocess.run(["gallery-dl", "--version"], capture_output=True, text=True, check=True)
+                gallery_dl_present = True
+            except (subprocess.SubprocessError, FileNotFoundError):
+                logger.info("Gallery-dl not found, skipping method 2")
 
-            # Get a unique filename based on URL
-            import hashlib
-            url_hash = hashlib.md5(url.encode()).hexdigest()
-            base_filename = os.path.join(download_dir, f"instagram_{url_hash}")
+            if gallery_dl_present:
+                output_dir = os.path.join(temp_dir, f"insta_{request_id}")
+                os.makedirs(output_dir, exist_ok=True)
 
-            # Try with different format options
+                # Try to download using gallery-dl
+                cmd = [
+                    "gallery-dl",
+                    "--cookies", "none",
+                    "--dest", output_dir,
+                    url
+                ]
+
+                try:
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await process.communicate()
+
+                    # Check if files were downloaded
+                    files = os.listdir(output_dir)
+
+                    if files:
+                        success = await send_instagram_files(message, output_dir, files, me, bot)
+                        if success:
+                            await shortcuts.add_to_analitic_data(me.username, url)
+                            await progress_msg.delete()
+                            # Clean up
+                            shutil.rmtree(output_dir, ignore_errors=True)
+                            return
+                except Exception as e:
+                    logger.error(f"Gallery-dl error: {e}")
+        except Exception as e:
+            logger.error(f"Approach 2 error: {e}")
+
+        # Approach 3: youtube-dl / yt-dlp method (fallback)
+        await progress_msg.edit_text("🔍 Загружаю через yt-dlp (метод 3/3)...")
+
+        try:
+            output_file = os.path.join(temp_dir, f"insta_{request_id}")
+
+            # Advanced yt-dlp options with cookies and headers
             ydl_opts = {
-                'format': 'best',  # Try best format first
-                'outtmpl': f"{base_filename}.%(ext)s",
-                'cookiefile': temp_cookies_file,
+                'format': 'best',
+                'outtmpl': f"{output_file}.%(ext)s",
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': False,
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Referer': 'https://www.instagram.com/',
+                    'Origin': 'https://www.instagram.com',
+                    'x-ig-app-id': '936619743392459',
                 }
             }
 
-            with YoutubeDL(ydl_opts) as ydl:
-                await progress_msg.edit_text("📥 Скачиваю медиа из Instagram...")
+            # Create cookies file
+            cookies_file = os.path.join(temp_dir, f"cookies_{request_id}.txt")
+            with open(cookies_file, "w") as f:
+                f.write("""# Netscape HTTP Cookie File
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrftoken\tsomerandomcsrftoken
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tmid\tYf8XQgABAAHaJf3kDKq0ZiVw4YHl
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tds_user_id\t1234567890
+.instagram.com\tTRUE\t/\tFALSE\t1999999999\tsessionid\t1234567890%3A12345abcdef%3A1
+""")
+            ydl_opts['cookiefile'] = cookies_file
 
+            with YoutubeDL(ydl_opts) as ydl:
                 await asyncio.get_event_loop().run_in_executor(
                     executor,
                     lambda: ydl.extract_info(url, download=True)
                 )
 
-                # Find downloaded file
+                # Check for downloaded files
                 for ext in ['mp4', 'jpg', 'png', 'webp']:
-                    filepath = f"{base_filename}.{ext}"
-                    if os.path.exists(filepath):
+                    filepath = f"{output_file}.{ext}"
+                    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
                         try:
                             if ext in ['mp4']:
                                 await bot.send_video(
@@ -2582,82 +2593,85 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
                             # Success
                             await shortcuts.add_to_analitic_data(me.username, url)
-                            os.remove(filepath)  # Clean up
                             await progress_msg.delete()
+
+                            # Clean up
+                            os.remove(filepath)
+                            os.remove(cookies_file)
                             return
                         except Exception as send_error:
                             logger.error(f"Error sending file {filepath}: {send_error}")
                         finally:
-                            # Clean up file even if sending fails
+                            # Clean up
                             if os.path.exists(filepath):
                                 os.remove(filepath)
 
-            # If we get here, we didn't find any downloaded files
-            raise FileNotFoundError("Downloaded file not found")
+            # Clean up cookies file
+            if os.path.exists(cookies_file):
+                os.remove(cookies_file)
+        except Exception as e:
+            logger.error(f"Approach 3 error: {e}")
 
-        except Exception as download_error:
-            logger.error(f"Second attempt error: {download_error}")
-            # Continue to third method
-
-        # Third attempt - try using API directly
-        await progress_msg.edit_text("🔄 Пробую использовать Instagram API напрямую...")
-
-        try:
-            # Extract post ID from URL
-            import re
-            match = re.search(r'/p/([^/]+)', url)
-            if not match:
-                match = re.search(r'/reel/([^/]+)', url)
-
-            if not match:
-                raise ValueError(f"Could not extract post ID from URL: {url}")
-
-            post_id = match.group(1)
-
-            # Try Instagram GraphQL API
-            api_url = f"https://www.instagram.com/graphql/query/?query_hash=2c4c2e343a8f64c625ba02b2aa12c7f8&variables={{\"shortcode\":\"{post_id}\"}}"
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, headers=ydl_opts['http_headers']) as response:
-                    if response.status == 200:
-                        data = await response.json()
-
-                        # Try to extract media URL
-                        try:
-                            media = data['data']['shortcode_media']
-
-                            if media['is_video']:
-                                video_url = media['video_url']
-                                await bot.send_video(
-                                    chat_id=message.chat.id,
-                                    video=video_url,
-                                    caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                                )
-                            else:
-                                image_url = media['display_url']
-                                await bot.send_photo(
-                                    chat_id=message.chat.id,
-                                    photo=image_url,
-                                    caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
-                                )
-
-                            await shortcuts.add_to_analitic_data(me.username, url)
-                            await progress_msg.delete()
-                            return
-                        except (KeyError, TypeError) as e:
-                            logger.error(f"API format error: {e}")
-                            # Continue to fallback
-
-        except Exception as api_error:
-            logger.error(f"API attempt error: {api_error}")
-            # Final error message
-
-        # If all methods failed
-        await progress_msg.edit_text("❌ Не удалось загрузить медиа из Instagram. Попробуйте позже или другой пост.")
+        # If all approaches failed
+        await progress_msg.edit_text(
+            "❌ Не удалось загрузить медиа из Instagram. Instagram часто блокирует подобные загрузки. Попробуйте другой пост или позже.")
 
     except Exception as e:
         logger.error(f"Instagram handler error: {e}")
-        await progress_msg.edit_text("❌ Ошибка при скачивании из Instagram. Пост может быть приватным или удалённым.")
+        await progress_msg.edit_text("❌ Ошибка при скачивании из Instagram. Возможно, пост приватный или удалён.")
+
+
+async def send_instagram_files(message, directory, files, me, bot):
+    """Helper function to send downloaded Instagram files"""
+    sent_count = 0
+    media_files = []
+
+    # First sort files to ensure correct order
+    for f in sorted(files):
+        filepath = os.path.join(directory, f)
+        if not os.path.isfile(filepath):
+            continue
+
+        # Skip small files and metadata files
+        filesize = os.path.getsize(filepath)
+        if filesize < 1000 or '.json' in f or '.txt' in f:
+            continue
+
+        # Check file type
+        ext = os.path.splitext(f)[1].lower()
+        if ext in ['.jpg', '.jpeg', '.png', '.webp']:
+            media_type = 'photo'
+        elif ext in ['.mp4', '.mov', '.webm']:
+            media_type = 'video'
+        else:
+            continue
+
+        media_files.append((filepath, media_type))
+
+    # Then send files
+    total_files = len(media_files)
+    for i, (filepath, media_type) in enumerate(media_files):
+        try:
+            if media_type == 'video':
+                await bot.send_video(
+                    chat_id=message.chat.id,
+                    video=FSInputFile(filepath),
+                    caption=f"📹 Instagram видео {i + 1}/{total_files}\nСкачано через @{me.username}"
+                )
+            else:
+                await bot.send_photo(
+                    chat_id=message.chat.id,
+                    photo=FSInputFile(filepath),
+                    caption=f"🖼 Instagram фото {i + 1}/{total_files}\nСкачано через @{me.username}"
+                )
+            sent_count += 1
+
+            # Add small delay between posts
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            logger.error(f"Error sending file {filepath}: {e}")
+
+    return sent_count > 0
 
 
 # @client_bot_router.message()
