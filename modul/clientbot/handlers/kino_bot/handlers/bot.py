@@ -1,4 +1,5 @@
 import asyncio
+import glob
 import subprocess
 import time
 import traceback
@@ -2400,6 +2401,7 @@ class InstagramDownloader:
 
 async def handle_instagram(message: Message, url: str, me, bot: Bot):
     progress_msg = await message.answer("⏳ Загружаю медиа из Instagram...")
+    message_deleted = False
 
     try:
         # Clean up URL - remove tracking parameters
@@ -2408,7 +2410,11 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
         # Check if URL is valid Instagram URL
         if not any(domain in url for domain in ['instagram.com', 'instagr.am', 'instagram']):
-            await progress_msg.edit_text("❌ Это не похоже на ссылку Instagram")
+            try:
+                await progress_msg.edit_text("❌ Это не похоже на ссылку Instagram")
+            except Exception as e:
+                logger.error(f"Error editing message: {e}")
+                await message.answer("❌ Это не похоже на ссылку Instagram")
             return
 
         logger.info(f"Processing Instagram URL: {url}")
@@ -2523,11 +2529,20 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
             return sent_count > 0
 
-        # Try multiple download approaches
+        # Безопасное редактирование сообщения
+        async def safe_edit_message(msg, text):
+            nonlocal message_deleted
+            if not message_deleted:
+                try:
+                    await msg.edit_text(text)
+                except Exception as e:
+                    logger.error(f"Error editing message: {e}")
+                    message_deleted = True
+                    await message.answer(text)
 
         # First, try direct API method if this is a reel (fastest method)
         if is_reel:
-            await progress_msg.edit_text("🔍 Использую прямой API метод для reel...")
+            await safe_edit_message(progress_msg, "🔍 Использую прямой API метод для reel...")
 
             try:
                 import re
@@ -2569,7 +2584,11 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                                 caption=f"📹 Instagram видео\nСкачано через @{me.username}"
                                             )
                                             await shortcuts.add_to_analitic_data(me.username, url)
-                                            await progress_msg.delete()
+                                            try:
+                                                await progress_msg.delete()
+                                                message_deleted = True
+                                            except:
+                                                pass
                                             return
                                         except Exception as video_err:
                                             logger.error(f"Error sending video: {video_err}")
@@ -2586,7 +2605,11 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                                 caption=f"🎞 Instagram превью видео\nСкачано через @{me.username}"
                                             )
                                             await shortcuts.add_to_analitic_data(me.username, url)
-                                            await progress_msg.delete()
+                                            try:
+                                                await progress_msg.delete()
+                                                message_deleted = True
+                                            except:
+                                                pass
                                             return
                                         except Exception as photo_err:
                                             logger.error(f"Error sending image: {photo_err}")
@@ -2594,7 +2617,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                 logger.error(f"Direct API method error: {e}")
 
         # Approach 1: Direct instaloader method (using Python subprocess)
-        await progress_msg.edit_text("🔍 Загружаю через instaloader (метод 1/3)...")
+        await safe_edit_message(progress_msg, "🔍 Загружаю через instaloader (метод 1/3)...")
 
         try:
             # Check if instaloader is installed
@@ -2644,7 +2667,11 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                 success = await send_instagram_files(message, output_dir, files, me, bot)
                                 if success:
                                     await shortcuts.add_to_analitic_data(me.username, url)
-                                    await progress_msg.delete()
+                                    try:
+                                        await progress_msg.delete()
+                                        message_deleted = True
+                                    except:
+                                        pass
                                     # Clean up
                                     shutil.rmtree(output_dir, ignore_errors=True)
                                     return
@@ -2654,7 +2681,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
             logger.error(f"Approach 1 error: {e}")
 
         # Approach 2: Gallery-dl method (external tool)
-        await progress_msg.edit_text("🔍 Загружаю через gallery-dl (метод 2/3)...")
+        await safe_edit_message(progress_msg, "🔍 Загружаю через gallery-dl (метод 2/3)...")
 
         try:
             # Check if gallery-dl is installed
@@ -2692,7 +2719,11 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                         success = await send_instagram_files(message, output_dir, files, me, bot)
                         if success:
                             await shortcuts.add_to_analitic_data(me.username, url)
-                            await progress_msg.delete()
+                            try:
+                                await progress_msg.delete()
+                                message_deleted = True
+                            except:
+                                pass
                             # Clean up
                             shutil.rmtree(output_dir, ignore_errors=True)
                             return
@@ -2702,7 +2733,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
             logger.error(f"Approach 2 error: {e}")
 
         # Approach 3: youtube-dl / yt-dlp method (fallback)
-        await progress_msg.edit_text("🔍 Загружаю через yt-dlp (метод 3/3)...")
+        await safe_edit_message(progress_msg, "🔍 Загружаю через yt-dlp (метод 3/3)...")
 
         try:
             output_file = os.path.join(temp_dir, f"insta_{request_id}")
@@ -2749,11 +2780,14 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 """)
                 ydl_opts['cookiefile'] = cookies_file
 
-                with YoutubeDL(ydl_opts) as ydl:
-                    await asyncio.get_event_loop().run_in_executor(
-                        executor,
-                        lambda: ydl.extract_info(url, download=True)
-                    )
+                try:
+                    with YoutubeDL(ydl_opts) as ydl:
+                        await asyncio.get_event_loop().run_in_executor(
+                            executor,
+                            lambda: ydl.extract_info(url, download=True)
+                        )
+                except Exception as e:
+                    logger.error(f"Failed with cookies too: {e}")
 
             # Check for downloaded files - first check for videos
             media_found = False
@@ -2771,7 +2805,11 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                         )
                         media_found = True
                         await shortcuts.add_to_analitic_data(me.username, url)
-                        await progress_msg.delete()
+                        try:
+                            await progress_msg.delete()
+                            message_deleted = True
+                        except:
+                            pass
                         break
                     except Exception as send_error:
                         logger.error(f"Error sending video: {send_error}")
@@ -2784,17 +2822,23 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                             )
                             media_found = True
                             await shortcuts.add_to_analitic_data(me.username, url)
-                            await progress_msg.delete()
+                            try:
+                                await progress_msg.delete()
+                                message_deleted = True
+                            except:
+                                pass
                             break
                         except Exception as doc_error:
                             logger.error(f"Error sending as document: {doc_error}")
                     finally:
-                        if os.path.exists(filepath):
-                            os.remove(filepath)
+                        try:
+                            if os.path.exists(filepath):
+                                os.remove(filepath)
+                        except:
+                            pass
 
             # If no video found, check for images
             if not media_found:
-                import glob
                 image_files = []
                 for ext in ['jpg', 'jpeg', 'png', 'webp']:
                     # Check direct filename matches
@@ -2824,7 +2868,11 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                         )
                         media_found = True
                         await shortcuts.add_to_analitic_data(me.username, url)
-                        await progress_msg.delete()
+                        try:
+                            await progress_msg.delete()
+                            message_deleted = True
+                        except:
+                            pass
                         break
                     except Exception as send_error:
                         logger.error(f"Error sending image: {send_error}")
@@ -2837,23 +2885,36 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                             )
                             media_found = True
                             await shortcuts.add_to_analitic_data(me.username, url)
-                            await progress_msg.delete()
+                            try:
+                                await progress_msg.delete()
+                                message_deleted = True
+                            except:
+                                pass
                             break
                         except Exception as doc_error:
                             logger.error(f"Error sending as document: {doc_error}")
                     finally:
-                        if os.path.exists(filepath):
-                            os.remove(filepath)
+                        try:
+                            if os.path.exists(filepath):
+                                os.remove(filepath)
+                        except:
+                            pass
 
             # Clean up all related files
             for f in glob.glob(f"{output_file}*"):
-                if os.path.exists(f):
-                    os.remove(f)
+                try:
+                    if os.path.exists(f):
+                        os.remove(f)
+                except:
+                    pass
 
             # Clean up cookies file if it exists
             cookies_file = os.path.join(temp_dir, f"cookies_{request_id}.txt")
-            if os.path.exists(cookies_file):
-                os.remove(cookies_file)
+            try:
+                if os.path.exists(cookies_file):
+                    os.remove(cookies_file)
+            except:
+                pass
 
             if media_found:
                 return
@@ -2863,7 +2924,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
 
         # If all approaches failed, try one final direct API request for thumbnails
         try:
-            await progress_msg.edit_text("🔍 Использую запасной метод...")
+            await safe_edit_message(progress_msg, "🔍 Использую запасной метод...")
 
             import re
             import aiohttp
@@ -2885,35 +2946,55 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                 async with aiohttp.ClientSession() as session:
                     async with session.get(oembed_url, headers=headers, timeout=10) as response:
                         if response.status == 200:
-                            data = await response.json()
+                            try:
+                                data = await response.json()
 
-                            if 'thumbnail_url' in data:
-                                thumbnail_url = data['thumbnail_url']
-                                logger.info(f"Found thumbnail URL via OEmbed: {thumbnail_url}")
+                                if 'thumbnail_url' in data:
+                                    thumbnail_url = data['thumbnail_url']
+                                    logger.info(f"Found thumbnail URL via OEmbed: {thumbnail_url}")
 
-                                caption = "🎞 Instagram превью видео" if is_reel else "🖼 Instagram фото"
+                                    caption = "🎞 Instagram превью видео" if is_reel else "🖼 Instagram фото"
 
-                                try:
-                                    await bot.send_photo(
-                                        chat_id=message.chat.id,
-                                        photo=thumbnail_url,
-                                        caption=f"{caption}\nСкачано через @{me.username}"
-                                    )
-                                    await shortcuts.add_to_analitic_data(me.username, url)
-                                    await progress_msg.delete()
-                                    return
-                                except Exception as photo_err:
-                                    logger.error(f"Error sending image: {photo_err}")
+                                    try:
+                                        await bot.send_photo(
+                                            chat_id=message.chat.id,
+                                            photo=thumbnail_url,
+                                            caption=f"{caption}\nСкачано через @{me.username}"
+                                        )
+                                        await shortcuts.add_to_analitic_data(me.username, url)
+                                        try:
+                                            await progress_msg.delete()
+                                            message_deleted = True
+                                        except:
+                                            pass
+                                        return
+                                    except Exception as photo_err:
+                                        logger.error(f"Error sending image: {photo_err}")
+                            except Exception as json_error:
+                                logger.error(f"JSON parsing error: {json_error}")
         except Exception as e:
             logger.error(f"Final fallback method error: {e}")
 
-        # If all approaches failed
-        await progress_msg.edit_text(
+        # If all approaches failed, send error message
+        if not message_deleted:
+            try:
+                await progress_msg.delete()
+                message_deleted = True
+            except:
+                pass
+
+        await message.answer(
             "❌ Не удалось загрузить медиа из Instagram. Instagram часто блокирует подобные загрузки. Попробуйте другой пост или позже.")
 
     except Exception as e:
         logger.error(f"Instagram handler error: {e}")
-        await progress_msg.edit_text("❌ Ошибка при скачивании из Instagram. Возможно, пост приватный или удалён.")
+        if not message_deleted:
+            try:
+                await progress_msg.delete()
+            except:
+                pass
+
+        await message.answer("❌ Ошибка при скачивании из Instagram. Возможно, пост приватный или удалён.")
 
 
 async def send_instagram_files(message, directory, files, me, bot):
