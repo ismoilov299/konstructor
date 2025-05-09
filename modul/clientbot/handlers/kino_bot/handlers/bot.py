@@ -2670,14 +2670,33 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                 total_sent = 0
                 for i, (media_type, media_url) in enumerate(unique_urls):
                     try:
-                        # Определение типа медиа по URL и типу
-                        is_video = media_type == 'video' or '.mp4' in media_url.lower() or post_type == 'reel'
+                        # Лучшее определение типа медиа
+                        url_lower = media_url.lower()
+                        has_video_extension = any(ext in url_lower for ext in ['.mp4', '.mov', '.webm'])
 
-                        # Логирование для отладки
-                        logger.info(f"Медиа #{i + 1}: type={media_type}, url={media_url[:50]}..., is_video={is_video}")
+                        # Проверка на видео по URL и расширению
+                        # Instagram reels могут быть отданы как фото (thumbnail), но мы должны
+                        # знать, что это вероятно видео
+                        is_reel = post_type == 'reel'
 
-                        if is_video:
+                        # Проверка URL на признаки что это изображение
+                        is_cdn_photo = 'cdninstagram.com/v/t51' in url_lower
+
+                        # Итоговое определение типа медиа
+                        is_actually_video = (media_type == 'video' or has_video_extension) and not is_cdn_photo
+
+                        # Если это reel, но URL похож на фото, логируем это
+                        if is_reel and not is_actually_video:
+                            logger.info(f"Reel обнаружен, но URL похож на фото: {media_url[:50]}...")
+
+                        logger.info(f"Медиа #{i + 1}: type={media_type}, url={media_url[:50]}..., " +
+                                    f"is_actually_video={is_actually_video}, is_reel={is_reel}, " +
+                                    f"is_cdn_photo={is_cdn_photo}")
+
+                        # Отправка медиа в зависимости от определенного типа
+                        if is_actually_video:
                             try:
+                                logger.info(f"Отправка как видео: {media_url[:50]}...")
                                 await bot.send_video(
                                     chat_id=message.chat.id,
                                     video=media_url,
@@ -2685,9 +2704,10 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                 )
                                 total_sent += 1
                             except Exception as video_error:
-                                logger.error(f"Ошибка при отправке видео: {video_error}")
+                                logger.error(f"Ошибка при отправке как видео: {video_error}")
                                 # Если не удалось отправить как видео, пробуем как фото
                                 try:
+                                    logger.info(f"Запасной вариант: отправка как фото")
                                     await bot.send_photo(
                                         chat_id=message.chat.id,
                                         photo=media_url,
@@ -2695,19 +2715,28 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                     )
                                     total_sent += 1
                                 except Exception as fallback_error:
-                                    logger.error(f"Не удалось отправить даже как фото: {fallback_error}")
+                                    logger.error(f"Запасной вариант также не удался: {fallback_error}")
                         else:
+                            # Определяем подпись в зависимости от типа поста и результата распознавания
+                            caption = f"🖼 Instagram "
+                            if is_reel:
+                                caption += f"превью рила {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                            else:
+                                caption += f"фото {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+
                             try:
+                                logger.info(f"Отправка как фото: {media_url[:50]}...")
                                 await bot.send_photo(
                                     chat_id=message.chat.id,
                                     photo=media_url,
-                                    caption=f"🖼 Instagram фото {i + 1}/{len(unique_urls)}\nСкачано через @{me.username}"
+                                    caption=caption
                                 )
                                 total_sent += 1
                             except Exception as photo_error:
-                                logger.error(f"Ошибка при отправке фото: {photo_error}")
+                                logger.error(f"Ошибка при отправке как фото: {photo_error}")
                                 # Если не удалось отправить как фото, пробуем как видео
                                 try:
+                                    logger.info(f"Запасной вариант: отправка как видео")
                                     await bot.send_video(
                                         chat_id=message.chat.id,
                                         video=media_url,
@@ -2715,12 +2744,12 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                                     )
                                     total_sent += 1
                                 except Exception as fallback_error:
-                                    logger.error(f"Не удалось отправить даже как видео: {fallback_error}")
+                                    logger.error(f"Запасной вариант также не удался: {fallback_error}")
 
                         # Небольшая задержка между сообщениями
                         await asyncio.sleep(0.5)
                     except Exception as e:
-                        logger.error(f"Общая ошибка при отправке медиа {i + 1}: {e}")
+                        logger.error(f"Общая ошибка при обработке медиа {i + 1}: {e}")
 
                 if total_sent > 0:
                     await shortcuts.add_to_analitic_data(me.username, url)
@@ -2910,12 +2939,12 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
         except Exception as e:
             logger.error(f"Ошибка при использовании yt-dlp: {e}")
 
-        # Если все методы не сработали
-        await progress_msg.edit_text(
-            "❌ Не удалось загрузить медиа из Instagram. "
-            "Instagram регулярно меняет API и блокирует внешние загрузки. "
-            "Попробуйте другой пост или позже."
-        )
+            # Если все методы не сработали
+            await progress_msg.edit_text(
+                "❌ Не удалось загрузить медиа из Instagram. "
+                "Instagram регулярно меняет API и блокирует внешние загрузки. "
+                "Попробуйте другой пост или позже."
+            )
 
     except Exception as e:
         logger.error(f"Общая ошибка при обработке Instagram: {e}")
