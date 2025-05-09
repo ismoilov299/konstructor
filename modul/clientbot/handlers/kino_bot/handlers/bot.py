@@ -2397,7 +2397,7 @@ class InstagramDownloader:
                     continue
         return None
 
-
+import glob  # Добавьте этот импорт в начало файла
 async def handle_instagram(message: Message, url: str, me, bot: Bot):
     progress_msg = await message.answer("⏳ Загружаю медиа из Instagram...")
 
@@ -2533,6 +2533,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
             logger.error(f"Approach 2 error: {e}")
 
         # Approach 3: youtube-dl / yt-dlp method (fallback)
+        # Approach 3: youtube-dl / yt-dlp method (fallback)
         await progress_msg.edit_text("🔍 Загружаю через yt-dlp (метод 3/3)...")
 
         try:
@@ -2542,6 +2543,7 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
             ydl_opts = {
                 'format': 'best',
                 'outtmpl': f"{output_file}.%(ext)s",
+                'writethumbnail': True,  # Ensure thumbnails are saved
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
@@ -2560,25 +2562,31 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
             cookies_file = os.path.join(temp_dir, f"cookies_{request_id}.txt")
             with open(cookies_file, "w") as f:
                 f.write("""# Netscape HTTP Cookie File
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrftoken\tsomerandomcsrftoken
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tmid\tYf8XQgABAAHaJf3kDKq0ZiVw4YHl
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tds_user_id\t1234567890
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tsessionid\t1234567890%3A12345abcdef%3A1
-""")
+        .instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrftoken\tsomerandomcsrftoken
+        .instagram.com\tTRUE\t/\tFALSE\t1999999999\tmid\tYf8XQgABAAHaJf3kDKq0ZiVw4YHl
+        .instagram.com\tTRUE\t/\tFALSE\t1999999999\tds_user_id\t1234567890
+        .instagram.com\tTRUE\t/\tFALSE\t1999999999\tsessionid\t1234567890%3A12345abcdef%3A1
+        """)
             ydl_opts['cookiefile'] = cookies_file
 
+            # Выполняем команду yt-dlp
             with YoutubeDL(ydl_opts) as ydl:
-                await asyncio.get_event_loop().run_in_executor(
+                info_dict = await asyncio.get_event_loop().run_in_executor(
                     executor,
                     lambda: ydl.extract_info(url, download=True)
                 )
 
-                # Check for downloaded files
-                for ext in ['mp4', 'jpg', 'png', 'webp']:
+                # Логируем информацию о полученных данных
+                logger.info(f"YT-DLP extraction successful. Info: {info_dict.keys() if info_dict else 'None'}")
+
+                # Check for downloaded files - all possible extensions
+                # Instagram может сохранять в различных форматах
+                for ext in ['mp4', 'jpg', 'jpeg', 'png', 'webp', 'webm']:
                     filepath = f"{output_file}.{ext}"
                     if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                        logger.info(f"Found file {filepath} with size {os.path.getsize(filepath)}")
                         try:
-                            if ext in ['mp4']:
+                            if ext in ['mp4', 'webm']:
                                 await bot.send_video(
                                     chat_id=message.chat.id,
                                     video=FSInputFile(filepath),
@@ -2601,10 +2609,48 @@ async def handle_instagram(message: Message, url: str, me, bot: Bot):
                             return
                         except Exception as send_error:
                             logger.error(f"Error sending file {filepath}: {send_error}")
+                            # Попробуем отправить как документ если другие методы не работают
+                            try:
+                                await bot.send_document(
+                                    chat_id=message.chat.id,
+                                    document=FSInputFile(filepath),
+                                    caption=f"📄 Instagram медиа\nСкачано через @{me.username}"
+                                )
+                                # Success
+                                await shortcuts.add_to_analitic_data(me.username, url)
+                                await progress_msg.delete()
+                                return
+                            except Exception as doc_error:
+                                logger.error(f"Failed to send as document: {doc_error}")
                         finally:
                             # Clean up
                             if os.path.exists(filepath):
                                 os.remove(filepath)
+
+                # Special check for thumbnail files - yt-dlp sometimes downloads thumbnails separately
+                thumbnail_paths = glob.glob(f"{output_file}*.jpg") + glob.glob(f"{output_file}*.png") + glob.glob(
+                    f"{output_file}*.webp")
+                for thumb_path in thumbnail_paths:
+                    if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 1000:  # Минимальный размер файла
+                        try:
+                            logger.info(f"Sending thumbnail file: {thumb_path}")
+                            await bot.send_photo(
+                                chat_id=message.chat.id,
+                                photo=FSInputFile(thumb_path),
+                                caption=f"🖼 Instagram фото\nСкачано через @{me.username}"
+                            )
+                            # Success
+                            await shortcuts.add_to_analitic_data(me.username, url)
+                            await progress_msg.delete()
+                            return
+                        except Exception as thumb_error:
+                            logger.error(f"Error sending thumbnail {thumb_path}: {thumb_error}")
+                        finally:
+                            if os.path.exists(thumb_path):
+                                os.remove(thumb_path)
+
+                # If we get here, we couldn't find any suitable media files
+                logger.warning(f"No suitable media files found by yt-dlp for {url}")
 
             # Clean up cookies file
             if os.path.exists(cookies_file):
@@ -2644,14 +2690,20 @@ async def send_instagram_files(message, directory, files, me, bot):
         elif ext in ['.mp4', '.mov', '.webm']:
             media_type = 'video'
         else:
+            # Логируем необычные расширения для анализа
+            logger.info(f"Unusual file extension found: {ext} in file {f}")
             continue
 
         media_files.append((filepath, media_type))
 
     # Then send files
     total_files = len(media_files)
+    logger.info(f"Found {total_files} media files in directory {directory}")
+
     for i, (filepath, media_type) in enumerate(media_files):
         try:
+            logger.info(f"Sending file {i + 1}/{total_files}: {filepath} as {media_type}")
+
             if media_type == 'video':
                 await bot.send_video(
                     chat_id=message.chat.id,
@@ -2670,6 +2722,24 @@ async def send_instagram_files(message, directory, files, me, bot):
             await asyncio.sleep(0.5)
         except Exception as e:
             logger.error(f"Error sending file {filepath}: {e}")
+
+            # Try alternate method if primary fails
+            try:
+                if media_type == 'video':
+                    await bot.send_document(
+                        chat_id=message.chat.id,
+                        document=FSInputFile(filepath),
+                        caption=f"📹 Instagram видео {i + 1}/{total_files}\nСкачано через @{me.username}"
+                    )
+                else:
+                    await bot.send_document(
+                        chat_id=message.chat.id,
+                        document=FSInputFile(filepath),
+                        caption=f"🖼 Instagram фото {i + 1}/{total_files}\nСкачано через @{me.username}"
+                    )
+                sent_count += 1
+            except Exception as fallback_error:
+                logger.error(f"Fallback error for file {filepath}: {fallback_error}")
 
     return sent_count > 0
 
