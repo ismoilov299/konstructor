@@ -337,8 +337,20 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
                     **kwargs
                 )
             else:
+                print()
                 print("DEBUG: Photo file not found, sending error message")
                 await message.answer(f"Фото не найдено. {caption}", **kwargs)
+                print(f"DEBUG CRITICAL: Checking file path directly: {photo}")
+                print(f"DEBUG CRITICAL: File exists directly? {os.path.exists(photo)}")
+
+                # Проверка наличия директории
+                photo_dir = os.path.dirname(photo)
+                print(f"DEBUG CRITICAL: Directory path: {photo_dir}")
+                print(f"DEBUG CRITICAL: Directory exists? {os.path.exists(photo_dir)}")
+
+                # Проверка содержимого директории
+                if os.path.exists(photo_dir):
+                    print(f"DEBUG CRITICAL: Directory contents: {os.listdir(photo_dir)}")
 
     except Exception as e:
         print(f"DEBUG: Error in show_profile: {e}")
