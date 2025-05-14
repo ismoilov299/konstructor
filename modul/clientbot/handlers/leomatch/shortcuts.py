@@ -370,22 +370,54 @@ def _update_profile_sync(leo, kwargs: dict):
         if 'photo' in kwargs:
             old_file = leo.photo
             new_file = kwargs['photo']
-            if old_file and old_file != new_file and os.path.exists(old_file):
-                os.remove(old_file)
-            leo.photo = new_file
+
+            # Преобразуем пути к абсолютным для правильного сравнения
+            abs_base_dir = "/var/www/konstructor"
+            abs_old_file = os.path.join(abs_base_dir, old_file) if old_file and not os.path.isabs(
+                old_file) else old_file
+            abs_new_file = os.path.join(abs_base_dir, new_file) if not os.path.isabs(new_file) else new_file
+
+            print(f"Update profile sync - old file: {abs_old_file}, new file: {abs_new_file}")
+
+            # Удаляем старый файл только если он отличается от нового И существует
+            if old_file and abs_old_file != abs_new_file and os.path.exists(abs_old_file):
+                print(f"Removing old file: {abs_old_file}")
+                try:
+                    os.remove(abs_old_file)
+                    print(f"Old file removed successfully")
+                except Exception as e:
+                    print(f"Error removing old file: {e}")
+
+            # Проверяем существование нового файла перед обновлением БД
+            if os.path.exists(abs_new_file):
+                print(f"New file exists, size: {os.path.getsize(abs_new_file)} bytes")
+                leo.photo = new_file
+            else:
+                print(f"WARNING: New file does not exist: {abs_new_file}")
+                # Можно добавить дополнительную логику или вернуть False
 
         if 'media_type' in kwargs:
             leo.media_type = kwargs['media_type']
 
+        # Обновляем остальные поля
         for key, value in kwargs.items():
             if key not in ['photo', 'media_type']:
                 setattr(leo, key, value)
 
+        # Сохраняем изменения в БД
         leo.save()
         print(f"Profile updated successfully with: {kwargs}")
+
+        # Проверяем, существует ли файл после обновления
+        if 'photo' in kwargs:
+            abs_file = os.path.join(abs_base_dir, leo.photo) if not os.path.isabs(leo.photo) else leo.photo
+            print(f"After DB update, file exists: {os.path.exists(abs_file)}")
+
         return True
     except Exception as e:
         print(f"Error in _update_profile_sync: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         return False
 
 
@@ -397,12 +429,22 @@ async def update_profile(uid: int, kwargs: dict):
 
         if 'photo' in kwargs:
             new_photo = kwargs['photo']
-            if os.path.exists(new_photo):
-                if leo.photo and os.path.exists(leo.photo):
-                    os.remove(leo.photo)
+            # Преобразуем пути к абсолютным для корректного сравнения
+            abs_new_photo = os.path.join("/var/www/konstructor", new_photo) if not os.path.isabs(
+                new_photo) else new_photo
+            abs_old_photo = os.path.join("/var/www/konstructor", leo.photo) if leo.photo and not os.path.isabs(
+                leo.photo) else leo.photo
+
+            print(f"New photo: {abs_new_photo}, old photo: {abs_old_photo}")
+
+            if os.path.exists(abs_new_photo):
+                # Удаляем старый файл только если он отличается от нового
+                if leo.photo and abs_old_photo != abs_new_photo and os.path.exists(abs_old_photo):
+                    print(f"Removing old photo: {abs_old_photo}")
+                    os.remove(abs_old_photo)
                 leo.photo = new_photo
             else:
-                print(f"New photo file does not exist: {new_photo}")
+                print(f"New photo file does not exist: {abs_new_photo}")
                 return False
 
         success = await sync_to_async(_update_profile_sync)(leo, kwargs)
@@ -410,6 +452,11 @@ async def update_profile(uid: int, kwargs: dict):
         if success:
             updated_leo = await get_leo(uid)
             print(f"After update - photo: {updated_leo.photo}, media_type: {updated_leo.media_type}")
+
+            # Проверяем существование файла после обновления
+            abs_updated_photo = os.path.join("/var/www/konstructor", updated_leo.photo) if not os.path.isabs(
+                updated_leo.photo) else updated_leo.photo
+            print(f"After update, checking if file exists: {os.path.exists(abs_updated_photo)}")
 
         return success
     except Exception as e:
