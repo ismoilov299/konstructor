@@ -260,97 +260,62 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         if keyboard:
             kwargs['reply_markup'] = keyboard
 
-        print(f"DEBUG: Showing profile - media_type: {media_type}, photo path: {photo}")
-
-        # Отладка путей
-        print(f"DEBUG: Current working directory: {os.getcwd()}")
-        print(f"DEBUG: Is absolute path: {os.path.isabs(photo)}")
-
-        # Проверка существования файла с подробной информацией
-        file_exists = os.path.exists(photo)
-        print(f"DEBUG: File exists check (direct): {file_exists}")
-
-        # Если путь относительный, попробуем построить разные варианты пути
+        # Преобразуем относительный путь в абсолютный
+        abs_base_dir = "/var/www/konstructor"
         if not os.path.isabs(photo):
-            # Вариант 1: от текущей директории
-            abs_path1 = os.path.join(os.getcwd(), photo)
-            exists1 = os.path.exists(abs_path1)
-            print(f"DEBUG: Absolute path 1: {abs_path1}, exists: {exists1}")
+            abs_photo = os.path.join(abs_base_dir, photo)
+        else:
+            abs_photo = photo
 
-            # Вариант 2: от родительской директории текущего файла
-            current_file = os.path.abspath(__file__)
-            parent_dir = os.path.dirname(os.path.dirname(current_file))
-            abs_path2 = os.path.join(parent_dir, photo)
-            exists2 = os.path.exists(abs_path2)
-            print(f"DEBUG: Absolute path 2: {abs_path2}, exists: {exists2}")
+        print(f"DEBUG: Using absolute path for photo: {abs_photo}")
+        file_exists = os.path.exists(abs_photo)
 
-            # Вариант 3: от корня проекта (предполагая, что modul находится в корне)
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-            abs_path3 = os.path.join(project_root, photo)
-            exists3 = os.path.exists(abs_path3)
-            print(f"DEBUG: Absolute path 3: {abs_path3}, exists: {exists3}")
-
-            # Используем первый найденный рабочий путь
-            if exists1:
-                photo = abs_path1
+        # Если файл не найден по абсолютному пути, проверим альтернативные пути
+        if not file_exists:
+            # Извлекаем имя файла из пути
+            file_name = os.path.basename(photo)
+            # Ищем файл в фиксированной директории
+            alt_path = os.path.join("/var/www/konstructor/modul/clientbot/data", file_name)
+            if os.path.exists(alt_path):
+                abs_photo = alt_path
                 file_exists = True
-            elif exists2:
-                photo = abs_path2
-                file_exists = True
-            elif exists3:
-                photo = abs_path3
-                file_exists = True
-
-        print(f"DEBUG: Final photo path: {photo}")
-        print(f"DEBUG: Final file exists: {file_exists}")
+                print(f"DEBUG: Found file in alternative location: {alt_path}")
 
         if media_type == "VIDEO":
             if file_exists:
-                print("DEBUG: Sending video as local file")
+                print(f"DEBUG: Sending video: {abs_photo}")
                 await message.answer_video(
-                    video=FSInputFile(photo),
+                    video=FSInputFile(abs_photo),
                     caption=caption,
                     **kwargs
                 )
             else:
-                print("DEBUG: Video file not found, sending error message")
+                print(f"DEBUG: Video file not found: {abs_photo}")
                 await message.answer(f"Видео не найдено. {caption}", **kwargs)
 
         elif media_type == "VIDEO_NOTE":
             if file_exists:
-                print("DEBUG: Sending video note as local file")
+                print(f"DEBUG: Sending video note: {abs_photo}")
                 await message.answer_video_note(
-                    video_note=FSInputFile(photo),
+                    video_note=FSInputFile(abs_photo),
                     **kwargs
                 )
             else:
-                print("DEBUG: Video note file not found, sending error message")
+                print(f"DEBUG: Video note file not found: {abs_photo}")
                 await message.answer(f"Видеозаписка не найдена.", **kwargs)
             await message.answer(caption, **kwargs)
 
         else:  # PHOTO
             if file_exists:
-                print("DEBUG: Sending photo as local file")
+                print(f"DEBUG: Sending photo: {abs_photo}")
                 await message.answer_photo(
-                    photo=FSInputFile(photo),
+                    photo=FSInputFile(abs_photo),
                     caption=caption,
                     **kwargs
                 )
             else:
-                print()
-                print("DEBUG: Photo file not found, sending error message")
+                print(f"DEBUG: Photo file not found: {abs_photo}")
                 await message.answer(f"Фото не найдено. {caption}", **kwargs)
-                print(f"DEBUG CRITICAL: Checking file path directly: {photo}")
-                print(f"DEBUG CRITICAL: File exists directly? {os.path.exists(photo)}")
-
-                # Проверка наличия директории
-                photo_dir = os.path.dirname(photo)
-                print(f"DEBUG CRITICAL: Directory path: {photo_dir}")
-                print(f"DEBUG CRITICAL: Directory exists? {os.path.exists(photo_dir)}")
-
-                # Проверка содержимого директории
-                if os.path.exists(photo_dir):
-                    print(f"DEBUG CRITICAL: Directory contents: {os.listdir(photo_dir)}")
 
     except Exception as e:
         print(f"DEBUG: Error in show_profile: {e}")

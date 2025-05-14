@@ -1,4 +1,5 @@
 import os
+import traceback
 
 from aiogram import types, F
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
@@ -133,28 +134,58 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
             return
 
         if photo:
+            # Получаем информацию о файле
             file = await bot.get_file(photo.file_id)
-            file_path = f"modul/clientbot/data/leo{message.from_user.id}{file_extension}"
 
-            # Fayl yo'lini to'liq yaratish
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            # Используем абсолютные пути
+            abs_base_dir = "/var/www/konstructor/modul/clientbot/data"
+            abs_file_path = os.path.join(abs_base_dir, f"leo{message.from_user.id}{file_extension}")
 
-            await bot.download_file(file.file_path, file_path)
-            print(f"File saved to: {file_path}")
+            # Создаем директорию если нужно
+            if not os.path.exists(abs_base_dir):
+                os.makedirs(abs_base_dir, exist_ok=True)
+                print(f"Created directory: {abs_base_dir}")
 
-            success = await update_profile(message.from_user.id, {
-                "photo": file_path,
-                "media_type": media_type
-            })
+            # Загружаем файл
+            print(f"Downloading file to: {abs_file_path}")
+            try:
+                # Загружаем файл с Telegram
+                await bot.download_file(file.file_path, abs_file_path)
 
-            if success:
-                await message.answer("✅ Фото/видео успешно обновлено")
-                await start(message, state)
-            else:
-                await message.answer("❌ Произошла ошибка при обновлении")
+                # Проверяем, был ли файл сохранен
+                if os.path.exists(abs_file_path):
+                    print(f"File was successfully saved: {abs_file_path}")
+                    file_size = os.path.getsize(abs_file_path)
+                    print(f"File size: {file_size} bytes")
+
+                    # Сохраняем относительный путь в БД (для совместимости)
+                    rel_path = f"modul/clientbot/data/leo{message.from_user.id}{file_extension}"
+
+                    success = await update_profile(message.from_user.id, {
+                        "photo": rel_path,  # Сохраняем относительный путь
+                        "media_type": media_type
+                    })
+
+                    if success:
+                        await message.answer("✅ Фото/видео успешно обновлено")
+
+                        # Проверяем, действительно ли файл существует
+                        print(f"After update, checking if file exists: {os.path.exists(abs_file_path)}")
+
+                        await start(message, state)
+                    else:
+                        await message.answer("❌ Произошла ошибка при обновлении базы данных")
+                else:
+                    print(f"WARNING: File was not saved: {abs_file_path}")
+                    await message.answer("❌ Произошла ошибка при сохранении файла")
+            except Exception as download_error:
+                print(f"Error downloading file: {download_error}")
+                print(f"Error traceback: {traceback.format_exc()}")
+                await message.answer("❌ Ошибка при загрузке файла")
         else:
             await message.answer("❌ Не удалось получить файл")
 
     except Exception as e:
         print(f"Error in SET_PHOTO handler: {e}")
+        print(f"Error traceback: {traceback.format_exc()}")
         await message.answer("❌ Произошла ошибка при обновлении фото/видео")
