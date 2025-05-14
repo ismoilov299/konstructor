@@ -557,11 +557,12 @@ async def info(message: Message):
         refs_count = user_info[3]  # Количество рефералов пользователя
 
         admin_user = await get_admin_user(bot_token)
+        bot_user_info = await get_bot_user_info(message.from_user.id, message.bot.token)
 
         await message.bot.send_message(
             message.from_user.id,
             f"👥 Всего пользователей: {total_users_count}\n"
-            f"👨‍👨‍👦 Друзья: {refs_count}\n",
+            f"👨‍👨‍👦 Друзья: {bot_user_info[1]}\n",
             reply_markup=await admin_in(admin_user)
         )
 
