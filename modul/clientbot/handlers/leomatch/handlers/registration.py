@@ -86,6 +86,10 @@ async def download_file(url: str, file_path: str):
 
 @client_bot_router.message(F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 async def bot_start_lets_leo(message: types.Message, state: FSMContext):
+    user = message.from_user.full_name
+    print(message.from_user.username)
+    print(f"mening ismim {user}")
+    await message.answer('')
     await message.answer(
         (
             "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните"))

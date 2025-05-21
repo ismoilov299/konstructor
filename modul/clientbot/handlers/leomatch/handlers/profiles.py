@@ -127,7 +127,6 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                         )
                     except (TelegramBadRequest, TelegramForbiddenError) as e:
                         print(f"Could not send like notification to user {to_user.user.uid}: {e}")
-                        # Xatoni yutib yuboramiz, foydalanuvchi javobi uchun muhim emas
                 except Exception as e:
                     print(f"Error getting user or sending like notification to user {to_uid}: {e}")
 
