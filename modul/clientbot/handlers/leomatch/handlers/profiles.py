@@ -1,3 +1,4 @@
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
@@ -76,18 +77,36 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                     # Video yoki text ekanini tekshirish
                     if isinstance(msg, str):
                         if msg.startswith('bnVid_'):  # Video note format
-                            await message.bot.send_video_note(
-                                chat_id=to_user.user.uid,
-                                video_note=msg
-                            )
+                            try:
+                                await message.bot.send_video_note(
+                                    chat_id=to_user.user.uid,
+                                    video_note=msg
+                                )
+                            except (TelegramBadRequest, TelegramForbiddenError) as e:
+                                print(f"Could not send video note to user {to_user.user.uid}: {e}")
+                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(e).lower():
+                                    await message.answer("✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
+                                    # Shu joyda ushbu foydalanuvchini bazada ma'lum bir statusga o'zgartirish mumkin
+                                else:
+                                    await message.answer("❌ Не удалось отправить видео-сообщение")
+                                return
                         else:
                             # Debug uchun
                             print(f"Sending message to user {to_user.user.uid}: {msg}")
-                            result = await message.bot.send_message(
-                                chat_id=to_user.user.uid,
-                                text=f"💌 Новое сообщение:\n\n{msg}"
-                            )
-                            print(f"Message sent result: {result}")
+                            try:
+                                result = await message.bot.send_message(
+                                    chat_id=to_user.user.uid,
+                                    text=f"💌 Новое сообщение:\n\n{msg}"
+                                )
+                                print(f"Message sent result: {result}")
+                            except (TelegramBadRequest, TelegramForbiddenError) as e:
+                                print(f"Could not send message to user {to_user.user.uid}: {e}")
+                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(e).lower():
+                                    await message.answer("✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
+                                    # Shu joyda ushbu foydalanuvchini bazada ma'lum bir statusga o'zgartirish mumkin
+                                else:
+                                    await message.answer("❌ Не удалось отправить сообщение")
+                                return
 
                     await message.answer("✅ Сообщение отправлено!")
                 except Exception as e:
@@ -101,12 +120,16 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
             if to_user and to_user.user:
                 try:
                     from_user = await get_leo(from_uid)
-                    await message.bot.send_message(
-                        chat_id=to_user.user.uid,
-                        text=f"❤️ Вам поставили лайк!"
-                    )
+                    try:
+                        await message.bot.send_message(
+                            chat_id=to_user.user.uid,
+                            text=f"❤️ Вам поставили лайк!"
+                        )
+                    except (TelegramBadRequest, TelegramForbiddenError) as e:
+                        print(f"Could not send like notification to user {to_user.user.uid}: {e}")
+                        # Xatoni yutib yuboramiz, foydalanuvchi javobi uchun muhim emas
                 except Exception as e:
-                    print(f"Error sending like notification to user {to_uid}: {e}")
+                    print(f"Error getting user or sending like notification to user {to_uid}: {e}")
 
             await message.answer("Лайк отправлен")
 
