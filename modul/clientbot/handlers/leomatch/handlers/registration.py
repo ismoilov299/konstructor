@@ -89,7 +89,8 @@ async def bot_start_lets_leo(message: types.Message, state: FSMContext):
     user = message.from_user.full_name
     print(message.from_user.username)
     print(f"mening ismim {user}")
-    await message.answer('')
+    if message.from_user.username == None:
+        await message.answer('username mavjud emas')
     await message.answer(
         (
             "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните"))
