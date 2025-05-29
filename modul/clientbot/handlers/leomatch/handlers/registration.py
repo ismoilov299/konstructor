@@ -91,6 +91,8 @@ async def bot_start_lets_leo(message: types.Message, state: FSMContext):
             (
                 "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните"))
 
+        await begin_registration(message, state)
+
 
     else:
         # await message.answer(
