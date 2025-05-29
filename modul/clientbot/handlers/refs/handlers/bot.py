@@ -568,7 +568,7 @@ async def info(message: Message):
 
 # 1. Check_chan callback'ni to'g'irlash - STATE'DAN REFERRAL OLISH QISMINI
 @client_bot_router.callback_query(F.data == "check_chan")
-async def check_chan_callback(query: CallbackQuery, state: FSMContext):
+async def check_chan_callback(query: CallbackQuery, state: FSMContext, bot: Bot):
     try:
         user_id = query.from_user.id
         print(f"🔍 NEW check_chan callback triggered for user {user_id}")
@@ -734,6 +734,47 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                     )
                     print(f"➕ Added user {user_id} to database, result: {new_user}")
 
+                    @sync_to_async
+                    @transaction.atomic
+                    def update_referrer(ref_id, bot_token):
+                        try:
+                            from modul.models import Bot
+                            current_bot = Bot.objects.get(token=bot_token)
+
+                            user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
+
+                            client_bot_user, created = ClientBotUser.objects.get_or_create(
+                                uid=ref_id,
+                                bot=current_bot,
+                                defaults={
+                                    'user': user_tg,
+                                    'balance': 0,
+                                    'referral_count': 0,
+                                    'referral_balance': 0
+                                }
+                            )
+
+                            admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
+                            price = float(admin_info.price) if admin_info and admin_info.price else 3.0
+
+                            client_bot_user.referral_count += 1
+                            client_bot_user.referral_balance += price
+                            client_bot_user.save()
+
+                            user_tg.refs += 1
+                            user_tg.balance += price
+                            user_tg.save()
+
+                            print(
+                                f"💰 Updated referrer {ref_id} for bot {current_bot.username}: referrals={client_bot_user.referral_count}, balance={client_bot_user.referral_balance}")
+                            return True, price
+                        except UserTG.DoesNotExist:
+                            print(f"❓ Referrer {ref_id} not found in UserTG table")
+                            return False, 0
+                        except Exception as e:
+                            print(f"⚠️ Error updating referrer: {e}")
+                            traceback.print_exc()
+                            return False, 0
                     # Referrer bonuslarini yangilash
                     @sync_to_async
                     @transaction.atomic
@@ -741,6 +782,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                         try:
                             # Avval UserTG jadvalidan qidirish
                             referrer = UserTG.objects.select_for_update().get(uid=ref_id)
+                            # balance_client =  ClientBotUser.balance
 
                             # Admin info va price olish
                             admin_info = AdminInfo.objects.first()
@@ -801,7 +843,11 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                             traceback.print_exc()
                             return False
 
+                    current_user_id = query.from_user.id
+
                     # FIXED: Remove the arguments from the function call
+                    success, reward_amount = await update_referrer(ref_id, bot.token)
+                    print(f"✅ Referrer update success for user {current_user_id}: {success}")
                     success = await update_referrer()
                     print(f"✅ Referrer update success for user {user_id}: {success}")
 
