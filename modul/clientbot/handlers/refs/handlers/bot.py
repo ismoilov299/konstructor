@@ -570,6 +570,7 @@ async def info(message: Message):
 @client_bot_router.callback_query(F.data == "check_chan")
 async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
+        bot = query.bot
         user_id = query.from_user.id
         print(f"🔍 NEW check_chan callback triggered for user {user_id}")
 
