@@ -568,7 +568,7 @@ async def info(message: Message):
 
 # 1. Check_chan callback'ni to'g'irlash - STATE'DAN REFERRAL OLISH QISMINI
 @client_bot_router.callback_query(F.data == "check_chan")
-async def check_chan_callback(query: CallbackQuery, state: FSMContext, bot: Bot):
+async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
         user_id = query.from_user.id
         print(f"🔍 NEW check_chan callback triggered for user {user_id}")
