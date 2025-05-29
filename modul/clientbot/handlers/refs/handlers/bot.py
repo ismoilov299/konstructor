@@ -790,7 +790,8 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                             traceback.print_exc()
                             return False
 
-                    success = await update_referrer(ref_id, query.bot)
+                    # FIXED: Remove the arguments from the function call
+                    success = await update_referrer()
                     print(f"✅ Referrer update success for user {user_id}: {success}")
 
                     if success:
@@ -826,7 +827,6 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         try:
             await state.clear()
         except:
-            pass
             pass
 
 @client_bot_router.callback_query(F.data.in_(["payment"]))
