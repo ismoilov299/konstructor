@@ -829,6 +829,8 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
 
                             # O'zgarishlar saqlanishini kutish
                             await asyncio.sleep(1)
+                            success = await update_referrer()
+                            print(f"✅ Referrer update success for user {user_id}: {success}")
 
                             await query.bot.send_message(
                                 chat_id=ref_id,
