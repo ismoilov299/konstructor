@@ -741,21 +741,37 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                         try:
                             # Avval UserTG jadvalidan qidirish
                             referrer = UserTG.objects.select_for_update().get(uid=ref_id)
-                            admin_info = AdminInfo.objects.first()
 
+                            # Admin info va price olish
+                            admin_info = AdminInfo.objects.first()
                             price = float(admin_info.price) if admin_info and admin_info.price else 10.0
 
+                            print(f"💵 Price from admin_info: {price}")
+                            print(
+                                f"📊 Before update - Referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
+
                             # Balansni va referallar sonini yangilash
-                            referrer.refs += 1
-                            referrer.balance += price
+                            referrer.refs = (referrer.refs or 0) + 1
+                            referrer.balance = (referrer.balance or 0) + price
                             referrer.save()
 
-                            print(f"💰 Updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
+                            # Yangilanishdan keyin tekshirish
+                            referrer.refresh_from_db()
+                            print(
+                                f"💰 After update - Referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
                             return True
+
                         except UserTG.DoesNotExist:
                             try:
+                                print(f"🔄 UserTG not found for {ref_id}, checking User table...")
                                 # UserTG topilmasa, User jadvalidan qidirish
                                 user = User.objects.get(uid=ref_id)
+                                print(f"👤 Found user in User table: {user.uid}")
+
+                                # Admin info va price olish
+                                admin_info = AdminInfo.objects.first()
+                                price = float(admin_info.price) if admin_info and admin_info.price else 10.0
+                                print(f"💵 Price from admin_info: {price}")
 
                                 # Agar User topilsa, shu User uchun yangi UserTG yaratish
                                 referrer = UserTG.objects.create(
@@ -763,21 +779,15 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                                     uid=ref_id,
                                     username=user.username,
                                     first_name=user.first_name or "User",
-                                    last_name=user.last_name
+                                    last_name=user.last_name,
+                                    refs=1,  # Boshlang'ich qiymat
+                                    balance=price  # Boshlang'ich balans
                                 )
-
-                                # Mukofot miqdorini olish
-                                admin_info = AdminInfo.objects.first()
-                                price = float(admin_info.price) if admin_info and admin_info.price else 10.0
-
-                                # Balansni va referallar sonini yangilash
-                                referrer.refs += 1
-                                referrer.balance += price
-                                referrer.save()
 
                                 print(
                                     f"💰 Created and updated referrer {ref_id}: refs={referrer.refs}, balance={referrer.balance}")
                                 return True
+
                             except User.DoesNotExist:
                                 print(f"❓ Referrer {ref_id} not found in both UserTG and User tables")
                                 return False
@@ -785,6 +795,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                                 print(f"⚠️ Error creating UserTG from User: {e}")
                                 traceback.print_exc()
                                 return False
+
                         except Exception as e:
                             print(f"⚠️ Error updating referrer: {e}")
                             traceback.print_exc()
@@ -793,6 +804,22 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                     # FIXED: Remove the arguments from the function call
                     success = await update_referrer()
                     print(f"✅ Referrer update success for user {user_id}: {success}")
+
+                    # Qo'shimcha tekshirish - balans haqiqatan o'zgarganmi?
+                    if success:
+                        try:
+                            @sync_to_async
+                            def verify_balance():
+                                try:
+                                    referrer = UserTG.objects.get(uid=ref_id)
+                                    return referrer.balance, referrer.refs
+                                except:
+                                    return None, None
+
+                            balance, refs = await verify_balance()
+                            print(f"🔍 Final verification - Referrer {ref_id}: balance={balance}, refs={refs}")
+                        except Exception as e:
+                            print(f"⚠️ Error verifying balance: {e}")
 
                     if success:
                         # Referrerga xabar yuborish
