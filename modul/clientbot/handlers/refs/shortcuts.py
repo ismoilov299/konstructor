@@ -12,63 +12,61 @@ logger = logging.getLogger(__name__)
 
 
 @sync_to_async
+@transaction.atomic
 def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=None):
+    """
+    Eski funksiya - yangi mantiq bilan
+    MUHIM: Inviter ni belgilamaydi, faqat foydalanuvchini yaratadi
+    """
     try:
-        # Проверяем, существует ли пользователь
+        from modul.models import Bot, UserTG, ClientBotUser
+
+        print(f"🔧 DEBUG: refs/shortcuts add_user called for user {tg_id}")
+
+        # Botni topish
+        bot_obj = Bot.objects.get(token=bot_token)
+
+        # Allaqachon mavjud yoki yo'qligini tekshirish
+        existing_client = ClientBotUser.objects.filter(
+            uid=tg_id,
+            bot=bot_obj
+        ).first()
+
+        if existing_client:
+            print(f"⚠️ User {tg_id} already exists for bot {bot_obj.username}")
+            return False
+
+        # UserTG ni yaratish yoki olish
         user_tg, created = UserTG.objects.get_or_create(
             uid=tg_id,
             defaults={
                 'username': user_name,
                 'first_name': user_name,
-                'invited': invited,
-                'invited_id': invited_id,
-                'created_at': timezone.now()
             }
         )
 
         if created:
-            print(f"User {tg_id} successfully added with link {tg_id}")
+            print(f"✅ DEBUG: Created new UserTG for {tg_id}")
         else:
-            print(f"User {tg_id} already exists, using existing record")
+            print(f"ℹ️ DEBUG: UserTG already exists for {tg_id}")
 
-        # Добавляем связь с ботом вне зависимости от того, новый пользователь или нет
-        if bot_token:
-            try:
-                current_bot = Bot.objects.get(token=bot_token)
+        # ClientBotUser yaratish - INVITER NI BELGILAMAYDI
+        client_user = ClientBotUser.objects.create(
+            uid=tg_id,
+            user=user_tg,
+            bot=bot_obj,
+            inviter=None,  # MUHIM: Bu yerda None
+            balance=0,
+            referral_count=0,
+            referral_balance=0
+        )
 
-                # Проверяем, существует ли уже запись ClientBotUser
-                client_bot_user, client_created = ClientBotUser.objects.get_or_create(
-                    user=user_tg,
-                    bot=current_bot,
-                    defaults={
-                        'uid': tg_id,
-                        'inviter': None  # Инвайтера добавим потом, если он есть
-                    }
-                )
-
-                # Если инвайтер существует и запись была создана, обновляем инвайтера
-                if invited_id and client_created:
-                    inviter_client = ClientBotUser.objects.filter(uid=invited_id, bot=current_bot).first()
-                    if inviter_client:
-                        client_bot_user.inviter = inviter_client
-                        client_bot_user.save()
-
-                        # Увеличиваем счетчик рефералов у пригласившего
-                        inviter_client.referral_count += 1
-                        inviter_client.save()
-
-                if client_created:
-                    print(f"ClientBotUser {tg_id} successfully added for bot {current_bot.username}")
-                else:
-                    print(f"ClientBotUser {tg_id} already exists for bot {current_bot.username}")
-
-            except Exception as e:
-                print(f"⚠️ Error creating/updating ClientBotUser: {e}")
-                traceback.print_exc()
-
+        print(f"✅ DEBUG: refs/shortcuts created ClientBotUser for {tg_id} WITH INVITER=None")
         return True
+
     except Exception as e:
-        print(f"Error adding user {tg_id} to database: {e}")
+        print(f"❌ Error in refs/shortcuts add_user: {e}")
+        import traceback
         traceback.print_exc()
         return False
 
