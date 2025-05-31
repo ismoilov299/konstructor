@@ -1429,9 +1429,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             await state.update_data(referral=referral, referrer_id=referral)
             print(f"Saved referral to state with both keys: {referral}")
 
-            state_data = await state.get_data()
-            print(f"State after saving referral: {state_data}")
-
         channels = await get_channels_for_check()
         if channels:
             not_subscribed_channels = []
@@ -1484,31 +1481,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     reply_markup=kb.as_markup(),
                     parse_mode="HTML"
                 )
-                state_data = await state.get_data()
-                print(f"State before channel check (user not subscribed): {state_data}")
                 return False
 
-        state_data = await state.get_data()
-        print(f"State after channel check (user subscribed): {state_data}")
-
-        bot_db = await shortcuts.get_bot(bot)
+        # Kanallar tekshiruvi muvaffaqiyatli bo'lsa, foydalanuvchini qo'shish
         current_user_id = message.from_user.id
-
-        @sync_to_async
-        def check_user_in_specific_bot(user_id, bot_token):
-            try:
-                bot_obj = models.Bot.objects.get(token=bot_token)
-
-                client_user = models.ClientBotUser.objects.filter(
-                    uid=user_id,
-                    bot=bot_obj
-                ).first()
-
-                return client_user is not None
-            except Exception as e:
-                logger.error(f"Error checking user in specific bot: {e}")
-                return False
-
         is_registered = await check_user_in_specific_bot(current_user_id, bot.token)
 
         if not is_registered:
@@ -1521,94 +1497,35 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             )
             print(f"➕ Added user {current_user_id} to database, result: {new_user}")
 
-            if referral:
-                try:
-                    ref_id = int(referral)
-                    print(f"🔄 Processing referral for user {current_user_id} from {ref_id}")
+            # YAGONA REFERRAL JARAYONI
+            if referral and referral.isdigit():
+                ref_id = int(referral)
+                if ref_id != current_user_id:  # O'zini referral qilmaslik
+                    success, reward = await process_referral_bonus(current_user_id, ref_id, bot.token)
 
-                    if ref_id != current_user_id:
-                        print(f"👥 User {current_user_id} referred by {ref_id}")
+                    if success:
+                        try:
+                            user_name = html.escape(message.from_user.first_name)
+                            user_profile_link = f'tg://user?id={current_user_id}'
 
-                        referrer_exists = await check_user_in_specific_bot(ref_id, bot.token)
+                            await asyncio.sleep(1)
 
-                        if not referrer_exists:
-                            print(f"⚠️ Referrer {ref_id} not found in this bot's database, skipping referral")
-                        else:
-                            @sync_to_async
-                            @transaction.atomic
-                            def update_referrer(ref_id, bot_token):
-                                try:
-                                    from modul.models import Bot
-                                    current_bot = Bot.objects.get(token=bot_token)
-
-                                    user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
-
-                                    client_bot_user, created = ClientBotUser.objects.get_or_create(
-                                        uid=ref_id,
-                                        bot=current_bot,
-                                        defaults={
-                                            'user': user_tg,
-                                            'balance': 0,
-                                            'referral_count': 0,
-                                            'referral_balance': 0
-                                        }
-                                    )
-
-                                    admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
-                                    price = float(admin_info.price) if admin_info and admin_info.price else 3.0
-
-                                    client_bot_user.referral_count += 1
-                                    client_bot_user.referral_balance += price
-                                    client_bot_user.save()
-
-                                    user_tg.refs += 1
-                                    user_tg.balance += price
-                                    user_tg.save()
-
-                                    print(
-                                        f"💰 Updated referrer {ref_id} for bot {current_bot.username}: referrals={client_bot_user.referral_count}, balance={client_bot_user.referral_balance}")
-                                    return True, price
-                                except UserTG.DoesNotExist:
-                                    print(f"❓ Referrer {ref_id} not found in UserTG table")
-                                    return False, 0
-                                except Exception as e:
-                                    print(f"⚠️ Error updating referrer: {e}")
-                                    traceback.print_exc()
-                                    return False, 0
-
-                            if referrer_exists:
-                                success, reward_amount = await update_referrer(ref_id, bot.token)
-                                print(f"✅ Referrer update success for user {current_user_id}: {success}")
-
-                                if success:
-                                    try:
-                                        user_name = html.escape(message.from_user.first_name)
-                                        user_profile_link = f'tg://user?id={current_user_id}'
-
-                                        await asyncio.sleep(1)
-
-                                        await bot.send_message(
-                                            chat_id=ref_id,
-                                            text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>\nВам начислено {reward_amount}₽",
-                                            parse_mode="html"
-                                        )
-                                        print(f"📨 Sent referral notification to {ref_id} about user {current_user_id}")
-                                    except Exception as e:
-                                        print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
-                    else:
-                        print(f"🚫 Self-referral detected: user {current_user_id} trying to refer themselves")
-                except ValueError:
-                    print(f"❌ Invalid referrer_id: {referral}")
-        else:
-            print(f"ℹ️ User {current_user_id} already registered with this bot, skipping registration")
+                            await bot.send_message(
+                                chat_id=ref_id,
+                                text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>\n"
+                                     f"💰 Получено: {reward}₽",
+                                parse_mode="HTML"
+                            )
+                            print(f"📨 Sent referral notification to {ref_id} about user {current_user_id}")
+                        except Exception as e:
+                            print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
 
         await start(message, state, bot)
+
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
         traceback.print_exc()
-        await message.answer(
-            "Произошла ошибка при запуске. Пожалуйста, попробуйте позже."
-        )
+        await message.answer("Произошла ошибка при запуске. Пожалуйста, попробуйте позже.")
 
 
 @client_bot_router.callback_query(F.data == 'start_search')

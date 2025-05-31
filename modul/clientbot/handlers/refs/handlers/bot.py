@@ -124,76 +124,71 @@ def save_user(u, bot: Bot, link=None, inviter=None):
         raise
 
 
-async def process_referral(message: Message, referrer_id: int):
-    """Process referral rewards and updates"""
+@sync_to_async
+@transaction.atomic
+def process_referral_bonus(new_user_id: int, referrer_id: int, bot_token: str):
+    """
+    Yagona referral bonus berish funksiyasi
+    Faqat bir marta chaqirilishi kerak
+    """
     try:
-        # Check if user already exists
-        user = await shortcuts.get_user(message.from_user.id, message.bot)
-        if user:
-            return False
+        from modul.models import Bot, UserTG, ClientBotUser, AdminInfo
 
-        print(f"Processing referral: new user {message.from_user.id} from referrer {referrer_id}")
+        # Botni topish
+        current_bot = Bot.objects.get(token=bot_token)
 
-        # Prevent self-referral
-        if referrer_id == message.from_user.id:
-            logger.warning(f"User {referrer_id} tried to refer themselves")
-            return False
+        # Referrer mavjudligini tekshirish
+        referrer_user = UserTG.objects.filter(uid=referrer_id).first()
+        if not referrer_user:
+            print(f"❌ Referrer {referrer_id} not found in UserTG")
+            return False, 0
 
-        # Get referrer
-        inviter = await shortcuts.get_user(referrer_id, message.bot)
-        if not inviter:
-            return False
+        referrer_client = ClientBotUser.objects.filter(
+            uid=referrer_id,
+            bot=current_bot
+        ).first()
+        if not referrer_client:
+            print(f"❌ Referrer {referrer_id} not found for bot {current_bot.username}")
+            return False, 0
 
-        # Update referrer's stats
-        @sync_to_async
-        @transaction.atomic
-        def update_referral():
-            try:
-                user_tg = UserTG.objects.select_for_update().get(uid=referrer_id)
-                admin_info = AdminInfo.objects.first()
+        # Yangi foydalanuvchi allaqachon referral qilinganmi tekshirish
+        new_user_client = ClientBotUser.objects.filter(
+            uid=new_user_id,
+            bot=current_bot,
+            inviter__isnull=False  # Inviter mavjud bo'lsa, allaqachon referral qilingan
+        ).first()
 
-                if not admin_info:
-                    return False
+        if new_user_client and new_user_client.inviter:
+            print(f"⚠️ User {new_user_id} already has referrer: {new_user_client.inviter.uid}")
+            return False, 0
 
-                user_tg.refs += 1
-                user_tg.balance += float(admin_info.price or 3.0)
-                user_tg.save()
-                return True
-            except Exception as ex:
-                logger.error(f"Error in referral update: {ex}")
-                return False
+        # Bonus miqdorini aniqlash
+        admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
+        bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
 
-        referral_success = await update_referral()
+        # Referrer balansini yangilash
+        referrer_client.referral_count += 1
+        referrer_client.referral_balance += bonus_amount
+        referrer_client.balance += bonus_amount
+        referrer_client.save()
 
-        if referral_success:
-            # First save the new user
-            me = await message.bot.get_me()
-            new_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-            await save_user(
-                u=message.from_user,
-                inviter=inviter,
-                bot=message.bot,
-                link=new_link
-            )
+        # UserTG balansini yangilash
+        referrer_user.refs += 1
+        referrer_user.balance += bonus_amount
+        referrer_user.save()
 
-            # Then send notification
-            try:
-                user_link = html.escape(message.from_user.first_name)
-                user_profile_link = f'tg://user?id={message.from_user.id}'
-                await message.bot.send_message(
-                    chat_id=referrer_id,
-                    text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_link}</a>",
-                    parse_mode="HTML"
-                )
-                print('progress ')
-            except TelegramForbiddenError:
-                logger.error(f"Cannot send message to user {referrer_id}")
+        # Yangi foydalanuvchiga referrer ni belgilash
+        if new_user_client:
+            new_user_client.inviter = referrer_client
+            new_user_client.save()
 
-        return referral_success
+        print(f"✅ Referral bonus processed: {referrer_id} got {bonus_amount} for referring {new_user_id}")
+        return True, bonus_amount
 
     except Exception as e:
-        logger.error(f"Error in process_referral: {e}")
-        return False
+        print(f"❌ Error in process_referral_bonus: {e}")
+        traceback.print_exc()
+        return False, 0
 
 
 async def banned(message):
@@ -578,14 +573,15 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         state_data = await state.get_data()
         print(f"📊 State data for user {user_id}: {state_data}")
 
-        # Har ikkala kalit nomini tekshirish - 'referral' yoki 'referrer_id' bo'lishi mumkin
+        # Referrer ID ni olish
         referrer_id = state_data.get('referrer_id') or state_data.get('referral')
         print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
 
+        # Kanallarni tekshirish
         channels = await get_channels_for_check()
         print(f"📡 Channels for user {user_id}: {channels}")
 
-        # Obuna bo'lmagan kanallar ro'yxatini yaratish
+        # Obuna bo'lmagan kanallar ro'yxati
         not_subscribed_channels = []
 
         if not channels:
@@ -624,10 +620,11 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                     print(f"⚠️ Error checking channel {channel_id}: {e}")
                     continue
 
+        # Agar barcha kanallarga obuna bo'lmagan bo'lsa
         if not is_subscribed:
             print(f"🚫 User {user_id} not subscribed to all channels")
 
-            # Foydalanuvchiga aniq ogohlantirish berish
+            # Foydalanuvchiga ogohlantirish berish
             await query.answer("⚠️ Вы не подписались на все каналы! Пожалуйста, подпишитесь и нажмите кнопку снова.",
                                show_alert=True)
 
@@ -648,7 +645,6 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
 
             # "message is not modified" xatoligini oldini olish
             try:
-                # Har safar vaqt qo'shib, xabarni o'zgacha qilish
                 import time
                 now = int(time.time())
                 await query.message.edit_text(
@@ -678,7 +674,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
 
         print(f"✅ User {user_id} subscribed to all channels")
 
-        # MUHIM: Avval foydalanuvchi bo'sh-yo'qligini tekshirish
+        # Foydalanuvchi ro'yxatdan o'tganmi tekshirish
         is_registered = await check_user(user_id)
         print(f"📝 User {user_id} registration status: {is_registered}")
 
@@ -694,103 +690,33 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             )
             print(f"➕ Added user {user_id} to database, result: {new_user}")
 
-            # Referral mavjud va to'g'ri bo'lsa, bonus berish
-            if referrer_id:
-                try:
-                    ref_id = int(referrer_id)
+            # YAGONA REFERRAL JARAYONI
+            if referrer_id and str(referrer_id).isdigit():
+                ref_id = int(referrer_id)
+                if ref_id != user_id:  # O'zini referral qilmaslik
                     print(f"🔄 Processing referral for NEW user {user_id} from {ref_id}")
 
-                    # O'ziga-o'zi refer qilmaslikni tekshirish
-                    if ref_id != user_id:
-                        print(f"👥 User {user_id} referred by {ref_id}")
+                    success, reward = await process_referral_bonus(user_id, ref_id, bot.token)
+                    print(f"✅ Referral bonus result: success={success}, reward={reward}")
 
-                        # Referrer mavjudligini tekshirish
-                        @sync_to_async
-                        def check_referrer_exists(ref_id, bot_token):
-                            try:
-                                from modul.models import Bot
-                                current_bot = Bot.objects.get(token=bot_token)
-                                client_bot_user = ClientBotUser.objects.filter(
-                                    uid=ref_id,
-                                    bot=current_bot
-                                ).first()
-                                return client_bot_user is not None
-                            except Exception as e:
-                                print(f"Error checking referrer exists: {e}")
-                                return False
+                    if success:
+                        try:
+                            user_name = html.escape(query.from_user.first_name)
+                            user_profile_link = f'tg://user?id={user_id}'
 
-                        referrer_exists = await check_referrer_exists(ref_id, bot.token)
+                            await asyncio.sleep(1)
 
-                        if referrer_exists:
-                            @sync_to_async
-                            @transaction.atomic
-                            def update_referrer_balance(ref_id, bot_token):
-                                try:
-                                    from modul.models import Bot
-                                    current_bot = Bot.objects.get(token=bot_token)
-
-                                    # UserTG ni olish
-                                    user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
-
-                                    # ClientBotUser ni olish
-                                    client_bot_user = ClientBotUser.objects.select_for_update().get(
-                                        uid=ref_id,
-                                        bot=current_bot
-                                    )
-
-                                    # AdminInfo dan price olish
-                                    admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
-                                    price = float(admin_info.price) if admin_info and admin_info.price else 3.0
-
-                                    # Balanslarni yangilash
-                                    client_bot_user.referral_count += 1
-                                    client_bot_user.referral_balance += price
-                                    client_bot_user.balance += price
-                                    client_bot_user.save()
-
-                                    # UserTG balanslarini yangilash
-                                    user_tg.refs += 1
-                                    user_tg.balance += price
-                                    user_tg.save()
-
-                                    print(
-                                        f"💰 Updated referrer {ref_id} for bot {current_bot.username}: "
-                                        f"referrals={client_bot_user.referral_count}, "
-                                        f"referral_balance={client_bot_user.referral_balance}, "
-                                        f"total_balance={client_bot_user.balance}"
-                                    )
-                                    return True, price
-                                except Exception as e:
-                                    print(f"⚠️ Error updating referrer balance: {e}")
-                                    traceback.print_exc()
-                                    return False, 0
-
-                            success, reward_amount = await update_referrer_balance(ref_id, bot.token)
-                            print(f"✅ Referrer balance update success: {success}, reward: {reward_amount}")
-
-                            if success:
-                                # Referrerga xabar yuborish
-                                try:
-                                    user_name = html.escape(query.from_user.first_name)
-                                    user_profile_link = f'tg://user?id={user_id}'
-
-                                    await asyncio.sleep(1)  # Balans o'zgarishini kutish
-
-                                    await query.bot.send_message(
-                                        chat_id=ref_id,
-                                        text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>\n"
-                                             f"💰 Получено: {reward_amount} сум",
-                                        parse_mode="HTML"
-                                    )
-                                    print(f"📨 Sent referral notification to {ref_id} about user {user_id}")
-                                except Exception as e:
-                                    print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
-                        else:
-                            print(f"❓ Referrer {ref_id} not found in database for this bot")
-                    else:
-                        print(f"🚫 Self-referral detected: user {user_id} trying to refer themselves")
-                except ValueError:
-                    print(f"❌ Invalid referrer_id: {referrer_id}")
+                            await query.bot.send_message(
+                                chat_id=ref_id,
+                                text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>\n"
+                                     f"💰 Получено: {reward}₽",
+                                parse_mode="HTML"
+                            )
+                            print(f"📨 Sent referral notification to {ref_id} about user {user_id}")
+                        except Exception as e:
+                            print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
+                else:
+                    print(f"🚫 Self-referral detected: user {user_id} trying to refer themselves")
         else:
             print(f"ℹ️ User {user_id} already registered, skipping referral process")
 
