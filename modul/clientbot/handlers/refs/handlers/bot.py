@@ -151,20 +151,43 @@ def process_referral_bonus(new_user_id: int, referrer_id: int, bot_token: str):
             print(f"❌ Referrer {referrer_id} not found for bot {current_bot.username}")
             return False, 0
 
-        # Yangi foydalanuvchi allaqachon referral qilinganmi tekshirish
+        # Yangi foydalanuvchini olish
         new_user_client = ClientBotUser.objects.filter(
             uid=new_user_id,
-            bot=current_bot,
-            inviter__isnull=False  # Inviter mavjud bo'lsa, allaqachon referral qilingan
+            bot=current_bot
         ).first()
 
-        if new_user_client and new_user_client.inviter:
+        if not new_user_client:
+            print(f"❌ New user {new_user_id} not found for bot {current_bot.username}")
+            return False, 0
+
+        # Allaqachon referral bonus olinganmi tekshirish
+        if new_user_client.inviter is not None:
             print(f"⚠️ User {new_user_id} already has referrer: {new_user_client.inviter.uid}")
+            return False, 0
+
+        # Agar inviter_id allaqachon to'g'ri belgilangan bo'lsa, lekin inviter field bo'sh bo'lsa
+        if hasattr(new_user_client, 'invited_id') and new_user_client.invited_id == referrer_id:
+            print(f"⚠️ User {new_user_id} already processed referral for {referrer_id}")
+            # Faqat inviter field ni yangilash, bonus bermaydi
+            new_user_client.inviter = referrer_client
+            new_user_client.save()
             return False, 0
 
         # Bonus miqdorini aniqlash
         admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
         bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
+
+        # Bu yerda referral tizimida takroriy bonus berish bo'lganmi tekshirish
+        # Agar referrer allaqachon bu foydalanuvchi uchun bonus olgan bo'lsa
+        existing_referral_count = ClientBotUser.objects.filter(
+            inviter=referrer_client,
+            user__uid=new_user_id
+        ).count()
+
+        if existing_referral_count > 0:
+            print(f"⚠️ Referrer {referrer_id} already got bonus for user {new_user_id}")
+            return False, 0
 
         # Referrer balansini yangilash
         referrer_client.referral_count += 1
@@ -178,11 +201,12 @@ def process_referral_bonus(new_user_id: int, referrer_id: int, bot_token: str):
         referrer_user.save()
 
         # Yangi foydalanuvchiga referrer ni belgilash
-        if new_user_client:
-            new_user_client.inviter = referrer_client
-            new_user_client.save()
+        new_user_client.inviter = referrer_client
+        new_user_client.save()
 
         print(f"✅ Referral bonus processed: {referrer_id} got {bonus_amount} for referring {new_user_id}")
+        print(
+            f"💰 Referrer {referrer_id} new stats: referrals={referrer_client.referral_count}, balance={referrer_client.balance}")
         return True, bonus_amount
 
     except Exception as e:
@@ -750,6 +774,95 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             await state.clear()
         except:
             pass
+
+
+@sync_to_async
+def check_user_in_specific_bot(user_id, bot_token):
+    """
+    Foydalanuvchi konkret botda ro'yxatdan o'tganmi tekshirish
+    """
+    try:
+        from modul.models import Bot, ClientBotUser
+        bot_obj = Bot.objects.get(token=bot_token)
+        client_user = ClientBotUser.objects.filter(
+            uid=user_id,
+            bot=bot_obj
+        ).first()
+        return client_user is not None
+    except Exception as e:
+        print(f"Error checking user in specific bot: {e}")
+        return False
+
+
+@sync_to_async
+@transaction.atomic
+def add_user_safely(tg_id, user_name, invited_type, invited_id, bot_token):
+    """
+    Foydalanuvchini xavfsiz qo'shish - takroriy qo'shishni oldini oladi
+    """
+    try:
+        from modul.models import Bot, UserTG, ClientBotUser
+
+        # Botni topish
+        bot_obj = Bot.objects.get(token=bot_token)
+
+        # Allaqachon mavjud yoki yo'qligini tekshirish
+        existing_client = ClientBotUser.objects.filter(
+            uid=tg_id,
+            bot=bot_obj
+        ).first()
+
+        if existing_client:
+            print(f"⚠️ User {tg_id} already exists for bot {bot_obj.username}")
+            return False
+
+        # UserTG ni yaratish yoki olish
+        user_tg, created = UserTG.objects.get_or_create(
+            uid=tg_id,
+            defaults={
+                'username': user_name,
+                'first_name': user_name,
+            }
+        )
+
+        if created:
+            print(f"✅ Created new UserTG for {tg_id}")
+        else:
+            print(f"ℹ️ UserTG already exists for {tg_id}")
+
+        # Inviter ni aniqlash
+        inviter_client = None
+        if invited_id and invited_type == "Referral":
+            inviter_client = ClientBotUser.objects.filter(
+                uid=invited_id,
+                bot=bot_obj
+            ).first()
+            if not inviter_client:
+                print(f"⚠️ Inviter {invited_id} not found for bot {bot_obj.username}")
+
+        # ClientBotUser yaratish
+        client_user = ClientBotUser.objects.create(
+            uid=tg_id,
+            user=user_tg,
+            bot=bot_obj,
+            inviter=inviter_client,  # Darhol inviter ni belgilash
+            balance=0,
+            referral_count=0,
+            referral_balance=0
+        )
+
+        print(f"✅ Created ClientBotUser for {tg_id} in bot {bot_obj.username}")
+
+        if inviter_client:
+            print(f"🔗 Set inviter {invited_id} for user {tg_id}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error in add_user_safely: {e}")
+        traceback.print_exc()
+        return False
+
 
 @client_bot_router.callback_query(F.data.in_(["payment"]))
 async def call_backs(query: CallbackQuery, state: FSMContext):

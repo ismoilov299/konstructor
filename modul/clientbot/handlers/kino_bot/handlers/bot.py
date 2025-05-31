@@ -1429,8 +1429,12 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             await state.update_data(referral=referral, referrer_id=referral)
             print(f"Saved referral to state with both keys: {referral}")
 
+        # AVVAL KANALLAR MAVJUDLIGINI TEKSHIRISH
         channels = await get_channels_for_check()
+        print(f"📡 Found channels: {channels}")
+
         if channels:
+            print(f"🔒 Channels exist, checking user subscription for {message.from_user.id}")
             not_subscribed_channels = []
 
             for channel_id, channel_url in channels:
@@ -1462,6 +1466,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     continue
 
             if not_subscribed_channels:
+                print(f"🚫 User {message.from_user.id} not subscribed to all channels")
                 channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
 
                 kb = InlineKeyboardBuilder()
@@ -1481,24 +1486,33 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     reply_markup=kb.as_markup(),
                     parse_mode="HTML"
                 )
-                return False
+                print(
+                    f"📝 State saved for user {message.from_user.id}: referral data will be processed after channel check")
+                return  # FAQAT KANAL TEKSHIRUVI XABARINI YUBORISH, BOSHQA HECH NARSA QILMASLIK
 
-        # Kanallar tekshiruvi muvaffaqiyatli bo'lsa, foydalanuvchini qo'shish
+            else:
+                print(f"✅ User {message.from_user.id} subscribed to all channels")
+                # Agar barcha kanallarga obuna bo'lgan bo'lsa, to'g'ridan-to'g'ri davom etish
+        else:
+            print(f"ℹ️ No channels found, proceeding with normal registration")
+
+        # KANALLAR YO'Q YOKI BARCHA KANALLARGA OBUNA BO'LGAN BO'LSA
+        # Foydalanuvchini tekshirish va qo'shish
         current_user_id = message.from_user.id
         is_registered = await check_user_in_specific_bot(current_user_id, bot.token)
 
         if not is_registered:
-            new_user = await add_user(
+            new_user = await add_user_safely(
                 tg_id=current_user_id,
                 user_name=message.from_user.first_name,
-                invited="Direct" if not referral else "Referral",
+                invited_type="Direct" if not referral else "Referral",
                 invited_id=int(referral) if referral else None,
                 bot_token=bot.token
             )
             print(f"➕ Added user {current_user_id} to database, result: {new_user}")
 
-            # YAGONA REFERRAL JARAYONI
-            if referral and referral.isdigit():
+            # REFERRAL JARAYONI (FAQAT KANALLAR YO'Q YOKI ALLAQACHON OBUNA BO'LGAN HOLDA)
+            if new_user and referral and referral.isdigit():
                 ref_id = int(referral)
                 if ref_id != current_user_id:  # O'zini referral qilmaslik
                     success, reward = await process_referral_bonus(current_user_id, ref_id, bot.token)
@@ -1519,7 +1533,10 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                             print(f"📨 Sent referral notification to {ref_id} about user {current_user_id}")
                         except Exception as e:
                             print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
+        else:
+            print(f"ℹ️ User {current_user_id} already registered in this bot")
 
+        # ASOSIY MENYUNI KO'RSATISH
         await start(message, state, bot)
 
     except Exception as e:
