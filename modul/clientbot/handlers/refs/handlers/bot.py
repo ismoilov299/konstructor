@@ -214,7 +214,6 @@ def process_referral_bonus(new_user_id: int, referrer_id: int, bot_token: str):
         traceback.print_exc()
         return False, 0
 
-
 async def banned(message):
     check = await check_ban(message.from_user.id)
     if check:
