@@ -2,6 +2,7 @@ import logging
 import traceback
 
 from asgiref.sync import sync_to_async
+from django.db import transaction
 from django.db.models import Count, F
 from django.utils import timezone
 from psycopg2 import IntegrityError
