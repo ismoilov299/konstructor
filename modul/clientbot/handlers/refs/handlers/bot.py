@@ -128,21 +128,18 @@ def save_user(u, bot: Bot, link=None, inviter=None):
 @transaction.atomic
 def process_referral_bonus(new_user_id: int, referrer_id: int, bot_token: str):
     """
-    Yagona referral bonus berish funksiyasi
-    Faqat bir marta chaqirilishi kerak
+    Har bot uchun alohida referral bonus berish
     """
     try:
         from modul.models import Bot, UserTG, ClientBotUser, AdminInfo
 
+        print(f"🔧 DEBUG: process_referral_bonus called - new_user: {new_user_id}, referrer: {referrer_id}")
+
         # Botni topish
         current_bot = Bot.objects.get(token=bot_token)
+        print(f"🔧 DEBUG: Found bot: {current_bot.username}")
 
-        # Referrer mavjudligini tekshirish
-        referrer_user = UserTG.objects.filter(uid=referrer_id).first()
-        if not referrer_user:
-            print(f"❌ Referrer {referrer_id} not found in UserTG")
-            return False, 0
-
+        # Referrer ni shu bot uchun tekshirish
         referrer_client = ClientBotUser.objects.filter(
             uid=referrer_id,
             bot=current_bot
@@ -150,8 +147,10 @@ def process_referral_bonus(new_user_id: int, referrer_id: int, bot_token: str):
         if not referrer_client:
             print(f"❌ Referrer {referrer_id} not found for bot {current_bot.username}")
             return False, 0
+        print(
+            f"🔧 DEBUG: Found referrer ClientBotUser: {referrer_client.uid}, current balance: {referrer_client.balance}")
 
-        # Yangi foydalanuvchini olish
+        # Yangi foydalanuvchini shu bot uchun tekshirish
         new_user_client = ClientBotUser.objects.filter(
             uid=new_user_id,
             bot=current_bot
@@ -160,53 +159,46 @@ def process_referral_bonus(new_user_id: int, referrer_id: int, bot_token: str):
         if not new_user_client:
             print(f"❌ New user {new_user_id} not found for bot {current_bot.username}")
             return False, 0
+        print(
+            f"🔧 DEBUG: Found new user ClientBotUser: {new_user_client.uid}, current inviter: {new_user_client.inviter}")
 
         # Allaqachon referral bonus olinganmi tekshirish
         if new_user_client.inviter is not None:
             print(f"⚠️ User {new_user_id} already has referrer: {new_user_client.inviter.uid}")
             return False, 0
 
-        # Agar inviter_id allaqachon to'g'ri belgilangan bo'lsa, lekin inviter field bo'sh bo'lsa
-        if hasattr(new_user_client, 'invited_id') and new_user_client.invited_id == referrer_id:
-            print(f"⚠️ User {new_user_id} already processed referral for {referrer_id}")
-            # Faqat inviter field ni yangilash, bonus bermaydi
-            new_user_client.inviter = referrer_client
-            new_user_client.save()
-            return False, 0
-
         # Bonus miqdorini aniqlash
         admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
         bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
+        print(f"🔧 DEBUG: Bonus amount: {bonus_amount}")
 
-        # Bu yerda referral tizimida takroriy bonus berish bo'lganmi tekshirish
-        # Agar referrer allaqachon bu foydalanuvchi uchun bonus olgan bo'lsa
-        existing_referral_count = ClientBotUser.objects.filter(
-            inviter=referrer_client,
-            user__uid=new_user_id
-        ).count()
+        # FAQAT SHU BOT UCHUN BALANSNI YANGILASH
+        print(
+            f"🔧 DEBUG: BEFORE UPDATE - Referrer bot balance: {referrer_client.balance}, refs: {referrer_client.referral_count}")
 
-        if existing_referral_count > 0:
-            print(f"⚠️ Referrer {referrer_id} already got bonus for user {new_user_id}")
-            return False, 0
-
-        # Referrer balansini yangilash
+        # Referrer balansini yangilash (faqat shu bot uchun)
         referrer_client.referral_count += 1
         referrer_client.referral_balance += bonus_amount
         referrer_client.balance += bonus_amount
         referrer_client.save()
 
-        # UserTG balansini yangilash
-        referrer_user.refs += 1
-        referrer_user.balance += bonus_amount
-        referrer_user.save()
+        # UserTG ni ham yangilaymiz (umumiy statistika uchun)
+        referrer_user = UserTG.objects.filter(uid=referrer_id).first()
+        if referrer_user:
+            referrer_user.refs += 1
+            referrer_user.balance += bonus_amount
+            referrer_user.save()
 
-        # Yangi foydalanuvchiga referrer ni belgilash
+        print(
+            f"🔧 DEBUG: AFTER UPDATE - Referrer bot balance: {referrer_client.balance}, refs: {referrer_client.referral_count}")
+
+        # Inviter ni belgilash
         new_user_client.inviter = referrer_client
         new_user_client.save()
 
-        print(f"✅ Referral bonus processed: {referrer_id} got {bonus_amount} for referring {new_user_id}")
         print(
-            f"💰 Referrer {referrer_id} new stats: referrals={referrer_client.referral_count}, balance={referrer_client.balance}")
+            f"✅ Referral bonus processed for bot {current_bot.username}: {referrer_id} got {bonus_amount} for referring {new_user_id}")
+        print(f"🔗 Set inviter {referrer_id} for user {new_user_id} in bot {current_bot.username}")
         return True, bonus_amount
 
     except Exception as e:
@@ -797,15 +789,17 @@ def check_user_in_specific_bot(user_id, bot_token):
 @transaction.atomic
 def add_user_safely(tg_id, user_name, invited_type, invited_id, bot_token):
     """
-    Foydalanuvchini xavfsiz qo'shish - takroriy qo'shishni oldini oladi
+    Foydalanuvchini konkret bot uchun qo'shish
     """
     try:
         from modul.models import Bot, UserTG, ClientBotUser
 
+        print(f"🔧 DEBUG: add_user_safely called for user {tg_id} in bot with token {bot_token}")
+
         # Botni topish
         bot_obj = Bot.objects.get(token=bot_token)
 
-        # Allaqachon mavjud yoki yo'qligini tekshirish
+        # Bu bot uchun allaqachon mavjudligini tekshirish
         existing_client = ClientBotUser.objects.filter(
             uid=tg_id,
             bot=bot_obj
@@ -815,7 +809,7 @@ def add_user_safely(tg_id, user_name, invited_type, invited_id, bot_token):
             print(f"⚠️ User {tg_id} already exists for bot {bot_obj.username}")
             return False
 
-        # UserTG ni yaratish yoki olish
+        # UserTG ni yaratish yoki olish (umumiy)
         user_tg, created = UserTG.objects.get_or_create(
             uid=tg_id,
             defaults={
@@ -825,36 +819,22 @@ def add_user_safely(tg_id, user_name, invited_type, invited_id, bot_token):
         )
 
         if created:
-            print(f"✅ Created new UserTG for {tg_id}")
+            print(f"✅ DEBUG: Created new UserTG for {tg_id}")
         else:
-            print(f"ℹ️ UserTG already exists for {tg_id}")
+            print(f"ℹ️ DEBUG: UserTG already exists for {tg_id}")
 
-        # Inviter ni aniqlash
-        inviter_client = None
-        if invited_id and invited_type == "Referral":
-            inviter_client = ClientBotUser.objects.filter(
-                uid=invited_id,
-                bot=bot_obj
-            ).first()
-            if not inviter_client:
-                print(f"⚠️ Inviter {invited_id} not found for bot {bot_obj.username}")
-
-        # ClientBotUser yaratish
+        # ClientBotUser yaratish - BU BOT UCHUN ALOHIDA
         client_user = ClientBotUser.objects.create(
             uid=tg_id,
             user=user_tg,
             bot=bot_obj,
-            inviter=inviter_client,  # Darhol inviter ni belgilash
-            balance=0,
-            referral_count=0,
-            referral_balance=0
+            inviter=None,  # Bu yerda None
+            balance=0,  # Bu botdagi balans
+            referral_count=0,  # Bu botdagi referrallar
+            referral_balance=0  # Bu botdagi referral bonuslari
         )
 
-        print(f"✅ Created ClientBotUser for {tg_id} in bot {bot_obj.username}")
-
-        if inviter_client:
-            print(f"🔗 Set inviter {invited_id} for user {tg_id}")
-
+        print(f"✅ DEBUG: Created ClientBotUser for {tg_id} in bot {bot_obj.username} WITH INVITER=None")
         return True
 
     except Exception as e:

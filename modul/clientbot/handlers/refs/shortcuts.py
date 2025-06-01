@@ -102,7 +102,9 @@ def check_user(tg_id):
     return UserTG.objects.filter(uid=tg_id).exists()
 
 
-@sync_to_async
+sync_to_async
+
+
 def get_bot_user_info(user_id, bot_token):
     try:
         print(f"DEBUG: get_bot_user_info called with user_id={user_id}, bot_token={bot_token}")
@@ -111,16 +113,7 @@ def get_bot_user_info(user_id, bot_token):
         bot = Bot.objects.get(token=bot_token)
         print(f"DEBUG: Found bot: id={bot.id}, username={bot.username}")
 
-        # Получаем пользователя по uid
-        user_tg = UserTG.objects.filter(uid=user_id).first()
-
-        if not user_tg:
-            print(f"DEBUG: UserTG with uid={user_id} not found")
-            return None
-
-        print(f"DEBUG: Found UserTG: id={user_tg.id}, username={user_tg.username}")
-
-        # Получаем информацию о пользователе для этого бота
+        # Получаем информацию о пользователе ДЛЯ ЭТОГО БОТА
         client_bot_user = ClientBotUser.objects.filter(
             uid=user_id,
             bot=bot
@@ -130,18 +123,16 @@ def get_bot_user_info(user_id, bot_token):
             print(
                 f"DEBUG: Found ClientBotUser: id={client_bot_user.id}, balance={client_bot_user.balance}, referral_balance={client_bot_user.referral_balance}, referral_count={client_bot_user.referral_count}")
 
-            # TO'G'RI BALANS HISOBASH:
-            # balance - bu allaqachon barcha bonuslarni o'z ichiga olgan umumiy balans
-            # referral_balance - bu faqat statistika uchun (referral bonuslarining umumiy miqdori)
-            # Shuning uchun faqat balance ni qaytaramiz
-            total_balance = client_bot_user.balance  # FAQAT balance
-            referral_count = client_bot_user.referral_count
+            # FAQAT BU BOT UCHUN BALANS VA REFERRALLAR
+            bot_balance = client_bot_user.balance  # Bu botdagi balans
+            bot_referrals = client_bot_user.referral_count  # Bu botdagi referrallar
 
-            print(f"DEBUG: Returning balance={total_balance}, referrals={referral_count}")
-            return [total_balance, referral_count]
+            print(f"DEBUG: Returning bot-specific balance={bot_balance}, referrals={bot_referrals}")
+            return [bot_balance, bot_referrals]
         else:
-            print(f"DEBUG: ClientBotUser not found for user={user_tg.id}, bot={bot.id}")
-            return [0, 0]  # Возвращаем нулевые значения если запись не найдена
+            print(f"DEBUG: ClientBotUser not found for user={user_id}, bot={bot.username}")
+            return [0, 0]  # Bu botda foydalanuvchi yo'q
+
     except Bot.DoesNotExist:
         print(f"DEBUG: Bot with token {bot_token} does not exist")
         return [0, 0]
