@@ -1435,7 +1435,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         print(f"📡 Found channels: {channels}")
 
         if channels:
-            print(f"🔒 Channels exist, showing subscription check for {message.from_user.id}")
+            print(f"🔒 Channels exist, checking user subscription for {message.from_user.id}")
             not_subscribed_channels = []
 
             for channel_id, channel_url in channels:
@@ -1466,29 +1466,61 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     await remove_invalid_channel(channel_id)
                     continue
 
-            # KANALLAR MAVJUD BO'LSA - HAR DOIM KANAL TEKSHIRUVINI KO'RSATISH
-            # Obuna bo'lgan yoki bo'lmagan farqi yo'q - hammaga kanal tekshiruvini ko'rsatamiz
+            # AGAR BARCHA KANALLARGA OBUNA BO'LGAN BO'LSA
+            if not not_subscribed_channels:
+                print(f"✅ User {message.from_user.id} subscribed to all channels - proceeding with registration")
+                # Barcha kanallarga obuna bo'lgan - avtomatik ravishda davom etish
 
-            # Barcha kanallarni ko'rsatish (obuna bo'lgan va bo'lmaganlarini)
-            all_channels = not_subscribed_channels.copy()
+                # Foydalanuvchini tekshirish va qo'shish
+                current_user_id = message.from_user.id
+                is_registered = await check_user_in_specific_bot(current_user_id, bot.token)
 
-            # Obuna bo'lgan kanallarni ham qo'shish
-            for channel_id, channel_url in channels:
-                if not any(ch['id'] == channel_id for ch in not_subscribed_channels):
-                    try:
-                        chat_info = await message.bot.get_chat(chat_id=channel_id)
-                        all_channels.append({
-                            'id': channel_id,
-                            'title': chat_info.title,
-                            'invite_link': channel_url or chat_info.invite_link or f"https://t.me/{channel_id.strip('-')}"
-                        })
-                    except:
-                        pass
+                if not is_registered:
+                    new_user = await add_user_safely(
+                        tg_id=current_user_id,
+                        user_name=message.from_user.first_name,
+                        invited_type="Direct" if not referral else "Referral",
+                        invited_id=int(referral) if referral else None,
+                        bot_token=bot.token
+                    )
+                    print(f"➕ Added user {current_user_id} to database (all channels subscribed), result: {new_user}")
+
+                    # REFERRAL JARAYONI
+                    if new_user and referral and referral.isdigit():
+                        ref_id = int(referral)
+                        if ref_id != current_user_id:
+                            success, reward = await process_referral_bonus(current_user_id, ref_id, bot.token)
+
+                            if success:
+                                try:
+                                    user_name = html.escape(message.from_user.first_name)
+                                    user_profile_link = f'tg://user?id={current_user_id}'
+
+                                    await asyncio.sleep(1)
+
+                                    await bot.send_message(
+                                        chat_id=ref_id,
+                                        text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>\n"
+                                             f"💰 Получено: {reward}₽",
+                                        parse_mode="HTML"
+                                    )
+                                    print(f"📨 Sent referral notification to {ref_id} about user {current_user_id}")
+                                except Exception as e:
+                                    print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
+                else:
+                    print(f"ℹ️ User {current_user_id} already registered in this bot")
+
+                # ASOSIY MENYUNI KO'RSATISH
+                await start(message, state, bot)
+                return
+
+            # AGAR BA'ZI KANALLARGA OBUNA BO'LMAGAN BO'LSA - KANAL RO'YXATINI KO'RSATISH
+            print(f"🚫 User {message.from_user.id} not subscribed to all channels")
 
             channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
             kb = InlineKeyboardBuilder()
 
-            for index, channel in enumerate(all_channels):
+            for index, channel in enumerate(not_subscribed_channels):
                 title = channel['title']
                 invite_link = channel['invite_link']
 
@@ -1504,14 +1536,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 parse_mode="HTML"
             )
 
-            if not_subscribed_channels:
-                print(f"🚫 User {message.from_user.id} not subscribed to all channels")
-            else:
-                print(f"✅ User {message.from_user.id} subscribed to all channels but still showing channel check")
-
             print(f"📝 State saved for user {message.from_user.id}: referral data will be processed after channel check")
             print(f"🚫 NOT adding user to database - waiting for check_chan callback")
-            return  # FAQAT KANAL TEKSHIRUVI XABARINI YUBORISH, HECH NARSANI QO'SHMAYDI
+            return  # FAQAT OBUNA BO'LMAGAN KANALLARNI KO'RSATISH
 
         # FAQAT KANALLAR YO'Q BO'LSAGINA BU QISM ISHLAYDI
         print(f"ℹ️ No channels found, proceeding with normal registration for {message.from_user.id}")
@@ -1533,7 +1560,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             # REFERRAL JARAYONI (FAQAT KANALLAR YO'Q BO'LGANDA)
             if new_user and referral and referral.isdigit():
                 ref_id = int(referral)
-                if ref_id != current_user_id:  # O'zini referral qilmaslik
+                if ref_id != current_user_id:
                     success, reward = await process_referral_bonus(current_user_id, ref_id, bot.token)
 
                     if success:
