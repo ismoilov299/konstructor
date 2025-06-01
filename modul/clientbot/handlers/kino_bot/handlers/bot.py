@@ -38,7 +38,8 @@ from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_le
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
 from modul.clientbot.handlers.refs.data.excel_converter import convert_to_excel
 from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
-from modul.clientbot.handlers.refs.handlers.bot import start_ref
+from modul.clientbot.handlers.refs.handlers.bot import start_ref, check_user_in_specific_bot, add_user_safely, \
+    process_referral_bonus
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt, main_menu_bt2, payments_action_in, \
     declined_in, accepted_in, imp_menu_in
 from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_actual_price, get_all_wait_payment, \
@@ -1434,7 +1435,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         print(f"📡 Found channels: {channels}")
 
         if channels:
-            print(f"🔒 Channels exist, checking user subscription for {message.from_user.id}")
+            print(f"🔒 Channels exist, showing subscription check for {message.from_user.id}")
             not_subscribed_channels = []
 
             for channel_id, channel_url in channels:
@@ -1465,38 +1466,56 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     await remove_invalid_channel(channel_id)
                     continue
 
+            # KANALLAR MAVJUD BO'LSA - HAR DOIM KANAL TEKSHIRUVINI KO'RSATISH
+            # Obuna bo'lgan yoki bo'lmagan farqi yo'q - hammaga kanal tekshiruvini ko'rsatamiz
+
+            # Barcha kanallarni ko'rsatish (obuna bo'lgan va bo'lmaganlarini)
+            all_channels = not_subscribed_channels.copy()
+
+            # Obuna bo'lgan kanallarni ham qo'shish
+            for channel_id, channel_url in channels:
+                if not any(ch['id'] == channel_id for ch in not_subscribed_channels):
+                    try:
+                        chat_info = await message.bot.get_chat(chat_id=channel_id)
+                        all_channels.append({
+                            'id': channel_id,
+                            'title': chat_info.title,
+                            'invite_link': channel_url or chat_info.invite_link or f"https://t.me/{channel_id.strip('-')}"
+                        })
+                    except:
+                        pass
+
+            channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
+            kb = InlineKeyboardBuilder()
+
+            for index, channel in enumerate(all_channels):
+                title = channel['title']
+                invite_link = channel['invite_link']
+
+                channels_text += f"{index + 1}. {title}\n"
+                kb.button(text=f"📢 {title}", url=invite_link)
+
+            kb.button(text="✅ Проверить подписку", callback_data="check_chan")
+            kb.adjust(1)
+
+            await message.answer(
+                channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
+                reply_markup=kb.as_markup(),
+                parse_mode="HTML"
+            )
+
             if not_subscribed_channels:
                 print(f"🚫 User {message.from_user.id} not subscribed to all channels")
-                channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
-
-                kb = InlineKeyboardBuilder()
-
-                for index, channel in enumerate(not_subscribed_channels):
-                    title = channel['title']
-                    invite_link = channel['invite_link']
-
-                    channels_text += f"{index + 1}. {title}\n"
-                    kb.button(text=f"📢 {title}", url=invite_link)
-
-                kb.button(text="✅ Проверить подписку", callback_data="check_chan")
-                kb.adjust(1)
-
-                await message.answer(
-                    channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
-                    reply_markup=kb.as_markup(),
-                    parse_mode="HTML"
-                )
-                print(
-                    f"📝 State saved for user {message.from_user.id}: referral data will be processed after channel check")
-                return  # FAQAT KANAL TEKSHIRUVI XABARINI YUBORISH, BOSHQA HECH NARSA QILMASLIK
-
             else:
-                print(f"✅ User {message.from_user.id} subscribed to all channels")
-                # Agar barcha kanallarga obuna bo'lgan bo'lsa, to'g'ridan-to'g'ri davom etish
-        else:
-            print(f"ℹ️ No channels found, proceeding with normal registration")
+                print(f"✅ User {message.from_user.id} subscribed to all channels but still showing channel check")
 
-        # KANALLAR YO'Q YOKI BARCHA KANALLARGA OBUNA BO'LGAN BO'LSA
+            print(f"📝 State saved for user {message.from_user.id}: referral data will be processed after channel check")
+            print(f"🚫 NOT adding user to database - waiting for check_chan callback")
+            return  # FAQAT KANAL TEKSHIRUVI XABARINI YUBORISH, HECH NARSANI QO'SHMAYDI
+
+        # FAQAT KANALLAR YO'Q BO'LSAGINA BU QISM ISHLAYDI
+        print(f"ℹ️ No channels found, proceeding with normal registration for {message.from_user.id}")
+
         # Foydalanuvchini tekshirish va qo'shish
         current_user_id = message.from_user.id
         is_registered = await check_user_in_specific_bot(current_user_id, bot.token)
@@ -1509,9 +1528,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 invited_id=int(referral) if referral else None,
                 bot_token=bot.token
             )
-            print(f"➕ Added user {current_user_id} to database, result: {new_user}")
+            print(f"➕ Added user {current_user_id} to database (no channels), result: {new_user}")
 
-            # REFERRAL JARAYONI (FAQAT KANALLAR YO'Q YOKI ALLAQACHON OBUNA BO'LGAN HOLDA)
+            # REFERRAL JARAYONI (FAQAT KANALLAR YO'Q BO'LGANDA)
             if new_user and referral and referral.isdigit():
                 ref_id = int(referral)
                 if ref_id != current_user_id:  # O'zini referral qilmaslik
@@ -1536,7 +1555,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         else:
             print(f"ℹ️ User {current_user_id} already registered in this bot")
 
-        # ASOSIY MENYUNI KO'RSATISH
+        # ASOSIY MENYUNI KO'RSATISH (FAQAT KANALLAR YO'Q BO'LSA)
         await start(message, state, bot)
 
     except Exception as e:
