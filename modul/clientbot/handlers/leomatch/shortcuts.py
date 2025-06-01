@@ -79,19 +79,16 @@ async def get_leos_id(me: int):
         if leo_me.which_search != SexEnum.ANY.value:
             kwargs['sex'] = leo_me.which_search
 
-        age_range = (max(0, leo_me.age - 3), leo_me.age + 3)
-
         @sync_to_async
-        def filter_leos_sync(kwargs, age_range, my_sex, my_id):
+        def filter_leos_sync(kwargs, my_sex, my_id):
             return list(LeoMatchModel.objects.filter(
                 Q(active=True) &
                 Q(search=True) &
                 Q(**kwargs) &
-                Q(age__range=age_range) &
                 ~Q(id=my_id)
             ).select_related('user'))
 
-        leos = await filter_leos_sync(kwargs, age_range, leo_me.sex, leo_me.id)
+        leos = await filter_leos_sync(kwargs, leo_me.sex, leo_me.id)
 
         users_id = []
         for leo in leos:

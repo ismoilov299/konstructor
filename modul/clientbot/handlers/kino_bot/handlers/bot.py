@@ -1430,7 +1430,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             await state.update_data(referral=referral, referrer_id=referral)
             print(f"Saved referral to state with both keys: {referral}")
 
-        # AVVAL KANALLAR MAVJUDLIGINI TEKSHIRISH
         channels = await get_channels_for_check()
         print(f"📡 Found channels: {channels}")
 
@@ -1466,12 +1465,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                     await remove_invalid_channel(channel_id)
                     continue
 
-            # AGAR BARCHA KANALLARGA OBUNA BO'LGAN BO'LSA
             if not not_subscribed_channels:
                 print(f"✅ User {message.from_user.id} subscribed to all channels - proceeding with registration")
-                # Barcha kanallarga obuna bo'lgan - avtomatik ravishda davom etish
-
-                # Foydalanuvchini tekshirish va qo'shish
                 current_user_id = message.from_user.id
                 is_registered = await check_user_in_specific_bot(current_user_id, bot.token)
 
@@ -1510,11 +1505,9 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                 else:
                     print(f"ℹ️ User {current_user_id} already registered in this bot")
 
-                # ASOSIY MENYUNI KO'RSATISH
                 await start(message, state, bot)
                 return
 
-            # AGAR BA'ZI KANALLARGA OBUNA BO'LMAGAN BO'LSA - KANAL RO'YXATINI KO'RSATISH
             print(f"🚫 User {message.from_user.id} not subscribed to all channels")
 
             channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
@@ -1540,10 +1533,8 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             print(f"🚫 NOT adding user to database - waiting for check_chan callback")
             return  # FAQAT OBUNA BO'LMAGAN KANALLARNI KO'RSATISH
 
-        # FAQAT KANALLAR YO'Q BO'LSAGINA BU QISM ISHLAYDI
         print(f"ℹ️ No channels found, proceeding with normal registration for {message.from_user.id}")
 
-        # Foydalanuvchini tekshirish va qo'shish
         current_user_id = message.from_user.id
         is_registered = await check_user_in_specific_bot(current_user_id, bot.token)
 
@@ -1557,7 +1548,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             )
             print(f"➕ Added user {current_user_id} to database (no channels), result: {new_user}")
 
-            # REFERRAL JARAYONI (FAQAT KANALLAR YO'Q BO'LGANDA)
             if new_user and referral and referral.isdigit():
                 ref_id = int(referral)
                 if ref_id != current_user_id:
@@ -1582,7 +1572,6 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
         else:
             print(f"ℹ️ User {current_user_id} already registered in this bot")
 
-        # ASOSIY MENYUNI KO'RSATISH (FAQAT KANALLAR YO'Q BO'LSA)
         await start(message, state, bot)
 
     except Exception as e:
