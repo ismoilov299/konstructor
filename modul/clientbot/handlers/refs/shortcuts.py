@@ -102,18 +102,30 @@ def check_user(tg_id):
     return UserTG.objects.filter(uid=tg_id).exists()
 
 
-sync_to_async
+from asgiref.sync import sync_to_async
+from django.db import transaction
 
 
+@sync_to_async
 def get_bot_user_info(user_id, bot_token):
+    """
+    FAQAT shu bot uchun balans va referrallar
+    """
     try:
         print(f"DEBUG: get_bot_user_info called with user_id={user_id}, bot_token={bot_token}")
 
+        # Django modellarini import qilish
+        from modul.models import Bot, UserTG, ClientBotUser
+
         # Получаем бота по токену
-        bot = Bot.objects.get(token=bot_token)
+        bot = Bot.objects.filter(token=bot_token).first()
+        if not bot:
+            print(f"DEBUG: Bot with token {bot_token} not found")
+            return [0, 0]
+
         print(f"DEBUG: Found bot: id={bot.id}, username={bot.username}")
 
-        # Получаем информацию о пользователе ДЛЯ ЭТОГО БОТА
+        # Получаем информацию о пользователе ТОЛЬКО ДЛЯ ЭТОГО БОТА
         client_bot_user = ClientBotUser.objects.filter(
             uid=user_id,
             bot=bot
@@ -121,21 +133,18 @@ def get_bot_user_info(user_id, bot_token):
 
         if client_bot_user:
             print(
-                f"DEBUG: Found ClientBotUser: id={client_bot_user.id}, balance={client_bot_user.balance}, referral_balance={client_bot_user.referral_balance}, referral_count={client_bot_user.referral_count}")
+                f"DEBUG: Found ClientBotUser for bot {bot.username}: balance={client_bot_user.balance}, referral_count={client_bot_user.referral_count}")
 
-            # FAQAT BU BOT UCHUN BALANS VA REFERRALLAR
-            bot_balance = client_bot_user.balance  # Bu botdagi balans
-            bot_referrals = client_bot_user.referral_count  # Bu botdagi referrallar
+            # ВОЗВРАЩАЕМ ТОЛЬКО ДАННЫЕ ДЛЯ ЭТОГО БОТА
+            bot_balance = client_bot_user.balance  # Балас только в этом боте
+            bot_referrals = client_bot_user.referral_count  # Рефералы только в этом боте
 
-            print(f"DEBUG: Returning bot-specific balance={bot_balance}, referrals={bot_referrals}")
+            print(f"DEBUG: Returning BOT-SPECIFIC balance={bot_balance}, referrals={bot_referrals}")
             return [bot_balance, bot_referrals]
         else:
-            print(f"DEBUG: ClientBotUser not found for user={user_id}, bot={bot.username}")
-            return [0, 0]  # Bu botda foydalanuvchi yo'q
+            print(f"DEBUG: ClientBotUser not found for user={user_id} in bot={bot.username}")
+            return [0, 0]  # Пользователь не зарегистрирован в этом боте
 
-    except Bot.DoesNotExist:
-        print(f"DEBUG: Bot with token {bot_token} does not exist")
-        return [0, 0]
     except Exception as e:
         print(f"DEBUG: Error in get_bot_user_info: {e}")
         import traceback
