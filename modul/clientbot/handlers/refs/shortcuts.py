@@ -129,9 +129,14 @@ def get_bot_user_info(user_id, bot_token):
         if client_bot_user:
             print(
                 f"DEBUG: Found ClientBotUser: id={client_bot_user.id}, balance={client_bot_user.balance}, referral_balance={client_bot_user.referral_balance}, referral_count={client_bot_user.referral_count}")
-            # Возвращаем баланс и количество рефералов
-            total_balance = client_bot_user.balance + client_bot_user.referral_balance
+
+            # TO'G'RI BALANS HISOBASH:
+            # balance - bu allaqachon barcha bonuslarni o'z ichiga olgan umumiy balans
+            # referral_balance - bu faqat statistika uchun (referral bonuslarining umumiy miqdori)
+            # Shuning uchun faqat balance ni qaytaramiz
+            total_balance = client_bot_user.balance  # FAQAT balance
             referral_count = client_bot_user.referral_count
+
             print(f"DEBUG: Returning balance={total_balance}, referrals={referral_count}")
             return [total_balance, referral_count]
         else:
