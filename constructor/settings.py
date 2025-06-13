@@ -95,7 +95,7 @@ DATABASES = {
           'USER': 'giper_us1',
           'PASSWORD': 'giper_pass1',
           'HOST': 'localhost',
-          'PORT': 5432,
+          'PORT': 5433,
       }
 }
 
