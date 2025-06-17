@@ -69,6 +69,19 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
         # Like qo'shish
         await leo_set_like(from_uid, to_uid, msg)
 
+        # From user ma'lumotlarini olish (like va message uchun kerak bo'ladi)
+        from_user = await get_leo(from_uid)
+        from_name = from_user.full_name if from_user else "Неизвестный пользователь"
+        from_age = from_user.age if from_user else ""
+        from_city = from_user.city if from_user else ""
+
+        # Full name with age and city for like notification
+        from_full_info = f"{from_name}"
+        if from_age and from_city:
+            from_full_info += f", {from_age}, {from_city}"
+        elif from_age:
+            from_full_info += f", {from_age}"
+
         # Agar xabar bo'lsa uni yuborish
         if msg:
             to_user = await get_leo(to_uid)
@@ -78,14 +91,21 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                     if isinstance(msg, str):
                         if msg.startswith('bnVid_'):  # Video note format
                             try:
+                                # Video note yuborishdan oldin kimdan kelganligini bildirish
+                                await message.bot.send_message(
+                                    chat_id=to_user.user.uid,
+                                    text=f"💌 Видео-сообщение от {from_full_info}:"
+                                )
                                 await message.bot.send_video_note(
                                     chat_id=to_user.user.uid,
                                     video_note=msg
                                 )
                             except (TelegramBadRequest, TelegramForbiddenError) as e:
                                 print(f"Could not send video note to user {to_user.user.uid}: {e}")
-                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(e).lower():
-                                    await message.answer("✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
+                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(
+                                        e).lower():
+                                    await message.answer(
+                                        "✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
                                     # Shu joyda ushbu foydalanuvchini bazada ma'lum bir statusga o'zgartirish mumkin
                                 else:
                                     await message.answer("❌ Не удалось отправить видео-сообщение")
@@ -96,13 +116,15 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                             try:
                                 result = await message.bot.send_message(
                                     chat_id=to_user.user.uid,
-                                    text=f"💌 Новое сообщение:\n\n{msg}"
+                                    text=f"💌 Новое сообщение от {from_full_info}:\n\n{msg}"
                                 )
                                 print(f"Message sent result: {result}")
                             except (TelegramBadRequest, TelegramForbiddenError) as e:
                                 print(f"Could not send message to user {to_user.user.uid}: {e}")
-                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(e).lower():
-                                    await message.answer("✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
+                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(
+                                        e).lower():
+                                    await message.answer(
+                                        "✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
                                     # Shu joyda ushbu foydalanuvchini bazada ma'lum bir statusga o'zgartirish mumkin
                                 else:
                                     await message.answer("❌ Не удалось отправить сообщение")
@@ -116,14 +138,14 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                 print(f"User not found or invalid: {to_user}")
                 await message.answer("❌ Не удалось найти пользователя")
         else:
+            # Oddiy like yuborish (xabar yo'q)
             to_user = await get_leo(to_uid)
             if to_user and to_user.user:
                 try:
-                    from_user = await get_leo(from_uid)
                     try:
                         await message.bot.send_message(
                             chat_id=to_user.user.uid,
-                            text=f"❤️ Вам поставили лайк!"
+                            text=f"❤️ Вам поставил лайк {from_full_info}!"
                         )
                     except (TelegramBadRequest, TelegramForbiddenError) as e:
                         print(f"Could not send like notification to user {to_user.user.uid}: {e}")
