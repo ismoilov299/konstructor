@@ -82,6 +82,9 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
         elif from_age:
             from_full_info += f", {from_age}"
 
+        # User link yaratish (HTML format)
+        user_link = f'<a href="tg://user?id={from_uid}">{from_name}</a>'
+
         # Agar xabar bo'lsa uni yuborish
         if msg:
             to_user = await get_leo(to_uid)
@@ -92,9 +95,12 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                         if msg.startswith('bnVid_'):  # Video note format
                             try:
                                 # Video note yuborishdan oldin kimdan kelganligini bildirish
+                                additional_info = f", {from_age}, {from_city}" if from_age and from_city else (
+                                    f", {from_age}" if from_age else "")
                                 await message.bot.send_message(
                                     chat_id=to_user.user.uid,
-                                    text=f"💌 Видео-сообщение от {from_full_info}:"
+                                    text=f"💌 Видео-сообщение от {user_link}{additional_info}:",
+                                    parse_mode="HTML"
                                 )
                                 await message.bot.send_video_note(
                                     chat_id=to_user.user.uid,
@@ -114,9 +120,12 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                             # Debug uchun
                             print(f"Sending message to user {to_user.user.uid}: {msg}")
                             try:
+                                additional_info = f", {from_age}, {from_city}" if from_age and from_city else (
+                                    f", {from_age}" if from_age else "")
                                 result = await message.bot.send_message(
                                     chat_id=to_user.user.uid,
-                                    text=f"💌 Новое сообщение от {from_full_info}:\n\n{msg}"
+                                    text=f"💌 Новое сообщение от {user_link}{additional_info}:\n\n{msg}",
+                                    parse_mode="HTML"
                                 )
                                 print(f"Message sent result: {result}")
                             except (TelegramBadRequest, TelegramForbiddenError) as e:
@@ -143,9 +152,12 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
             if to_user and to_user.user:
                 try:
                     try:
+                        additional_info = f", {from_age}, {from_city}" if from_age and from_city else (
+                            f", {from_age}" if from_age else "")
                         await message.bot.send_message(
                             chat_id=to_user.user.uid,
-                            text=f"❤️ Вам поставил лайк {from_full_info}!"
+                            text=f"❤️ Вам поставил лайк {user_link}{additional_info}!",
+                            parse_mode="HTML"
                         )
                     except (TelegramBadRequest, TelegramForbiddenError) as e:
                         print(f"Could not send like notification to user {to_user.user.uid}: {e}")
