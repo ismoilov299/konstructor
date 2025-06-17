@@ -156,7 +156,7 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                             f", {from_age}" if from_age else "")
                         await message.bot.send_message(
                             chat_id=to_user.user.uid,
-                            text=f"❤️ Вам поставил лайк {user_link}{additional_info}!",
+                            text=f"❤️ Вам поставил лайк {user_link}!",
                             parse_mode="HTML"
                         )
                     except (TelegramBadRequest, TelegramForbiddenError) as e:
