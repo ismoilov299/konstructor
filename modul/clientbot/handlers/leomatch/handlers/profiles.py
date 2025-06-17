@@ -99,7 +99,7 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                                     f", {from_age}" if from_age else "")
                                 await message.bot.send_message(
                                     chat_id=to_user.user.uid,
-                                    text=f"💌 Видео-сообщение от {user_link}{additional_info}:",
+                                    text=f"💌 Видео-сообщение от {user_link}:",
                                     parse_mode="HTML"
                                 )
                                 await message.bot.send_video_note(
@@ -124,7 +124,7 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                                     f", {from_age}" if from_age else "")
                                 result = await message.bot.send_message(
                                     chat_id=to_user.user.uid,
-                                    text=f"💌 Новое сообщение от {user_link}{additional_info}:\n\n{msg}",
+                                    text=f"💌 Новое сообщение от {user_link}:\n\n{msg}",
                                     parse_mode="HTML"
                                 )
                                 print(f"Message sent result: {result}")
