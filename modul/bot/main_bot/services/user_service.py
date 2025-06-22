@@ -1,7 +1,7 @@
-# modul/bot/main_bot/services/user_service.py
+# modul/bot/main_bot/services/user_service.py (tuzatilgan versiya)
 """
 Main bot uchun foydalanuvchi xizmatlari
-Barcha Django ORM operatsiyalari sync_to_async bilan amalga oshiriladi
+Bot modelining haqiqiy fieldlariga moslashtirilgan
 """
 
 from asgiref.sync import sync_to_async
@@ -67,10 +67,11 @@ def create_or_get_user(uid: int, first_name: str, last_name: str = None, usernam
 def get_user_bots(uid: int):
     """
     Foydalanuvchining barcha botlarini olish
+    Bot modelining haqiqiy fieldlaridan foydalanib
     """
     try:
         return list(Bot.objects.filter(owner__uid=uid).values(
-            'id', 'username', 'name', 'is_active', 'created_at',
+            'id', 'username', 'token', 'bot_enable', 'created_at',
             'enable_refs', 'enable_kino', 'enable_music', 'enable_download',
             'enable_chatgpt', 'enable_leo', 'enable_horoscope', 'enable_anon', 'enable_sms'
         ))
@@ -99,7 +100,7 @@ def get_bot_statistics(bot_id: int):
     Bot statistikasini olish
     """
     try:
-        bot = Bot.objects.get(id=bot_id)
+        bot = Bot.objects.select_related('owner').get(id=bot_id)
 
         # Jami foydalanuvchilar
         total_users = ClientBotUser.objects.filter(bot=bot).count()
@@ -130,8 +131,18 @@ def get_bot_statistics(bot_id: int):
             'new_users': new_users,
             'total_payments': total_payments,
             'bot_username': bot.username,
-            'bot_name': bot.name,
-            'is_active': bot.is_active
+            'bot_token': bot.token,
+            'is_active': bot.bot_enable,  # Bot modelida bot_enable field mavjud
+            # Modullar
+            'enable_refs': bot.enable_refs,
+            'enable_kino': bot.enable_kino,
+            'enable_music': bot.enable_music,
+            'enable_download': bot.enable_download,
+            'enable_chatgpt': bot.enable_chatgpt,
+            'enable_leo': bot.enable_leo,
+            'enable_horoscope': bot.enable_horoscope,
+            'enable_anon': bot.enable_anon,
+            'enable_sms': bot.enable_sms
         }
     except Exception as e:
         logger.error(f"Error getting bot statistics for {bot_id}: {e}")
@@ -143,12 +154,13 @@ def get_bot_statistics(bot_id: int):
 def toggle_bot_status(bot_id: int, owner_uid: int):
     """
     Bot holatini o'zgartirish (faol/nofaol)
+    Bot modelida bot_enable field ishlatiladi
     """
     try:
         bot = Bot.objects.get(id=bot_id, owner__uid=owner_uid)
-        bot.is_active = not bot.is_active
+        bot.bot_enable = not bot.bot_enable
         bot.save()
-        return bot.is_active
+        return bot.bot_enable
     except Bot.DoesNotExist:
         return None
     except Exception as e:
@@ -204,10 +216,9 @@ def validate_bot_token(token: str):
     Bot tokenini tekshirish
     """
     import re
-    import aiohttp
 
     # Token formatini tekshirish
-    if not re.match(r'^\d+:[A-Za-z0-9_-]+$', token):
+    if not re.match(r'^\d+:[A-Za-z0-9_-]{35}$', token):
         return False, "Noto'g'ri token formati"
 
     # Token allaqachon ishlatilganmi tekshirish
@@ -219,18 +230,21 @@ def validate_bot_token(token: str):
 
 @sync_to_async
 @transaction.atomic
-def create_bot(owner_uid: int, token: str, username: str, name: str, modules: dict):
+def create_bot(owner_uid: int, token: str, username: str, bot_name: str, modules: dict):
     """
     Yangi bot yaratish
+    Bot modelining haqiqiy fieldlaridan foydalanib
     """
     try:
         owner = User.objects.get(uid=owner_uid)
 
+        # Bot modelining fieldlariga mos ravishda yaratish
         bot = Bot.objects.create(
             token=token,
             username=username,
-            name=name,
             owner=owner,
+            bot_enable=True,  # is_active o'rniga bot_enable
+            # Modullar
             enable_refs=modules.get('refs', False),
             enable_kino=modules.get('kino', False),
             enable_music=modules.get('music', False),
@@ -240,9 +254,9 @@ def create_bot(owner_uid: int, token: str, username: str, name: str, modules: di
             enable_horoscope=modules.get('horoscope', False),
             enable_anon=modules.get('anon', False),
             enable_sms=modules.get('sms', False),
-            is_active=True
         )
 
+        logger.info(f"Bot created successfully: {username} for user {owner_uid}")
         return bot
     except Exception as e:
         logger.error(f"Error creating bot for owner {owner_uid}: {e}")
@@ -259,7 +273,7 @@ def get_user_statistics(uid: int):
 
         # Foydalanuvchi botlari soni
         total_bots = Bot.objects.filter(owner=user).count()
-        active_bots = Bot.objects.filter(owner=user, is_active=True).count()
+        active_bots = Bot.objects.filter(owner=user, bot_enable=True).count()  # is_active o'rniga bot_enable
 
         # Barcha botlardagi foydalanuvchilar
         total_bot_users = ClientBotUser.objects.filter(bot__owner=user).count()
