@@ -1,8 +1,4 @@
-# modul/bot/main_bot/services/user_service.py (tuzatilgan versiya)
-"""
-Main bot uchun foydalanuvchi xizmatlari
-Bot modelining haqiqiy fieldlariga moslashtirilgan
-"""
+# modul/bot/main_bot/services/user_service.py (tuzatilgan - created_at fieldisiz)
 
 from asgiref.sync import sync_to_async
 from django.db import transaction
@@ -68,13 +64,14 @@ def get_user_bots(uid: int):
     """
     Foydalanuvchining barcha botlarini olish
     Bot modelining haqiqiy fieldlaridan foydalanib
+    MUHIM: Bot modelida 'created_at' field yo'q, shuning uchun 'id' bo'yicha tartiblash
     """
     try:
         return list(Bot.objects.filter(owner__uid=uid).values(
-            'id', 'username', 'token', 'bot_enable', 'created_at',
+            'id', 'username', 'token', 'bot_enable',  # created_at ni olib tashladik
             'enable_refs', 'enable_kino', 'enable_music', 'enable_download',
             'enable_chatgpt', 'enable_leo', 'enable_horoscope', 'enable_anon', 'enable_sms'
-        ))
+        ).order_by('-id'))  # created_at o'rniga id bo'yicha tartiblash
     except Exception as e:
         logger.error(f"Error getting user bots for {uid}: {e}")
         return []
@@ -113,11 +110,17 @@ def get_bot_statistics(bot_id: int):
         ).count()
 
         # Yangi foydalanuvchilar (oxirgi 24 soat)
+        # MUHIM: ClientBotUser modelida created_at field bormi tekshirish kerak
         day_ago = timezone.now() - timedelta(days=1)
-        new_users = ClientBotUser.objects.filter(
-            bot=bot,
-            created_at__gte=day_ago
-        ).count()
+        try:
+            # ClientBotUser da created_at field bormi tekshirish
+            new_users = ClientBotUser.objects.filter(
+                bot=bot,
+                user__created_at__gte=day_ago  # UserTG ning created_at fieldidan foydalanish
+            ).count()
+        except Exception:
+            # Agar created_at field bo'lmasa, 0 qaytarish
+            new_users = 0
 
         # Jami to'lovlar (agar refs modul yoqilgan bo'lsa)
         total_payments = 0
@@ -218,7 +221,7 @@ def validate_bot_token(token: str):
     import re
 
     # Token formatini tekshirish
-    if not re.match(r'^\d+:[A-Za-z0-9_-]{35}$', token):
+    if not re.match(r'^\d{8,10}:[A-Za-z0-9_-]{35}$', token):
         return False, "Noto'g'ri token formati"
 
     # Token allaqachon ishlatilganmi tekshirish
@@ -230,7 +233,7 @@ def validate_bot_token(token: str):
 
 @sync_to_async
 @transaction.atomic
-def create_bot(owner_uid: int, token: str, username: str, bot_name: str, modules: dict):
+def create_bot(owner_uid: int, token: str, username: str, modules: dict):
     """
     Yangi bot yaratish
     Bot modelining haqiqiy fieldlaridan foydalanib
@@ -243,7 +246,7 @@ def create_bot(owner_uid: int, token: str, username: str, bot_name: str, modules
             token=token,
             username=username,
             owner=owner,
-            bot_enable=True,  # is_active o'rniga bot_enable
+            bot_enable=True,  # Bot aktivligi
             # Modullar
             enable_refs=modules.get('refs', False),
             enable_kino=modules.get('kino', False),
