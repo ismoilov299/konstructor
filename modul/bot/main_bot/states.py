@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class CreateBotStates(StatesGroup):
     """Bot yaratish jarayoni state'lari"""
+    selecting_modules = State()           # Modullar tanlanmoqda
     waiting_for_token = State()           # Token kutilmoqda
     configuring_modules = State()         # Modullar sozlanmoqda
     setting_admin = State()               # Admin sozlamalari
