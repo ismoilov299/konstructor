@@ -1,4 +1,4 @@
-# modul/bot/main_bot/handlers/create_bot.py
+# modul/bot/main_bot/handlers/create_bot.py (русская версия)
 """
 Main bot orqali yangi bot yaratish handlerlari
 """
@@ -348,7 +348,6 @@ async def save_bot_config(callback: CallbackQuery, state: FSMContext):
             owner_uid=callback.from_user.id,
             token=data['token'],
             username=data['bot_username'],
-            bot_name=data['bot_name'],
             modules=modules
         )
 
