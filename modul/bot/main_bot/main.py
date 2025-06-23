@@ -1,4 +1,4 @@
-# modul/bot/main_bot/main.py (to'liq versiya)
+# modul/bot/main_bot/main.py (tozalangan versiya)
 
 import asyncio
 from aiogram import Router, Bot, Dispatcher, F
@@ -12,6 +12,7 @@ from modul.loader import main_bot_router, client_bot_router
 from modul.models import User
 from modul.bot.main_bot.services.user_service import get_user_by_uid
 from modul.bot.main_bot.handlers.create_bot import create_bot_router
+from modul.bot.main_bot.handlers.manage_bots import manage_bots_router
 
 import requests
 import logging
@@ -137,162 +138,6 @@ def init_bot_handlers():
             reply_markup=await main_menu(),
             parse_mode="HTML"
         )
-        await callback.answer()
-
-    @main_bot_router.callback_query(F.data == "my_bots")
-    async def show_my_bots(callback: CallbackQuery):
-        """Foydalanuvchi botlarini ko'rsatish"""
-        from modul.bot.main_bot.services.user_service import get_user_bots
-
-        try:
-            user_bots = await get_user_bots(callback.from_user.id)
-
-            if not user_bots:
-                await callback.message.edit_text(
-                    "🤖 <b>Sizda hali botlar yo'q</b>\n\n"
-                    "Birinchi botingizni yaratib boshlang!\n"
-                    "Bot yaratish jarayoni juda oson va 2-3 daqiqada tugaydi.",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="➕ Birinchi botni yaratish", callback_data="create_bot")],
-                        [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-                    ]),
-                    parse_mode="HTML"
-                )
-                await callback.answer()
-                return
-
-            text = f"🤖 <b>Sizning botlaringiz ({len(user_bots)} ta):</b>\n\n"
-            buttons = []
-
-            for bot in user_bots:
-                # bot_enable field ishlatamiz (is_active o'rniga)
-                status = "🟢 Faol" if bot.get('bot_enable', False) else "🔴 O'chiq"
-
-                # Yoqilgan modullar sonini hisoblash
-                modules_count = sum([
-                    bot.get('enable_refs', False),
-                    bot.get('enable_kino', False),
-                    bot.get('enable_music', False),
-                    bot.get('enable_download', False),
-                    bot.get('enable_chatgpt', False),
-                    bot.get('enable_leo', False),
-                    bot.get('enable_horoscope', False),
-                    bot.get('enable_anon', False),
-                    bot.get('enable_sms', False)
-                ])
-
-                text += f"• @{bot['username']} - {status}\n"
-                text += f"  📊 {modules_count} ta modul yoqilgan\n\n"
-
-                buttons.append([InlineKeyboardButton(
-                    text=f"⚙️ @{bot['username']}",
-                    callback_data=f"manage_bot:{bot['id']}"
-                )])
-
-            buttons.append([InlineKeyboardButton(text="➕ Yangi bot yaratish", callback_data="create_bot")])
-            buttons.append([InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")])
-
-            await callback.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-                parse_mode="HTML"
-            )
-
-        except Exception as e:
-            logger.error(f"Error showing user bots for {callback.from_user.id}: {e}")
-            await callback.message.edit_text(
-                "❌ Botlarni yuklashda xatolik yuz berdi.\n"
-                "Iltimos, qaytadan urinib ko'ring.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔄 Qayta urinish", callback_data="my_bots")],
-                    [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-                ]),
-                parse_mode="HTML"
-            )
-
-        await callback.answer()
-
-    @main_bot_router.callback_query(F.data.startswith("manage_bot:"))
-    async def manage_specific_bot(callback: CallbackQuery):
-        """Aniq botni boshqarish"""
-        from modul.bot.main_bot.services.user_service import get_bot_statistics
-
-        try:
-            bot_id = int(callback.data.split(":")[1])
-            bot_stats = await get_bot_statistics(bot_id)
-
-            if not bot_stats:
-                await callback.message.edit_text(
-                    "❌ Bot topilmadi yoki sizga tegishli emas.",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="◀️ Botlarim", callback_data="my_bots")]
-                    ]),
-                    parse_mode="HTML"
-                )
-                await callback.answer()
-                return
-
-            # Enabled modules ro'yxati
-            enabled_modules = []
-            if bot_stats.get('enable_refs'): enabled_modules.append("💸 Referral")
-            if bot_stats.get('enable_kino'): enabled_modules.append("🎬 Kino")
-            if bot_stats.get('enable_music'): enabled_modules.append("🎵 Musiqa")
-            if bot_stats.get('enable_download'): enabled_modules.append("📥 Download")
-            if bot_stats.get('enable_chatgpt'): enabled_modules.append("💬 ChatGPT")
-            if bot_stats.get('enable_leo'): enabled_modules.append("❤️ Tanishuv")
-            if bot_stats.get('enable_horoscope'): enabled_modules.append("🔮 Munajjimlik")
-            if bot_stats.get('enable_anon'): enabled_modules.append("👤 Anonim")
-            if bot_stats.get('enable_sms'): enabled_modules.append("📱 SMS")
-
-            modules_text = "\n".join([f"  • {module}" for module in
-                                      enabled_modules]) if enabled_modules else "  Hech qanday modul yoqilmagan"
-
-            text = f"⚙️ <b>Bot boshqaruvi</b>\n\n" \
-                   f"🤖 <b>Bot:</b> @{bot_stats['bot_username']}\n" \
-                   f"📊 <b>Holati:</b> {'🟢 Faol' if bot_stats['is_active'] else '🔴 Ochiq'}\n" \
-                   f"👥 <b>Jami foydalanuvchilar:</b> {bot_stats['total_users']}\n" \
-                   f"🟢 <b>Faol foydalanuvchilar:</b> {bot_stats['active_users']}\n" \
-                   f"🆕 <b>Yangi foydalanuvchilar (24h):</b> {bot_stats['new_users']}\n\n" \
-                   f"🔧 <b>Faol modullar:</b>\n{modules_text}\n\n" \
-                   f"🔗 <b>Bot linki:</b> https://t.me/{bot_stats['bot_username']}"
-
-            buttons = [
-                [InlineKeyboardButton(
-                    text="🔄 Modullarni tahrirlash",
-                    callback_data=f"edit_modules:{bot_id}"
-                )],
-                [InlineKeyboardButton(
-                    text="📊 Batafsil statistika",
-                    callback_data=f"bot_stats:{bot_id}"
-                )],
-                [InlineKeyboardButton(
-                    text="⚙️ Bot sozlamalari",
-                    callback_data=f"bot_settings:{bot_id}"
-                )],
-                [InlineKeyboardButton(
-                    text="🔴 Botni o'chirish" if bot_stats['is_active'] else "🟢 Botni yoqish",
-                    callback_data=f"toggle_bot:{bot_id}"
-                )],
-                [InlineKeyboardButton(text="◀️ Botlarim", callback_data="my_bots")]
-            ]
-
-            await callback.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-                parse_mode="HTML"
-            )
-
-        except Exception as e:
-            logger.error(f"Error managing bot for {callback.from_user.id}: {e}")
-            await callback.message.edit_text(
-                "❌ Bot ma'lumotlarini yuklashda xatolik.\n"
-                "Iltimos, qaytadan urinib ko'ring.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="◀️ Botlarim", callback_data="my_bots")]
-                ]),
-                parse_mode="HTML"
-            )
-
         await callback.answer()
 
     @main_bot_router.callback_query(F.data == "statistics")
@@ -424,46 +269,7 @@ def init_bot_handlers():
         )
         await callback.answer()
 
-    # Toggle bot status handler
-    @main_bot_router.callback_query(F.data.startswith("toggle_bot:"))
-    async def toggle_bot_status_handler(callback: CallbackQuery):
-        """Bot holatini o'zgartirish"""
-        from modul.bot.main_bot.services.user_service import toggle_bot_status
-
-        try:
-            bot_id = int(callback.data.split(":")[1])
-            new_status = await toggle_bot_status(bot_id, callback.from_user.id)
-
-            if new_status is None:
-                await callback.answer("❌ Bot topilmadi yoki sizga tegishli emas!", show_alert=True)
-                return
-
-            status_text = "yoqildi" if new_status else "o'chirildi"
-            await callback.answer(f"✅ Bot {status_text}!", show_alert=True)
-
-            # Bot boshqaruv sahifasini yangilash
-            await manage_specific_bot(callback)
-
-        except Exception as e:
-            logger.error(f"Error toggling bot status: {e}")
-            await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
-
     # Placeholder handlers for future features
-    @main_bot_router.callback_query(F.data.startswith("edit_modules:"))
-    async def edit_modules_placeholder(callback: CallbackQuery):
-        """Modullarni tahrirlash (placeholder)"""
-        await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
-
-    @main_bot_router.callback_query(F.data.startswith("bot_stats:"))
-    async def bot_stats_placeholder(callback: CallbackQuery):
-        """Bot statistikasi (placeholder)"""
-        await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
-
-    @main_bot_router.callback_query(F.data.startswith("bot_settings:"))
-    async def bot_settings_placeholder(callback: CallbackQuery):
-        """Bot sozlamalari (placeholder)"""
-        await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
-
     @main_bot_router.callback_query(F.data == "detailed_stats")
     async def detailed_stats_placeholder(callback: CallbackQuery):
         """Batafsil statistika (placeholder)"""
@@ -474,8 +280,9 @@ def init_bot_handlers():
         """Balans tarixi (placeholder)"""
         await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
 
-    # Create bot router'ni qo'shish
+    # Include sub-routers
     main_bot_router.include_router(create_bot_router)
+    main_bot_router.include_router(manage_bots_router)
 
     logger.info("Main bot handlers initialized successfully!")
 
