@@ -40,7 +40,7 @@ async def bot_modules_menu(selected_modules=None):
     modules = [
         ("refs", "Реферальный 👥"),
         ("leo", "Дайвинчик 💞"),
-        ("asker", "Asker Бот 💬"),
+        ("asker", "Asker Бот 💬"),  # Будет сохраняться в enable_music
         ("kino", "Кинотеатр 🎥"),
         ("download", "DownLoader 💾"),
         ("chatgpt", "ChatGPT 💡")

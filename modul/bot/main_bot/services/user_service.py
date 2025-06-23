@@ -63,12 +63,12 @@ def create_or_get_user(uid: int, first_name: str, last_name: str = None, usernam
 def get_user_bots(uid: int):
     """
     Получение всех ботов пользователя
-    Используются только новые 6 модулей
+    Используются существующие поля из модели Bot
     """
     try:
         return list(Bot.objects.filter(owner__uid=uid).values(
             'id', 'username', 'token', 'bot_enable',
-            'enable_refs', 'enable_leo', 'enable_asker', 'enable_kino',
+            'enable_refs', 'enable_leo', 'enable_music', 'enable_kino',
             'enable_download', 'enable_chatgpt'
         ).order_by('-id'))
     except Exception as e:
@@ -134,10 +134,10 @@ def get_bot_statistics(bot_id: int):
             'bot_username': bot.username,
             'bot_token': bot.token,
             'is_active': bot.bot_enable,
-            # Только новые 6 модулей
+            # Используем существующие поля из модели
             'enable_refs': bot.enable_refs,
             'enable_leo': bot.enable_leo,
-            'enable_asker': bot.enable_asker,
+            'enable_music': bot.enable_music,  # Используем вместо asker
             'enable_kino': bot.enable_kino,
             'enable_download': bot.enable_download,
             'enable_chatgpt': bot.enable_chatgpt
@@ -241,21 +241,20 @@ def create_bot(owner_uid: int, token: str, username: str, modules: dict):
 
         owner = User.objects.get(uid=owner_uid)
 
-        # Создание бота с использованием только новых 6 модулей
+        # Создание бота с использованием существующих полей модели
         bot = Bot.objects.create(
             token=token,
             username=username,
             owner=owner,
             bot_enable=True,  # Активность бота
-            # Только новые 6 модулей
+            # Используем существующие поля из модели Bot
             enable_refs=modules.get('refs', False),
             enable_leo=modules.get('leo', False),
-            enable_asker=modules.get('asker', False),
+            enable_music=modules.get('asker', False),  # Используем music для asker
             enable_kino=modules.get('kino', False),
             enable_download=modules.get('download', False),
             enable_chatgpt=modules.get('chatgpt', False),
-            # Старые модули отключены по умолчанию
-            enable_music=False,
+            # Остальные модули отключены по умолчанию
             enable_horoscope=False,
             enable_anon=False,
             enable_sms=False
