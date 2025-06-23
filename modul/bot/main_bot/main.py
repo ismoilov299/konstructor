@@ -24,21 +24,23 @@ webhook_url = 'https://ismoilov299.uz/login/'
 
 # Keyboard funksiyalari
 async def main_menu():
-    """Asosiy menyu klaviaturasi"""
+    """Asosiy menyu klaviaturasi - yangilangan"""
     buttons = [
-        [InlineKeyboardButton(text="🤖 Mening botlarim", callback_data="my_bots")],
-        [InlineKeyboardButton(text="➕ Yangi bot yaratish", callback_data="create_bot")],
-        [InlineKeyboardButton(text="📊 Statistika", callback_data="statistics")],
-        [InlineKeyboardButton(text="💰 Balans", callback_data="balance")],
-        [InlineKeyboardButton(text="🔧 Sozlamalar", callback_data="settings")],
-        [InlineKeyboardButton(text="❓ Yordam", callback_data="help")]
+        [
+            InlineKeyboardButton(text="Создать бота ⚙️", callback_data="create_bot"),
+            InlineKeyboardButton(text="Мои боты 🖥️", callback_data="my_bots")
+        ],
+        [
+            InlineKeyboardButton(text="Инфо 📖", callback_data="info"),
+            InlineKeyboardButton(text="FAQ 💬", callback_data="faq")
+        ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 async def registration_keyboard(registration_url):
     """Ro'yxatdan o'tish klaviaturasi"""
-    buttons = [[InlineKeyboardButton(text="📝 Ro'yxatdan o'tish", url=registration_url)]]
+    buttons = [[InlineKeyboardButton(text="📝 Регистрация", url=registration_url)]]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -56,15 +58,14 @@ def init_bot_handlers():
             if db_user:
                 # Ro'yxatdan o'tgan foydalanuvchi - asosiy menyuni ko'rsatish
                 await message.answer(
-                    f"👋 <b>Xush kelibsiz, {user.first_name}!</b>\n\n"
-                    f"🤖 <b>Bot Konstruktor</b>ga xush kelibsiz!\n"
-                    f"Bu yerda siz o'zingizning Telegram botlaringizni yaratishingiz va boshqarishingiz mumkin.\n\n"
-                    f"📈 <b>Imkoniyatlar:</b>\n"
-                    f"• Bot yaratish va sozlash\n"
-                    f"• Modullarni boshqarish\n"
-                    f"• Statistikalarni kuzatish\n"
-                    f"• To'lovlar va balansni boshqarish\n\n"
-                    f"Quyidagi tugmalardan birini tanlang:",
+                    f"👋 <b>Добро пожаловать, {user.first_name}!</b>\n\n"
+                    f"🤖 <b>Конструктор ботов</b> - создавайте и управляйте своими Telegram ботами!\n\n"
+                    f"🔧 <b>Возможности:</b>\n"
+                    f"• Создание ботов за 2-3 минуты\n"
+                    f"• 9 профессиональных модулей\n"
+                    f"• Полная панель управления\n"
+                    f"• Автоматическая настройка\n\n"
+                    f"Выберите действие:",
                     reply_markup=await main_menu(),
                     parse_mode="HTML"
                 )
@@ -110,175 +111,145 @@ def init_bot_handlers():
         kb = await registration_keyboard(registration_url)
 
         await message.answer(
-            f"👋 <b>Salom, {first_name}!</b>\n\n"
-            f"🤖 <b>Bot Konstruktor</b>ga xush kelibsiz!\n\n"
-            f"Bu platformada siz:\n"
-            f"• 🚀 O'z Telegram botlaringizni yaratishingiz\n"
-            f"• ⚙️ Ularni professional darajada boshqarishingiz\n"
-            f"• 📊 Batafsil statistikalarni ko'rishingiz\n"
-            f"• 💰 Daromad olishingiz mumkin\n\n"
-            f"🎯 <b>9 ta modul mavjud:</b>\n"
-            f"💸 Referral • 🎬 Kino • 🎵 Musiqa • 📥 Yuklab olish\n"
-            f"💬 ChatGPT • ❤️ Tanishuv • 🔮 Munajjimlik\n"
-            f"👤 Anonim chat • 📱 SMS yuborish\n\n"
-            f"<b>Boshlash uchun ro'yxatdan o'ting:</b>",
+            f"👋 <b>Привет, {first_name}!</b>\n\n"
+            f"🤖 <b>Конструктор ботов</b> - добро пожаловать!\n\n"
+            f"Здесь вы можете:\n"
+            f"• 🚀 Создавать собственные Telegram боты\n"
+            f"• ⚙️ Управлять ими профессионально\n"
+            f"• 📊 Просматривать подробную статистику\n"
+            f"• 💰 Зарабатывать на рефералах\n\n"
+            f"🎯 <b>Доступно 9 модулей:</b>\n"
+            f"💸 Рефералы • 🎬 Кино • 🎵 Музыка • 📥 Загрузчик\n"
+            f"💬 ChatGPT • ❤️ Знакомства • 🔮 Гороскоп\n"
+            f"👤 Анонимный чат • 📱 SMS сервис\n\n"
+            f"<b>Для начала зарегистрируйтесь:</b>",
             reply_markup=kb,
             parse_mode="HTML"
         )
         logger.info(f"Registration message sent to new user {telegram_id}")
 
-    # Callback query handlerlar
     @main_bot_router.callback_query(F.data == "back_to_main")
     async def back_to_main(callback: CallbackQuery, state: FSMContext):
         """Asosiy menyuga qaytish"""
         await state.clear()
         await callback.message.edit_text(
-            f"🏠 <b>Asosiy menyu</b>\n\n"
-            f"Kerakli bo'limni tanlang:",
+            f"🏠 <b>Главное меню</b>\n\n"
+            f"Выберите нужное действие:",
             reply_markup=await main_menu(),
             parse_mode="HTML"
         )
         await callback.answer()
 
-    @main_bot_router.callback_query(F.data == "statistics")
-    async def show_statistics(callback: CallbackQuery):
-        """Umumiy statistikani ko'rsatish"""
-        from modul.bot.main_bot.services.user_service import get_user_statistics
+    @main_bot_router.callback_query(F.data == "info")
+    async def show_info(callback: CallbackQuery):
+        """Инфо бо'лими"""
+        info_text = (
+            f"📖 <b>Информация о Конструкторе ботов</b>\n\n"
+            f"🤖 <b>Что это?</b>\n"
+            f"Конструктор ботов - это платформа для создания и управления Telegram ботами без программирования.\n\n"
+            f"⚡ <b>Быстро и просто:</b>\n"
+            f"• Создание бота за 2-3 минуты\n"
+            f"• Готовые модули функций\n"
+            f"• Автоматическая настройка\n"
+            f"• Подробная статистика\n\n"
+            f"🎯 <b>9 профессиональных модулей:</b>\n\n"
+            f"💸 <b>Реферальная система</b> - зарабатывайте на рефералах\n"
+            f"🎬 <b>Кино бот</b> - поиск и скачивание фильмов\n"
+            f"🎵 <b>Музыкальный бот</b> - поиск музыки\n"
+            f"📥 <b>Загрузчик</b> - скачивание с YouTube, Instagram, TikTok\n"
+            f"💬 <b>ChatGPT</b> - ИИ помощник\n"
+            f"❤️ <b>Знакомства</b> - система знакомств Leo Match\n"
+            f"🔮 <b>Гороскоп</b> - астрология и предсказания\n"
+            f"👤 <b>Анонимный чат</b> - анонимное общение\n"
+            f"📱 <b>SMS сервис</b> - отправка SMS сообщений\n\n"
+            f"💡 <b>Преимущества:</b>\n"
+            f"• Без кодирования\n"
+            f"• Мгновенный запуск\n"
+            f"• Техническая поддержка\n"
+            f"• Постоянные обновления"
+        )
 
-        try:
-            user_stats = await get_user_statistics(callback.from_user.id)
-
-            if not user_stats:
-                await callback.message.edit_text(
-                    "❌ Statistika ma'lumotlarini olishda xatolik.",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-                    ]),
-                    parse_mode="HTML"
-                )
-                await callback.answer()
-                return
-
-            text = f"📊 <b>Sizning statistikangiz</b>\n\n" \
-                   f"👤 <b>Foydalanuvchi:</b> {user_stats['user_name']}\n" \
-                   f"📛 <b>Username:</b> @{user_stats['user_username']}\n\n" \
-                   f"🤖 <b>Jami botlar:</b> {user_stats['total_bots']}\n" \
-                   f"🟢 <b>Faol botlar:</b> {user_stats['active_bots']}\n" \
-                   f"👥 <b>Jami foydalanuvchilar:</b> {user_stats['total_bot_users']}\n" \
-                   f"💰 <b>Balans:</b> {user_stats['balance']} so'm\n" \
-                   f"👨‍👩‍👧‍👦 <b>Referrallar:</b> {user_stats['refs_count']} ta"
-
-            buttons = [
-                [InlineKeyboardButton(text="📈 Batafsil hisobot", callback_data="detailed_stats")],
-                [InlineKeyboardButton(text="💰 Balans tarixi", callback_data="balance_history")],
-                [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-            ]
-
-            await callback.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-                parse_mode="HTML"
-            )
-
-        except Exception as e:
-            logger.error(f"Error showing statistics for {callback.from_user.id}: {e}")
-            await callback.message.edit_text(
-                "❌ Statistikani yuklashda xatolik.\n"
-                "Iltimos, qaytadan urinib ko'ring.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔄 Qayta urinish", callback_data="statistics")],
-                    [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-                ]),
-                parse_mode="HTML"
-            )
-
+        await callback.message.edit_text(
+            info_text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🤖 Создать бота", callback_data="create_bot")],
+                [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/support_username")],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main")]
+            ]),
+            parse_mode="HTML"
+        )
         await callback.answer()
+
+    @main_bot_router.callback_query(F.data == "faq")
+    async def show_faq(callback: CallbackQuery):
+        """FAQ бо'лими"""
+        faq_text = (
+            f"💬 <b>Часто задаваемые вопросы (FAQ)</b>\n\n"
+            f"❓ <b>Как создать бота?</b>\n"
+            f"1. Нажмите 'Создать бота ⚙️'\n"
+            f"2. Получите токен у @BotFather\n"
+            f"3. Вставьте токен в наш бот\n"
+            f"4. Выберите нужные модули\n"
+            f"5. Готово! Бот работает\n\n"
+            f"💰 <b>Сколько это стоит?</b>\n"
+            f"Создание бота - БЕСПЛАТНО!\n"
+            f"Комиссия берется только с заработанных средств в модулях.\n\n"
+            f"🔧 <b>Нужно ли знать программирование?</b>\n"
+            f"НЕТ! Всё уже готово. Просто выбираете модули и настраиваете.\n\n"
+            f"⚙️ <b>Можно ли изменить модули позже?</b>\n"
+            f"ДА! В любое время можете включить/выключить модули в настройках.\n\n"
+            f"📊 <b>Как посмотреть статистику?</b>\n"
+            f"В разделе 'Мои боты 🖥️' выберите бота и нажмите 'Статистика'.\n\n"
+            f"🛠️ <b>Что если бот сломается?</b>\n"
+            f"У нас есть техническая поддержка 24/7. Обращайтесь в любое время!\n\n"
+            f"💸 <b>Как работает реферальная система?</b>\n"
+            f"За каждого приглашенного друга вы получаете бонус. Размер бонуса настраивается.\n\n"
+            f"🔒 <b>Безопасно ли давать токен бота?</b>\n"
+            f"ДА! Токен используется только для управления ботом. Мы НЕ можем получить доступ к вашему аккаунту.\n\n"
+            f"⏱️ <b>Как быстро бот начнет работать?</b>\n"
+            f"Сразу после создания! Обычно 30-60 секунд на настройку."
+        )
+
+        await callback.message.edit_text(
+            faq_text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❓ Задать вопрос", url="https://t.me/support_username")],
+                [InlineKeyboardButton(text="📖 Инструкция", url="https://docs.example.com")],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main")]
+            ]),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+
+    # Placeholder handlers
+    @main_bot_router.callback_query(F.data == "statistics")
+    async def statistics_redirect(callback: CallbackQuery):
+        """Statistika - my_bots orqali yo'naltirish"""
+        await callback.answer("📊 Статистику можно посмотреть в разделе 'Мои боты'")
+        # my_bots ga yo'naltirish
+        from modul.bot.main_bot.handlers.manage_bots import show_my_bots
+        await show_my_bots(callback)
 
     @main_bot_router.callback_query(F.data == "balance")
-    async def show_balance(callback: CallbackQuery):
-        """Balansni ko'rsatish"""
-        await callback.message.edit_text(
-            "💰 <b>Balans</b>\n\n"
-            "Bu funksiya hali ishlab chiqilmoqda...\n"
-            "Tez orada quyidagi imkoniyatlar qo'shiladi:\n\n"
-            "• 💳 To'lov tarixi\n"
-            "• 📊 Daromad statistikasi\n"
-            "• 💸 Pul yechish\n"
-            "• 🎁 Bonuslar",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-            ]),
-            parse_mode="HTML"
-        )
-        await callback.answer()
+    async def balance_redirect(callback: CallbackQuery):
+        """Balans - my_bots orqali yo'naltirish"""
+        await callback.answer("💰 Баланс можно посмотреть в разделе 'Мои боты'")
+        # my_bots ga yo'naltirish
+        from modul.bot.main_bot.handlers.manage_bots import show_my_bots
+        await show_my_bots(callback)
 
     @main_bot_router.callback_query(F.data == "settings")
-    async def show_settings(callback: CallbackQuery):
-        """Sozlamalarni ko'rsatish"""
-        await callback.message.edit_text(
-            "🔧 <b>Sozlamalar</b>\n\n"
-            "Bu funksiya hali ishlab chiqilmoqda...\n"
-            "Tez orada quyidagi sozlamalar qo'shiladi:\n\n"
-            "• 👤 Profil sozlamalari\n"
-            "• 🔔 Bildirishnomalar\n"
-            "• 🌐 Til tanlash\n"
-            "• 🔐 Xavfsizlik",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-            ]),
-            parse_mode="HTML"
-        )
-        await callback.answer()
+    async def settings_redirect(callback: CallbackQuery):
+        """Sozlamalar - my_bots orqali yo'naltirish"""
+        await callback.answer("🔧 Настройки ботов находятся в разделе 'Мои боты'")
+        # my_bots ga yo'naltirish
+        from modul.bot.main_bot.handlers.manage_bots import show_my_bots
+        await show_my_bots(callback)
 
     @main_bot_router.callback_query(F.data == "help")
-    async def show_help(callback: CallbackQuery):
-        """Yordam bo'limini ko'rsatish"""
-        help_text = (
-            "❓ <b>Yordam va Qo'llanma</b>\n\n"
-            "🤖 <b>Bot Konstruktor nima?</b>\n"
-            "Bu platforma orqali siz professional Telegram botlar yaratishingiz va boshqarishingiz mumkin.\n\n"
-            "🚀 <b>Qanday boshlash kerak?</b>\n"
-            "1️⃣ Ro'yxatdan o'ting\n"
-            "2️⃣ @BotFather dan bot yarating\n"
-            "3️⃣ Bot tokenini bizga bering\n"
-            "4️⃣ Kerakli modullarni tanlang\n"
-            "5️⃣ Botingiz tayyor!\n\n"
-            "🔧 <b>Mavjud modullar:</b>\n"
-            "💸 Referral tizimi - daromad oling\n"
-            "🎬 Kino bot - filmlar ulashing\n"
-            "🎵 Musiqa bot - qo'shiqlar toping\n"
-            "📥 Download bot - media yuklab oling\n"
-            "💬 ChatGPT - AI yordamchisi\n"
-            "❤️ Tanishuv - Leo Match tizimi\n"
-            "🔮 Munajjimlik - bashorat va horoskop\n"
-            "👤 Anonim chat - maxfiy suhbat\n"
-            "📱 SMS yuborish - xabar jo'natish\n\n"
-            "💬 <b>Qo'shimcha savol?</b>\n"
-            "Bizning qo'llab-quvvatlash xizmatiga murojaat qiling."
-        )
-
-        await callback.message.edit_text(
-            help_text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📞 Qo'llab-quvvatlash", url="https://t.me/support_username")],
-                [InlineKeyboardButton(text="📖 Batafsil qo'llanma", url="https://docs.example.com")],
-                [InlineKeyboardButton(text="💬 Guruh chat", url="https://t.me/botconstructor_group")],
-                [InlineKeyboardButton(text="◀️ Orqaga", callback_data="back_to_main")]
-            ]),
-            parse_mode="HTML"
-        )
-        await callback.answer()
-
-    # Placeholder handlers for future features
-    @main_bot_router.callback_query(F.data == "detailed_stats")
-    async def detailed_stats_placeholder(callback: CallbackQuery):
-        """Batafsil statistika (placeholder)"""
-        await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
-
-    @main_bot_router.callback_query(F.data == "balance_history")
-    async def balance_history_placeholder(callback: CallbackQuery):
-        """Balans tarixi (placeholder)"""
-        await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
+    async def help_redirect(callback: CallbackQuery):
+        """Yordam - FAQ ga yo'naltirish"""
+        await show_faq(callback)
 
     # Include sub-routers
     main_bot_router.include_router(create_bot_router)

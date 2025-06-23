@@ -20,6 +20,14 @@ class ManageBotStates(StatesGroup):
     editing_channels = State()            # Kanallar tahrirlanmoqda
     editing_admin = State()               # Admin ma'lumotlari tahrirlanmoqda
 
+class BotSettingsStates(StatesGroup):
+    """Bot sozlamalari state'lari"""
+    waiting_admin_input = State()         # Admin ma'lumoti kutilmoqda
+    waiting_channel_input = State()       # Kanal ma'lumoti kutilmoqda
+    waiting_referral_input = State()      # Referral sozlamalari kutilmoqda
+    waiting_message_input = State()       # Xabar matni kutilmoqda
+    confirming_action = State()           # Amalni tasdiqlash
+
 class UserSettingsStates(StatesGroup):
     """Foydalanuvchi sozlamalari state'lari"""
     editing_profile = State()             # Profil tahrirlanmoqda

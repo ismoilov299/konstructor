@@ -235,7 +235,7 @@ def validate_bot_token(token: str):
 @transaction.atomic
 def create_bot(owner_uid: int, token: str, username: str, modules: dict):
     """
-    Yangi bot yaratish
+    Yangi bot yaratish va avtomatik admin o'rnatish
     Bot modelining haqiqiy fieldlaridan foydalanib
     """
     try:
@@ -259,8 +259,31 @@ def create_bot(owner_uid: int, token: str, username: str, modules: dict):
             enable_sms=modules.get('sms', False),
         )
 
+        # AVTOMATIK ADMIN O'RNATISH
+        try:
+            from modul.models import AdminInfo
+            admin_info, created = AdminInfo.objects.get_or_create(
+                bot_token=token,
+                defaults={
+                    'admin_channel': f"@{owner.username}" if owner.username else str(owner_uid),
+                    'price': 3.0,  # Default referral bonus
+                    'min_amount': 30.0  # Default minimal yechish
+                }
+            )
+
+            if not created:
+                # Agar mavjud bo'lsa, admin ni yangilash
+                admin_info.admin_channel = f"@{owner.username}" if owner.username else str(owner_uid)
+                admin_info.save()
+
+            logger.info(f"Auto admin setup: @{username} -> admin: {admin_info.admin_channel}")
+
+        except Exception as admin_error:
+            logger.error(f"Error setting up auto admin for {username}: {admin_error}")
+
         logger.info(f"Bot created successfully: {username} for user {owner_uid}")
         return bot
+
     except Exception as e:
         logger.error(f"Error creating bot for owner {owner_uid}: {e}")
         return None

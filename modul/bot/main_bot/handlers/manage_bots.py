@@ -15,6 +15,7 @@ from modul.bot.main_bot.services.user_service import (
     update_bot_modules, delete_bot
 )
 from modul.bot.main_bot.states import ManageBotStates
+from modul.bot.main_bot.handlers.bot_settings import bot_settings_router
 
 logger = logging.getLogger(__name__)
 
@@ -517,9 +518,9 @@ async def confirm_bot_deletion(callback: CallbackQuery):
 
 # Placeholder handlers
 @manage_bots_router.callback_query(F.data.startswith("bot_settings:"))
-async def bot_settings_placeholder(callback: CallbackQuery):
-    """Bot sozlamalari (placeholder)"""
-    await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
+async def bot_settings_redirect(callback: CallbackQuery):
+    """Bot sozlamalari - bot_settings.py ga yo'naltirish"""
+    pass  # bot_settings.py da handler mavjud
 
 
 @manage_bots_router.callback_query(F.data.startswith("bot_chart:"))
@@ -527,6 +528,11 @@ async def bot_chart_placeholder(callback: CallbackQuery):
     """Bot grafik ko'rish (placeholder)"""
     await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
 
+
+@manage_bots_router.callback_query(F.data == "overall_stats")
+async def overall_stats_placeholder(callback: CallbackQuery):
+    """Umumiy statistika (placeholder)"""
+    await callback.answer("⚠️ Bu funksiya hali ishlab chiqilmoqda...", show_alert=True)
 
 @manage_bots_router.callback_query(F.data == "overall_stats")
 async def overall_stats_placeholder(callback: CallbackQuery):

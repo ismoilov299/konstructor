@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 create_bot_router = Router()
 
 
-# Keyboard funksiyalari
 async def create_bot_menu():
-    """Bot yaratish menyu klaviaturasi"""
     buttons = [
         [InlineKeyboardButton(text="📝 Bot tokenini kiriting", callback_data="enter_token")],
         [InlineKeyboardButton(text="❓ Token qanday olish?", callback_data="token_help")],
@@ -36,11 +34,9 @@ async def create_bot_menu():
 
 
 async def bot_modules_menu(selected_modules=None):
-    """Bot modullari tanlash klaviaturasi"""
     if selected_modules is None:
         selected_modules = {}
 
-    # Module ro'yxati va ularning ko'rinishi
     modules = [
         ("refs", "💸 Referral tizimi"),
         ("kino", "🎬 Kino bot"),
@@ -48,14 +44,13 @@ async def bot_modules_menu(selected_modules=None):
         ("download", "📥 Download bot"),
         ("chatgpt", "💬 ChatGPT"),
         ("leo", "❤️ Tanishuv (Leo)"),
-        ("horoscope", "🔮 Munajjimlik"),
         ("anon", "👤 Anonim chat"),
-        ("sms", "📱 SMS yuborish")
+
+
     ]
 
     buttons = []
     for module_key, module_name in modules:
-        # Module yoqilgan bo'lsa ✅, aks holda ⬜
         icon = "✅" if selected_modules.get(module_key, False) else "⬜"
         text = f"{icon} {module_name}"
         buttons.append([InlineKeyboardButton(
@@ -426,12 +421,16 @@ async def save_bot_config(callback: CallbackQuery, state: FSMContext):
             f"• <b>Username:</b> @{data['bot_username']}\n"
             f"• <b>Nomi:</b> {data['bot_name']}\n"
             f"• <b>ID:</b> <code>{data.get('bot_id', 'N/A')}</code>\n\n"
+            f"👨‍💼 <b>Admin sozlamalari:</b>\n"
+            f"• <b>Bot admin:</b> Siz (avtomatik)\n"
+            f"• <b>Referral bonus:</b> 3 so'm\n"
+            f"• <b>Minimal yechish:</b> 30 so'm\n\n"
             f"🌐 <b>Webhook:</b> {webhook_status}\n\n"
             f"🔧 <b>Yoqilgan modullar:</b>\n{modules_text}\n\n"
             f"🚀 <b>Bot havolasi:</b>\n"
             f"https://t.me/{data['bot_username']}\n\n"
-            f"✨ <b>Botingiz tayyor va foydalanishga darhol yaroqli!</b>\n"
-            f"Modullar avtomatik ishga tushgan."
+            f"✨ <b>Bot to'liq sozlangan va ishga tayyor!</b>\n"
+            f"📊 Bot sozlamalarini boshqarish uchun 'Mening botlarim' bo'limiga o'ting."
         )
 
         await progress_msg.edit_text(
