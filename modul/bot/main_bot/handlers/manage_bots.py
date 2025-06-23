@@ -15,7 +15,6 @@ from modul.bot.main_bot.services.user_service import (
     update_bot_modules, delete_bot
 )
 from modul.bot.main_bot.states import ManageBotStates
-from modul.bot.main_bot.handlers.bot_settings import bot_settings_router
 
 logger = logging.getLogger(__name__)
 
