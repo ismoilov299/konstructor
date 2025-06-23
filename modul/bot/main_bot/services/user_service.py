@@ -1,4 +1,4 @@
-# modul/bot/main_bot/services/user_service.py (tuzatilgan - created_at fieldisiz)
+# modul/bot/main_bot/services/user_service.py (русская версия)
 
 from asgiref.sync import sync_to_async
 from django.db import transaction
@@ -15,26 +15,26 @@ logger = logging.getLogger(__name__)
 @sync_to_async
 def get_user_by_uid(uid: int):
     """
-    Foydalanuvchini UID bo'yicha olish
+    Получение пользователя по UID
     """
     try:
         return User.objects.get(uid=uid)
     except User.DoesNotExist:
         return None
     except Exception as e:
-        logger.error(f"Error getting user {uid}: {e}")
+        logger.error(f"Ошибка при получении пользователя {uid}: {e}")
         return None
 
 
 @sync_to_async
 def check_user_exists(uid: int) -> bool:
     """
-    Foydalanuvchi mavjudligini tekshirish
+    Проверка существования пользователя
     """
     try:
         return User.objects.filter(uid=uid).exists()
     except Exception as e:
-        logger.error(f"Error checking user existence {uid}: {e}")
+        logger.error(f"Ошибка при проверке существования пользователя {uid}: {e}")
         return False
 
 
@@ -42,7 +42,7 @@ def check_user_exists(uid: int) -> bool:
 @transaction.atomic
 def create_or_get_user(uid: int, first_name: str, last_name: str = None, username: str = None):
     """
-    Foydalanuvchini yaratish yoki mavjudini olish
+    Создание или получение пользователя
     """
     try:
         user, created = User.objects.get_or_create(
@@ -55,77 +55,75 @@ def create_or_get_user(uid: int, first_name: str, last_name: str = None, usernam
         )
         return user, created
     except Exception as e:
-        logger.error(f"Error creating/getting user {uid}: {e}")
+        logger.error(f"Ошибка при создании/получении пользователя {uid}: {e}")
         return None, False
 
 
 @sync_to_async
 def get_user_bots(uid: int):
     """
-    Foydalanuvchining barcha botlarini olish
-    Bot modelining haqiqiy fieldlaridan foydalanib
-    MUHIM: Bot modelida 'created_at' field yo'q, shuning uchun 'id' bo'yicha tartiblash
+    Получение всех ботов пользователя
+    Используются только новые 6 модулей
     """
     try:
         return list(Bot.objects.filter(owner__uid=uid).values(
-            'id', 'username', 'token', 'bot_enable',  # created_at ni olib tashladik
-            'enable_refs', 'enable_kino', 'enable_music', 'enable_download',
-            'enable_chatgpt', 'enable_leo', 'enable_horoscope', 'enable_anon', 'enable_sms'
-        ).order_by('-id'))  # created_at o'rniga id bo'yicha tartiblash
+            'id', 'username', 'token', 'bot_enable',
+            'enable_refs', 'enable_leo', 'enable_asker', 'enable_kino',
+            'enable_download', 'enable_chatgpt'
+        ).order_by('-id'))
     except Exception as e:
-        logger.error(f"Error getting user bots for {uid}: {e}")
+        logger.error(f"Ошибка при получении ботов пользователя {uid}: {e}")
         return []
 
 
 @sync_to_async
 def get_bot_by_id(bot_id: int, owner_uid: int):
     """
-    Bot ID va owner UID bo'yicha botni olish
+    Получение бота по ID и UID владельца
     """
     try:
         return Bot.objects.get(id=bot_id, owner__uid=owner_uid)
     except Bot.DoesNotExist:
         return None
     except Exception as e:
-        logger.error(f"Error getting bot {bot_id} for owner {owner_uid}: {e}")
+        logger.error(f"Ошибка при получении бота {bot_id} для владельца {owner_uid}: {e}")
         return None
 
 
 @sync_to_async
 def get_bot_statistics(bot_id: int):
     """
-    Bot statistikasini olish
+    Получение статистики бота
     """
     try:
         bot = Bot.objects.select_related('owner').get(id=bot_id)
 
-        # Jami foydalanuvchilar
+        # Общее количество пользователей
         total_users = ClientBotUser.objects.filter(bot=bot).count()
 
-        # Faol foydalanuvchilar (oxirgi 7 kun)
+        # Активные пользователи (последние 7 дней)
         week_ago = timezone.now() - timedelta(days=7)
         active_users = ClientBotUser.objects.filter(
             bot=bot,
             user__last_interaction__gte=week_ago
         ).count()
 
-        # Yangi foydalanuvchilar (oxirgi 24 soat)
-        # MUHIM: ClientBotUser modelida created_at field bormi tekshirish kerak
+        # Новые пользователи (последние 24 часа)
         day_ago = timezone.now() - timedelta(days=1)
         try:
-            # ClientBotUser da created_at field bormi tekshirish
+            # Проверка наличия поля created_at в ClientBotUser
             new_users = ClientBotUser.objects.filter(
                 bot=bot,
-                user__created_at__gte=day_ago  # UserTG ning created_at fieldidan foydalanish
+                user__created_at__gte=day_ago  # Использование поля created_at из UserTG
             ).count()
         except Exception:
-            # Agar created_at field bo'lmasa, 0 qaytarish
+            # Если поле created_at отсутствует, возвращаем 0
             new_users = 0
 
-        # Jami to'lovlar (agar refs modul yoqilgan bo'lsa)
+        # Общие платежи (если включен модуль refs)
         total_payments = 0
         if bot.enable_refs:
-            # RefPayment modelidan olish mumkin
+            # Можно получить из модели RefPayment
             pass
 
         return {
@@ -135,20 +133,17 @@ def get_bot_statistics(bot_id: int):
             'total_payments': total_payments,
             'bot_username': bot.username,
             'bot_token': bot.token,
-            'is_active': bot.bot_enable,  # Bot modelida bot_enable field mavjud
-            # Modullar
+            'is_active': bot.bot_enable,
+            # Только новые 6 модулей
             'enable_refs': bot.enable_refs,
-            'enable_kino': bot.enable_kino,
-            'enable_music': bot.enable_music,
-            'enable_download': bot.enable_download,
-            'enable_chatgpt': bot.enable_chatgpt,
             'enable_leo': bot.enable_leo,
-            'enable_horoscope': bot.enable_horoscope,
-            'enable_anon': bot.enable_anon,
-            'enable_sms': bot.enable_sms
+            'enable_asker': bot.enable_asker,
+            'enable_kino': bot.enable_kino,
+            'enable_download': bot.enable_download,
+            'enable_chatgpt': bot.enable_chatgpt
         }
     except Exception as e:
-        logger.error(f"Error getting bot statistics for {bot_id}: {e}")
+        logger.error(f"Ошибка при получении статистики бота {bot_id}: {e}")
         return None
 
 
@@ -156,8 +151,7 @@ def get_bot_statistics(bot_id: int):
 @transaction.atomic
 def toggle_bot_status(bot_id: int, owner_uid: int):
     """
-    Bot holatini o'zgartirish (faol/nofaol)
-    Bot modelida bot_enable field ishlatiladi
+    Изменение статуса бота (активный/неактивный)
     """
     try:
         bot = Bot.objects.get(id=bot_id, owner__uid=owner_uid)
@@ -167,7 +161,7 @@ def toggle_bot_status(bot_id: int, owner_uid: int):
     except Bot.DoesNotExist:
         return None
     except Exception as e:
-        logger.error(f"Error toggling bot status {bot_id}: {e}")
+        logger.error(f"Ошибка при изменении статуса бота {bot_id}: {e}")
         return None
 
 
@@ -175,12 +169,12 @@ def toggle_bot_status(bot_id: int, owner_uid: int):
 @transaction.atomic
 def update_bot_modules(bot_id: int, owner_uid: int, modules: dict):
     """
-    Bot modullarini yangilash
+    Обновление модулей бота
     """
     try:
         bot = Bot.objects.get(id=bot_id, owner__uid=owner_uid)
 
-        # Modullarni yangilash
+        # Обновление модулей
         for module_name, enabled in modules.items():
             if hasattr(bot, f'enable_{module_name}'):
                 setattr(bot, f'enable_{module_name}', enabled)
@@ -188,10 +182,10 @@ def update_bot_modules(bot_id: int, owner_uid: int, modules: dict):
         bot.save()
         return True
     except Bot.DoesNotExist:
-        logger.error(f"Bot {bot_id} not found for owner {owner_uid}")
+        logger.error(f"Бот {bot_id} не найден для владельца {owner_uid}")
         return False
     except Exception as e:
-        logger.error(f"Error updating bot modules {bot_id}: {e}")
+        logger.error(f"Ошибка при обновлении модулей бота {bot_id}: {e}")
         return False
 
 
@@ -199,7 +193,7 @@ def update_bot_modules(bot_id: int, owner_uid: int, modules: dict):
 @transaction.atomic
 def delete_bot(bot_id: int, owner_uid: int):
     """
-    Botni o'chirish
+    Удаление бота
     """
     try:
         bot = Bot.objects.get(id=bot_id, owner__uid=owner_uid)
@@ -209,102 +203,110 @@ def delete_bot(bot_id: int, owner_uid: int):
     except Bot.DoesNotExist:
         return None
     except Exception as e:
-        logger.error(f"Error deleting bot {bot_id}: {e}")
+        logger.error(f"Ошибка при удалении бота {bot_id}: {e}")
         return None
 
 
 @sync_to_async
 def validate_bot_token(token: str):
     """
-    Bot tokenini tekshirish
+    Проверка токена бота
+    ВАЖНО: Проверяет, что токен не используется дважды
     """
     import re
 
-    # Token formatini tekshirish
+    # Проверка формата токена
     if not re.match(r'^\d{8,10}:[A-Za-z0-9_-]{35}$', token):
-        return False, "Noto'g'ri token formati"
+        return False, "Неправильный формат токена"
 
-    # Token allaqachon ishlatilganmi tekshirish
+    # КРИТИЧЕСКАЯ ПРОВЕРКА: Токен уже используется?
     if Bot.objects.filter(token=token).exists():
-        return False, "Bu token allaqachon ishlatilmoqda"
+        return False, "Этот токен уже используется другим ботом"
 
-    return True, "Token to'g'ri"
+    return True, "Токен корректный"
 
 
 @sync_to_async
 @transaction.atomic
 def create_bot(owner_uid: int, token: str, username: str, modules: dict):
     """
-    Yangi bot yaratish va avtomatik admin o'rnatish
-    Bot modelining haqiqiy fieldlaridan foydalanib
+    Создание нового бота и автоматическая настройка админа
+    ВАЖНО: Двойная проверка токена для предотвращения дублирования
     """
     try:
+        # ДВОЙНАЯ ПРОВЕРКА ТОКЕНА ПЕРЕД СОЗДАНИЕМ
+        if Bot.objects.filter(token=token).exists():
+            logger.error(f"Попытка создать бот с уже используемым токеном: {token}")
+            return None
+
         owner = User.objects.get(uid=owner_uid)
 
-        # Bot modelining fieldlariga mos ravishda yaratish
+        # Создание бота с использованием только новых 6 модулей
         bot = Bot.objects.create(
             token=token,
             username=username,
             owner=owner,
-            bot_enable=True,  # Bot aktivligi
-            # Modullar
+            bot_enable=True,  # Активность бота
+            # Только новые 6 модулей
             enable_refs=modules.get('refs', False),
+            enable_leo=modules.get('leo', False),
+            enable_asker=modules.get('asker', False),
             enable_kino=modules.get('kino', False),
-            enable_music=modules.get('music', False),
             enable_download=modules.get('download', False),
             enable_chatgpt=modules.get('chatgpt', False),
-            enable_leo=modules.get('leo', False),
-            enable_horoscope=modules.get('horoscope', False),
-            enable_anon=modules.get('anon', False),
-            enable_sms=modules.get('sms', False),
+            # Старые модули отключены по умолчанию
+            enable_music=False,
+            enable_horoscope=False,
+            enable_anon=False,
+            enable_sms=False
         )
 
-        # AVTOMATIK ADMIN O'RNATISH
+        # АВТОМАТИЧЕСКАЯ НАСТРОЙКА АДМИНА
         try:
             from modul.models import AdminInfo
             admin_info, created = AdminInfo.objects.get_or_create(
                 bot_token=token,
                 defaults={
-                    'admin_channel': f"@{owner.username}" if owner.username else str(owner_uid),
-                    'price': 3.0,  # Default referral bonus
-                    'min_amount': 30.0  # Default minimal yechish
+                    'admin_channel': f"@{owner.username}" if owner.username and owner.username != "Не указано" else str(owner_uid),
+                    'price': 3.0,  # Реферальный бонус по умолчанию
+                    'min_amount': 30.0  # Минимальная сумма вывода по умолчанию
                 }
             )
 
             if not created:
-                # Agar mavjud bo'lsa, admin ni yangilash
-                admin_info.admin_channel = f"@{owner.username}" if owner.username else str(owner_uid)
+                # Если уже существует, обновляем админа
+                admin_info.admin_channel = f"@{owner.username}" if owner.username and owner.username != "Не указано" else str(owner_uid)
                 admin_info.save()
 
-            logger.info(f"Auto admin setup: @{username} -> admin: {admin_info.admin_channel}")
+            logger.info(f"Автонастройка админа: @{username} -> админ: {admin_info.admin_channel}")
 
         except Exception as admin_error:
-            logger.error(f"Error setting up auto admin for {username}: {admin_error}")
+            logger.error(f"Ошибка при настройке автоадмина для {username}: {admin_error}")
 
-        logger.info(f"Bot created successfully: {username} for user {owner_uid}")
+        logger.info(f"Бот успешно создан: {username} для пользователя {owner_uid}")
         return bot
 
     except Exception as e:
-        logger.error(f"Error creating bot for owner {owner_uid}: {e}")
+        logger.error(f"Ошибка при создании бота для владельца {owner_uid}: {e}")
         return None
 
 
 @sync_to_async
 def get_user_statistics(uid: int):
     """
-    Foydalanuvchi umumiy statistikasini olish
+    Получение общей статистики пользователя
     """
     try:
         user = User.objects.get(uid=uid)
 
-        # Foydalanuvchi botlari soni
+        # Количество ботов пользователя
         total_bots = Bot.objects.filter(owner=user).count()
-        active_bots = Bot.objects.filter(owner=user, bot_enable=True).count()  # is_active o'rniga bot_enable
+        active_bots = Bot.objects.filter(owner=user, bot_enable=True).count()
 
-        # Barcha botlardagi foydalanuvchilar
+        # Пользователи во всех ботах
         total_bot_users = ClientBotUser.objects.filter(bot__owner=user).count()
 
-        # UserTG dan balans va referrallar
+        # Баланс и рефералы из UserTG
         user_tg = UserTG.objects.filter(uid=uid).first()
         balance = user_tg.balance if user_tg else 0
         refs_count = user_tg.refs if user_tg else 0
@@ -319,14 +321,14 @@ def get_user_statistics(uid: int):
             'user_username': user.username
         }
     except Exception as e:
-        logger.error(f"Error getting user statistics for {uid}: {e}")
+        logger.error(f"Ошибка при получении статистики пользователя {uid}: {e}")
         return None
 
 
-# Telegram API bilan ishlash uchun async funksiyalar
+# Async функции для работы с Telegram API
 async def get_bot_info_from_telegram(token: str):
     """
-    Telegram API orqali bot ma'lumotlarini olish
+    Получение информации о боте через Telegram API
     """
     import aiohttp
 
@@ -347,13 +349,13 @@ async def get_bot_info_from_telegram(token: str):
                         }
                 return None
     except Exception as e:
-        logger.error(f"Error getting bot info for token {token}: {e}")
+        logger.error(f"Ошибка при получении информации о боте для токена {token}: {e}")
         return None
 
 
 async def set_bot_webhook(token: str, webhook_url: str):
     """
-    Bot uchun webhook o'rnatish
+    Установка webhook для бота
     """
     import aiohttp
 
@@ -368,5 +370,5 @@ async def set_bot_webhook(token: str, webhook_url: str):
                     return result.get('ok', False)
                 return False
     except Exception as e:
-        logger.error(f"Error setting webhook for token {token}: {e}")
+        logger.error(f"Ошибка при установке webhook для токена {token}: {e}")
         return False
