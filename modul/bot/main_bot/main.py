@@ -173,7 +173,7 @@ def init_bot_handlers():
             info_text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🤖 Создать бота", callback_data="create_bot")],
-                [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/support_username")],
+                [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/ismoilov299")],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main")]
             ]),
             parse_mode="HTML"
