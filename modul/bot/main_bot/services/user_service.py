@@ -1,4 +1,4 @@
-# modul/bot/main_bot/services/user_service.py (русская версия)
+# modul/bot/main_bot/services/user_service.py (tuzatilgan versiya)
 
 from asgiref.sync import sync_to_async
 from django.db import transaction
@@ -69,7 +69,7 @@ def get_user_bots(uid: int):
         return list(Bot.objects.filter(owner__uid=uid).values(
             'id', 'username', 'token', 'bot_enable',
             'enable_refs', 'enable_leo', 'enable_kino',
-            'enable_download', 'enable_chatgpt','enable_davinci'
+            'enable_download', 'enable_chatgpt', 'enable_davinci'
         ).order_by('-id'))
     except Exception as e:
         logger.error(f"Ошибка при получении ботов пользователя {uid}: {e}")
@@ -137,10 +137,10 @@ def get_bot_statistics(bot_id: int):
             # Используем существующие поля из модели
             'enable_refs': bot.enable_refs,
             'enable_leo': bot.enable_leo,
-            'enable_music': bot.enable_music,  # Используем вместо asker
             'enable_kino': bot.enable_kino,
             'enable_download': bot.enable_download,
-            'enable_chatgpt': bot.enable_chatgpt
+            'enable_chatgpt': bot.enable_chatgpt,
+            'enable_davinci': bot.enable_davinci
         }
     except Exception as e:
         logger.error(f"Ошибка при получении статистики бота {bot_id}: {e}")
@@ -246,18 +246,15 @@ def create_bot(owner_uid: int, token: str, username: str, modules: dict):
             token=token,
             username=username,
             owner=owner,
-            bot_enable=True,  # Активность бота
+            bot_enable=True,
             # Используем существующие поля из модели Bot
             enable_refs=modules.get('refs', False),
             enable_leo=modules.get('leo', False),
-            enable_music=modules.get('asker', False),  # Используем music для asker
             enable_kino=modules.get('kino', False),
             enable_download=modules.get('download', False),
             enable_chatgpt=modules.get('chatgpt', False),
-            # Остальные модули отключены по умолчанию
-            enable_horoscope=False,
-            enable_anon=False,
-            enable_sms=False
+            enable_anon=modules.get('anon', False),
+            enable_davinci=modules.get('davinci', False)
         )
 
         # АВТОМАТИЧЕСКАЯ НАСТРОЙКА АДМИНА
