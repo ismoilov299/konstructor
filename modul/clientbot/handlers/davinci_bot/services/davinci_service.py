@@ -56,7 +56,32 @@ def get_or_create_davinci_profile(user_id: int, bot_username: str) -> Optional[L
         logger.error(f"Error getting/creating davinci profile: {e}")
         return None
 
+@sync_to_async
+def check_davinci_profile_exists(user_id: int, bot_username: str) -> bool:
+    """Check if davinci profile exists"""
+    try:
+        return LeoMatchModel.objects.filter(
+            user__uid=user_id,
+            bot_username=bot_username
+        ).exists()
+    except Exception as e:
+        logger.error(f"Error checking davinci profile existence: {e}")
+        return False
 
+
+@sync_to_async
+def get_davinci_profile(user_id: int, bot_username: str) -> Optional[LeoMatchModel]:
+    """Get existing davinci profile"""
+    try:
+        return LeoMatchModel.objects.select_related('user').get(
+            user__uid=user_id,
+            bot_username=bot_username
+        )
+    except LeoMatchModel.DoesNotExist:
+        return None
+    except Exception as e:
+        logger.error(f"Error getting davinci profile: {e}")
+        return None
 @sync_to_async
 def update_davinci_profile(user_id: int, bot_username: str, **kwargs) -> Optional[LeoMatchModel]:
     """Update davinci profile"""
