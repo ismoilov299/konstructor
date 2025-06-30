@@ -11,7 +11,6 @@ from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardB
 from asgiref.sync import sync_to_async
 
 from modul.clientbot import shortcuts
-from modul.clientbot.handlers.davinci_bot.handlers.filters import DavinciBotFilter
 from modul.clientbot.handlers.davinci_bot.handlers.states import (
     DavinciRegistration, DavinciEditProfile, DavinciBoostForm
 )
@@ -36,11 +35,13 @@ logger = logging.getLogger(__name__)
 
 
 class DavinciBotFilter:
+
     """Filter for davinci bot functionality"""
 
     async def __call__(self, message: Message, bot: Bot) -> bool:
         bot_db = await shortcuts.get_bot(bot)
-        return shortcuts.have_one_module(bot_db, "leo")
+        print(bot_db," davinci bot filter")
+        return shortcuts.have_one_module(bot_db, "davinci")
 
 
 @client_bot_router.message(F.text == "🫰 Знакомства", DavinciBotFilter())
