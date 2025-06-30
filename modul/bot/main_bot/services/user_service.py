@@ -68,8 +68,8 @@ def get_user_bots(uid: int):
     try:
         return list(Bot.objects.filter(owner__uid=uid).values(
             'id', 'username', 'token', 'bot_enable',
-            'enable_refs', 'enable_leo', 'enable_music', 'enable_kino',
-            'enable_download', 'enable_chatgpt'
+            'enable_refs', 'enable_leo', 'enable_kino',
+            'enable_download', 'enable_chatgpt','enable_davinci'
         ).order_by('-id'))
     except Exception as e:
         logger.error(f"Ошибка при получении ботов пользователя {uid}: {e}")
