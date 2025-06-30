@@ -47,6 +47,7 @@ class DavinciBotFilter:
 @client_bot_router.message(F.text == "🫰 Знакомства", DavinciBotFilter())
 async def davinci_start(message: Message, bot: Bot, state: FSMContext):
     """Main davinci start handler"""
+    print("Starting Davinci bot handler")
     await state.clear()
 
     bot_db = await shortcuts.get_bot(bot)
