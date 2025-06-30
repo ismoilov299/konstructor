@@ -172,6 +172,9 @@ async def set_webhook():
     except Exception as e:
         logger.error(f"Error setting webhook: {e}", exc_info=True)
 
+
+
+# from aiogram import Bot, Dispatcher
 # async def set_webhook():
 #     logger.info("Setting webhook")
 #     try:

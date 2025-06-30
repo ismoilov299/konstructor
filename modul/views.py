@@ -3,35 +3,27 @@ import hmac
 import json
 import logging
 import ssl
-import time
-
 import requests
 from aiohttp import TCPConnector
 from django import forms
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.core.files.base import ContentFile
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.forms import ModelForm
 from django.shortcuts import render, redirect, get_object_or_404
-from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse, HttpResponse
 from django.urls import reverse
-from django.utils import timezone
-from django.utils.text import slugify
+
 from django.views.decorators.csrf import csrf_exempt
 import aiohttp
 import asyncio
-from .loader import bot_session
 from .models import Bot, ClientBotUser, UserTG
 from django.views.decorators.http import require_POST
-from urllib.parse import urlencode
-from .crud import crud_bot
+
 from .config import settings_conf
-from aiogram import Bot as Bot_aiogram
 
 
 def index(request):

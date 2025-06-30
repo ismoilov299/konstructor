@@ -48,6 +48,7 @@ class CustomUserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     uid = models.BigIntegerField(unique=True, null=True, default=random.randint(1000000000, 9999999999))
+
     username = models.CharField(max_length=255, null=True, blank=True, unique=True)
     first_name = models.CharField(max_length=255, null=True, blank=True)
     last_name = models.CharField(max_length=255, null=True, blank=True)
@@ -81,28 +82,22 @@ class Bot(models.Model):
     mandatory_subscription = models.BooleanField(default=False)
     enable_promotion = models.BooleanField(default=False)
     enable_child_bot = models.BooleanField(default=False)
-    enable_music = models.BooleanField(default=False)
     enable_download = models.BooleanField(default=False)
     enable_leo = models.BooleanField(default=False)
     enable_chatgpt = models.BooleanField(default=False)
-    enable_horoscope = models.BooleanField(default=False)
     enable_anon = models.BooleanField(default=False)
-    enable_sms = models.BooleanField(default=False)
     enable_refs = models.BooleanField(default=False)
     enable_kino = models.BooleanField(default=False)
+    enable_davinci = models.BooleanField(default=False)
 
     def __str__(self):
         enabled_modules = []
         module_names = {
-            'enable_promotion': 'Промоушен',
-            'enable_child_bot': 'Дочерний бот',
-            'enable_music': 'Музыка',
+            'enable_davinci': 'Davinci',
             'enable_download': 'Загрузка',
             'enable_leo': 'Лео',
             'enable_chatgpt': 'ChatGPT',
-            'enable_horoscope': 'Гороскоп',
             'enable_anon': 'Анонимный чат',
-            'enable_sms': 'SMS',
             'enable_refs': 'Рефералы',
             'enable_kino': 'Кино'
         }
@@ -213,7 +208,8 @@ class DownloadAnalyticsModel(models.Model):
 
 
 class LeoMatchModel(models.Model):
-    user = models.ForeignKey(UserTG, on_delete=models.CASCADE)
+    # davinci_user_id = models.BigIntegerField(unique=True, null=True, default=None)  # davinci_user_id o'rniga
+    user = models.ForeignKey(User, on_delete=models.CASCADE)  # UserTG → User
     photo = models.CharField(max_length=1024)
     media_type = models.CharField(max_length=50, choices=MediaTypeEnum.choices)
     sex = models.CharField(max_length=50, choices=SexEnum.choices)
@@ -228,18 +224,42 @@ class LeoMatchModel(models.Model):
     count_likes = models.IntegerField(default=0)
     blocked = models.BooleanField(default=False)
 
+    # Davinchi change
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    admin_checked = models.BooleanField(default=False)  # davinci_admin_checked o'rniga
+    couple_notifications_stopped = models.BooleanField(default=False)  # davinci_couple_notifications_stopped o'rniga
+    rate_list = models.TextField(default='|', blank=True)  # davinci_rate_list o'rniga
+    gallery = models.TextField(default='[]', blank=True)  # davinci_gallery o'rniga
+
     def __str__(self):
         return self.full_name
+
+    class Meta:
+        # To ensure that each user can only have one LeoMatchModel with a specific bot_username
+        unique_together = ['user', 'bot_username']
 
 
 class LeoMatchLikesBasketModel(models.Model):
     from_user = models.ForeignKey(LeoMatchModel, related_name="leo_match_from_user", on_delete=models.CASCADE)
     to_user = models.ForeignKey(LeoMatchModel, related_name="leo_match_to_user", on_delete=models.CASCADE)
-    message = models.CharField(max_length=1024, null=True)
+    message = models.CharField(max_length=1024, null=True, blank=True)
     done = models.BooleanField(default=False)
+
+    # Yangi maydonlar
+    created_at = models.DateTimeField(auto_now_add=True)
+    like_type = models.CharField(max_length=10, default='like')  # like, dislike, super_like
+    media_file_id = models.CharField(max_length=255, null=True, blank=True)  # video message uchun
+    media_type = models.CharField(max_length=20, null=True, blank=True)  # video, photo
+    is_mutual = models.BooleanField(default=False)  # o'zaro like
+    viewed = models.BooleanField(default=False)  # ko'rildi
 
     def __str__(self):
         return f"From {self.from_user} to {self.to_user}"
+
+    class Meta:
+        # Bir userdan ikkinchisiga faqat bitta aktiv like
+        unique_together = ['from_user', 'to_user']
 
 
 class GPTRecordModel(models.Model):
@@ -250,6 +270,19 @@ class GPTRecordModel(models.Model):
 
     def __str__(self):
         return f"{self.type} - {self.message}"
+
+
+class DavinciStopWords(models.Model):
+    """Davinci da taqiqlangan so'zlar"""
+    word = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Stop Word: {self.word}"
+
+    class Meta:
+        db_table = 'davinci_stopwords'
 
 
 class TaskModel(models.Model):

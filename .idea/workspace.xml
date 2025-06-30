@@ -4,7 +4,28 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="703cb133-094c-4fbb-b47c-2aee762a8e0e" name="Changes" comment="qwe" />
+    <list default="true" id="703cb133-094c-4fbb-b47c-2aee762a8e0e" name="Changes" comment="qwe">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot_api/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot_api/views.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/clientbot/handlers/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/data/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/data/callback_datas.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/data/leo558618720.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/data/leo889121031.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/data/state.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/profile.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/profiles.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/registration.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/shorts.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/handlers/start.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/keyboards/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/keyboards/inline_kb.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/keyboards/reply_kb.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/clientbot/handlers/leomatch/shortcuts.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/modul/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/modul/views.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
