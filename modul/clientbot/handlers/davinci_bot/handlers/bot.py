@@ -579,4 +579,8 @@ async def handle_anket_gallery(message: types.Message, state: FSMContext):
     else:
         await message.answer(f"Фото добавлено - {len(gallery)} из 3. Еще одно фото или видео?")
 
-# Error handlers va boshqa qo'shimcha funksiyalar...
+
+@client_bot_router.message(F.text == "🫰 Знакомства")
+async def handle_dating(message: types.Message):
+    """Обработка функции знакомств"""
+    await message.answer("Добро пожаловать в раздел знакомств! 💕")
