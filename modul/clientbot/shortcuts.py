@@ -50,6 +50,7 @@ def have_one_module(bot, module_name: str):
         "enable_sms",
         "enable_refs",
         "enable_kino"
+        "enable_davinci",
     ]
     if getattr(bot, f"enable_{module_name}"):
         enabled_count = sum(1 for x in modules if getattr(bot, x, False))

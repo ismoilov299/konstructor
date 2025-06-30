@@ -24,6 +24,7 @@ from modul.clientbot.handlers.davinci_bot.services.davinci_service import (
     get_davinci_profiles_for_viewing, rate_profile, check_mutual_like,
     get_likes_received, get_matches
 )
+from modul.loader import client_bot_router
 from modul.models import LeoMatchModel, LeoMatchLikesBasketModel, DavinciStopWords
 from modul.clientbot.handlers.davinci_bot.utils.validators import (
     validate_age, validate_name, validate_about_me, check_stop_words
@@ -31,7 +32,7 @@ from modul.clientbot.handlers.davinci_bot.utils.validators import (
 
 logger = logging.getLogger(__name__)
 
-davinci_router = Router()
+
 
 
 class DavinciBotFilter:
@@ -42,7 +43,7 @@ class DavinciBotFilter:
         return shortcuts.have_one_module(bot_db, "leo")
 
 
-@davinci_router.message(F.text == "🫰 Знакомства", DavinciBotFilter())
+@client_bot_router.message(F.text == "🫰 Знакомства", DavinciBotFilter())
 async def davinci_start(message: Message, bot: Bot, state: FSMContext):
     """Main davinci start handler"""
     await state.clear()
@@ -71,7 +72,7 @@ async def davinci_start(message: Message, bot: Bot, state: FSMContext):
         )
 
 
-@davinci_router.message(F.text == "👤 Моя анкета", DavinciBotFilter())
+@client_bot_router.message(F.text == "👤 Моя анкета", DavinciBotFilter())
 async def show_my_profile(message: Message, bot: Bot):
     """Show user's profile"""
     bot_db = await shortcuts.get_bot(bot)
@@ -109,7 +110,7 @@ async def show_my_profile(message: Message, bot: Bot):
         )
 
 
-@davinci_router.message(F.text == "🚀 Смотреть анкеты", DavinciBotFilter())
+@client_bot_router.message(F.text == "🚀 Смотреть анкеты", DavinciBotFilter())
 async def view_profiles(message: Message, bot: Bot, state: FSMContext):
     """Start viewing profiles"""
     bot_db = await shortcuts.get_bot(bot)
@@ -162,7 +163,7 @@ async def show_profile_for_rating(message: Message, profile: LeoMatchModel, stat
         )
 
 
-@davinci_router.message(F.text == "👑 Boost", DavinciBotFilter())
+@client_bot_router.message(F.text == "👑 Boost", DavinciBotFilter())
 async def boost_menu(message: Message, bot: Bot):
     """Show boost options"""
     await message.answer(
@@ -176,7 +177,7 @@ async def boost_menu(message: Message, bot: Bot):
 
 
 # Registration handlers
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_start))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_start))
 async def start_registration(message: Message, state: FSMContext):
     """Start registration process"""
     await message.answer(
@@ -186,7 +187,7 @@ async def start_registration(message: Message, state: FSMContext):
     await state.set_state(DavinciRegistration.waiting_for_name)
 
 
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_name))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_name))
 async def process_name(message: Message, state: FSMContext):
     """Process name input"""
     name = message.text.strip()
@@ -212,7 +213,7 @@ async def process_name(message: Message, state: FSMContext):
     await state.set_state(DavinciRegistration.waiting_for_age)
 
 
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_age))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_age))
 async def process_age(message: Message, state: FSMContext):
     """Process age input"""
     try:
@@ -244,7 +245,7 @@ async def process_age(message: Message, state: FSMContext):
     await state.set_state(DavinciRegistration.waiting_for_sex)
 
 
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_sex))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_sex))
 async def process_sex(message: Message, state: FSMContext):
     """Process gender selection"""
     text = message.text.strip()
@@ -276,7 +277,7 @@ async def process_sex(message: Message, state: FSMContext):
     await state.set_state(DavinciRegistration.waiting_for_search_preference)
 
 
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_search_preference))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_search_preference))
 async def process_search_preference(message: Message, state: FSMContext):
     """Process search preference"""
     text = message.text.strip()
@@ -299,7 +300,7 @@ async def process_search_preference(message: Message, state: FSMContext):
     await state.set_state(DavinciRegistration.waiting_for_city)
 
 
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_city))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_city))
 async def process_city(message: Message, state: FSMContext):
     """Process city input"""
     city = message.text.strip()
@@ -325,7 +326,7 @@ async def process_city(message: Message, state: FSMContext):
     await state.set_state(DavinciRegistration.waiting_for_about)
 
 
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_about))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_about))
 async def process_about(message: Message, state: FSMContext):
     """Process about me text"""
     about_me = message.text.strip()
@@ -351,7 +352,7 @@ async def process_about(message: Message, state: FSMContext):
     await state.set_state(DavinciRegistration.waiting_for_photo)
 
 
-@davinci_router.message(StateFilter(DavinciRegistration.waiting_for_photo))
+@client_bot_router.message(StateFilter(DavinciRegistration.waiting_for_photo))
 async def process_photo(message: Message, state: FSMContext, bot: Bot):
     """Process photo upload"""
     if not message.photo:
@@ -398,7 +399,7 @@ async def process_photo(message: Message, state: FSMContext, bot: Bot):
 
 
 # Callback handlers
-@davinci_router.callback_query(F.data == "davinci_like")
+@client_bot_router.callback_query(F.data == "davinci_like")
 async def process_like(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Process like action"""
     data = await state.get_data()
@@ -434,7 +435,7 @@ async def process_like(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await show_next_profile(callback.message, user_profile, bot_db.username, state)
 
 
-@davinci_router.callback_query(F.data == "davinci_dislike")
+@client_bot_router.callback_query(F.data == "davinci_dislike")
 async def process_dislike(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Process dislike action"""
     data = await state.get_data()
