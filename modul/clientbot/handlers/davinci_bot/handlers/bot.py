@@ -39,7 +39,7 @@ class DavinciBotFilter:
 
     async def __call__(self, message: Message, bot: Bot) -> bool:
         bot_db = await shortcuts.get_bot(bot)
-        return shortcuts.have_one_module(bot_db, "davinci")
+        return shortcuts.have_one_module(bot_db, "leo")
 
 
 @davinci_router.message(F.text == "🫰 Знакомства", DavinciBotFilter())
