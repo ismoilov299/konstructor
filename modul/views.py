@@ -103,7 +103,8 @@ def get_bot_info(request, id):
             'enable_chatgpt': 'chatgpt',
             'enable_music': 'music',
             'enable_sms': 'sms',
-            'enable_horoscope': 'horoscope'
+            'enable_horoscope': 'horoscope',
+            'enable_davinci': 'davinci'
         }
 
         active_module = 'no_module'
@@ -157,6 +158,7 @@ class BotForm(ModelForm):
         ('download', 'All save бот'),
         ('anon', 'Аноним чат бот'),
         ('chatgpt', 'ChatGPT бот'),
+        ('davinci', 'Davinci бот')
     ]
     module = forms.ChoiceField(choices=MODULE_CHOICES, required=True)
 
@@ -200,11 +202,17 @@ def save_token(request):
                 owner=request.user,
                 username=bot_username,
                 enable_leo=module == 'leo',
+                enable_davinci=module == 'davinci',
                 enable_refs=module == 'refs',
+
                 enable_kino=module == 'kino',
+
                 enable_download=module == 'download',
                 enable_anon=module == 'anon',
                 enable_chatgpt=module == 'chatgpt',
+
+
+
             )
 
             try:
@@ -389,7 +397,7 @@ def update_bot_settings(request):
         module_flags = [
             'enable_music', 'enable_download', 'enable_leo',
             'enable_chatgpt', 'enable_horoscope', 'enable_anon',
-            'enable_sms', 'enable_refs', 'enable_kino'
+            'enable_sms', 'enable_refs', 'enable_kino','enable_davinci'
         ]
 
         for flag in module_flags:
@@ -403,9 +411,7 @@ def update_bot_settings(request):
             'download': 'enable_download',
             'anon': 'enable_anon',
             'chatgpt': 'enable_chatgpt',
-            'music': 'enable_music',
-            'sms': 'enable_sms',
-            'horoscope': 'enable_horoscope'
+            'davinci': 'enable_davinci'
         }
 
         if module != 'no_module':

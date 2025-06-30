@@ -43,35 +43,35 @@ class DavinciBotFilter:
         print(bot_db," davinci bot filter")
         return shortcuts.have_one_module(bot_db, "davinci")
 
+def davinchi_bot_handlers():
+    @client_bot_router.message(F.text == "🫰 Знакомства", DavinciBotFilter())
+    async def davinci_start(message: Message, bot: Bot, state: FSMContext):
+        """Main davinci start handler"""
+        print("Starting Davinci bot handler")
+        await state.clear()
 
-@client_bot_router.message(F.text == "🫰 Знакомства", DavinciBotFilter())
-async def davinci_start(message: Message, bot: Bot, state: FSMContext):
-    """Main davinci start handler"""
-    print("Starting Davinci bot handler")
-    await state.clear()
-
-    bot_db = await shortcuts.get_bot(bot)
-    user_profile = await get_or_create_davinci_profile(
-        user_id=message.from_user.id,
-        bot_username=bot_db.username
-    )
-
-    if not user_profile or not user_profile.admin_checked:
-        # Redirect to registration if no profile or not approved
-        await message.answer(
-            "👋 Добро пожаловать в Davinci знакомства!\n\n"
-            "Давайте создадим вашу анкету для поиска интересных людей.",
-            reply_markup=await get_registration_kb()
+        bot_db = await shortcuts.get_bot(bot)
+        user_profile = await get_or_create_davinci_profile(
+            user_id=message.from_user.id,
+            bot_username=bot_db.username
         )
-        await state.set_state(DavinciRegistration.waiting_for_start)
-    else:
-        # Show main menu
-        await message.answer(
-            f"🫰 Привет, {user_profile.full_name}!\n\n"
-            "Добро пожаловать в Davinci знакомства! 💫\n"
-            "Что будем делать?",
-            reply_markup=await get_davinci_main_menu()
-        )
+
+        if not user_profile or not user_profile.admin_checked:
+            # Redirect to registration if no profile or not approved
+            await message.answer(
+                "👋 Добро пожаловать в Davinci знакомства!\n\n"
+                "Давайте создадим вашу анкету для поиска интересных людей.",
+                reply_markup=await get_registration_kb()
+            )
+            await state.set_state(DavinciRegistration.waiting_for_start)
+        else:
+            # Show main menu
+            await message.answer(
+                f"🫰 Привет, {user_profile.full_name}!\n\n"
+                "Добро пожаловать в Davinci знакомства! 💫\n"
+                "Что будем делать?",
+                reply_markup=await get_davinci_main_menu()
+            )
 
 
 @client_bot_router.message(F.text == "👤 Моя анкета", DavinciBotFilter())
