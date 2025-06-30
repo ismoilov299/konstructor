@@ -2,6 +2,4 @@
 # from .cancel_state import client_bot_router
 # from .chatgpt import client_bot_router
 # from .leomatch import client_bot_router
-from .davinci_bot import client_bot_router
 
-__all__ = ["client_bot_router"]
