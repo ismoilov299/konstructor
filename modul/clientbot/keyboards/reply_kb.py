@@ -5,12 +5,12 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
 from asgiref.sync import sync_to_async
 
 from modul.clientbot import strings, shortcuts
-from modul.clientbot.shortcuts import get_current_bot,  get_bot_by_token
+from modul.clientbot.shortcuts import get_current_bot, get_bot_by_token
 from modul.models import Bot
 from aiogram import Bot as CBot
 from modul.config import settings_conf
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 MUSIC_MENU_BUTTONS_TEXT = [
     ("🎙Лучшая музыка"),
@@ -30,6 +30,13 @@ CHATGPT_BUTTONS_TEXT = [
     ("🔍 Гугл поиск"),
     ("🔋 Баланс"),
     ("ℹ️ Помощь"),
+]
+
+DAVINCI_BUTTONS_TEXT = [
+    ("🫰 Знакомства"),
+    ("👤 Моя анкета"),
+    ("🚀 Смотреть анкеты"),
+    ("👑 Boost"),
 ]
 
 HOROSCOPE_BUTTONS_TEXT = [
@@ -74,9 +81,6 @@ def yes_no():
     return builder.as_markup(resize_keyboard=True)
 
 
-
-
-
 async def turn_bot_data(attr: str, bot: CBot):
     bot = await get_current_bot()
     setattr(bot, attr, not getattr(bot, attr))
@@ -108,11 +112,14 @@ async def gen_buttons(current_bot: Bot, uid: int):
         btns.append(("💰 Баланс"))
         btns.append(("👤 Реферальная система"))
         btns.append(("🌍 Поменять язык"))
-    if bot_db.enable_music:
-        if have_one_module(bot_db, "music"):
-            [btns.append(i) for i in MUSIC_MENU_BUTTONS_TEXT]
-        else:
-            btns.append(("🎧 Музыка"))
+
+    # enable_music o'chirilgan - comment qilamiz
+    # if bot_db.enable_music:
+    #     if have_one_module(bot_db, "music"):
+    #         [btns.append(i) for i in MUSIC_MENU_BUTTONS_TEXT]
+    #     else:
+    #         btns.append(("🎧 Музыка"))
+
     if bot_db.enable_download:
         if not have_one_module(bot_db, "download"):
             btns.append(("🎥 Скачать видео"))
@@ -120,11 +127,14 @@ async def gen_buttons(current_bot: Bot, uid: int):
         pass
     if bot_db.enable_leo:
         btns.append(("🫰 Знакомства"))
-    if bot_db.enable_horoscope:
-        if have_one_module(bot_db, "horoscope"):
-            [btns.append(i) for i in HOROSCOPE_BUTTONS_TEXT]
+
+    # enable_horoscope -> enable_davinci o'zgartirildi
+    if bot_db.enable_davinci:
+        if have_one_module(bot_db, "davinci"):
+            [btns.append(i) for i in DAVINCI_BUTTONS_TEXT]
         else:
-            btns.append(("♈️ Гороскоп"))
+            btns.append(("🫰 Знакомства"))
+
     if bot_db.enable_promotion:
         btns.append(("ℹ️ Информация"))
     if bot_db.enable_refs:
@@ -142,21 +152,24 @@ async def gen_buttons(current_bot: Bot, uid: int):
 
     return btns
 
-# have_one_module funksiyasini ham o'zgartiramiz
+
+# have_one_module funksiyasini ham tuzatamiz
 def have_one_module(bot_db, module_name: str):
     modules = [
         "enable_promotion",
-        "enable_music",
+        # "enable_music",  # O'chirilgan
         "enable_download",
         "enable_leo",
         "enable_chatgpt",
-        "enable_horoscope",
+        "enable_davinci",  # enable_horoscope o'rniga
         "enable_anon",
-        "enable_sms",
+        # "enable_sms",  # O'chirilgan
     ]
     if getattr(bot_db, f"enable_{module_name}"):
-        return [getattr(bot_db, x) for x in modules].count(True) == 1
+        enabled_count = sum(1 for x in modules if getattr(bot_db, x, False))
+        return enabled_count == 1
     return False
+
 
 async def main_menu(uid: int, bot: Bot):
     builder = ReplyKeyboardBuilder()
