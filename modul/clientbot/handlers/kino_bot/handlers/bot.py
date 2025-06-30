@@ -20,7 +20,7 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 import re
-
+from modul.clientbot.handlers.davinci_bot import *
 from yt_dlp import YoutubeDL
 
 from modul import models
