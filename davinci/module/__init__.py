@@ -1,0 +1,113 @@
+
+import os.path
+
+if os.path.isdir("module"):
+    for module_one in os.listdir('module'):
+        if module_one == '__init__.py' or module_one == '__pycache__':
+            continue
+        else:
+            module_import = module_one.split('.')[0]
+            if module_import == 'Zuser':
+                from . import Zuser
+            elif module_import == 'Zadmin':
+                from . import Zadmin
+            elif module_import == 'Zworker':
+                from . import Zworker
+            elif module_import == 'bot':
+                from . import bot
+            elif module_import == 'op':
+                from . import op
+            elif module_import == 'kino':
+                from . import kino
+            elif module_import == 'kinoSmart':
+                from . import kinoSmart
+            elif module_import == 'kinoFilms':
+                from . import kinoFilms
+            elif module_import == 'clicker':
+                from . import clicker
+            elif module_import == 'anon':
+                from . import anon
+            elif module_import == 'davinci':
+                from . import davinci
+            elif module_import == 'rating':
+                from . import rating
+            elif module_import == 'magic':
+                from . import magic
+            elif module_import == 'book':
+                from . import book
+            elif module_import == 'sea':
+                from . import sea
+            elif module_import == 'pay':
+                from . import pay
+            elif module_import == 'payTime':
+                from . import payTime
+            elif module_import == 'payGood':
+                from . import payGood
+            elif module_import == 'payRating':
+                from . import payRating
+            elif module_import == 'mailingBot':
+                from . import mailingBot
+            elif module_import == 'mailingChat':
+                from . import mailingChat
+            elif module_import == 'mailingAccChat':
+                from . import mailingAccChat
+            elif module_import == 'info':
+                from . import info
+            elif module_import == 'valentine':
+                from . import valentine
+            elif module_import == 'infoMini':
+                from . import infoMini
+            elif module_import == 'welcome':
+                from . import welcome
+            elif module_import == 'welcDif':
+                from . import welcDif
+            elif module_import == 'oneMessage':
+                from . import oneMessage
+            elif module_import == 'referal':
+                from . import referal
+            elif module_import == 'LoadInsta':
+                from . import LoadInsta
+            elif module_import == 'LoadTiktok':
+                from . import LoadTiktok
+            elif module_import == 'LoadYoutube':
+                from . import LoadYoutube
+            elif module_import == 'LoadYoutube2':
+                from . import LoadYoutube2
+            elif module_import == 'load_big_file':
+                from . import load_big_file
+            elif module_import == 'antiSpam':
+                from . import antiSpam
+            elif module_import == 'showing':
+                from . import showing
+            elif module_import == 'button':
+                from . import button
+            elif module_import == 'font':
+                from . import font
+            elif module_import == 'sticker':
+                from . import sticker
+            elif module_import == 'theme':
+                from . import theme
+            elif module_import == 'background':
+                from . import background
+            elif module_import == 'emoji':
+                from . import emoji
+            elif module_import == 'lang':
+                from . import lang
+            elif module_import == 'alertStart':
+                from . import alertStart
+            elif module_import == 'bot':
+                from . import book
+            elif module_import == 'advStart':
+                from . import advStart
+            elif module_import == 'advOp':
+                from . import advOp
+            elif module_import == 'advGramads':
+                from . import advGramads
+            elif module_import == 'advFlyer':
+                from . import advFlyer
+            elif module_import == 'advSocialjet':
+                from . import advSocialjet
+            elif module_import == 'chat':
+                from . import chat
+
+# from . import info, admin #,Download_Instagram, Download_Youtube
