@@ -297,7 +297,7 @@ async def process_search_preference(message: Message, state: FSMContext):
     await state.update_data(which_search=which_search)
     await message.answer(
         "🏙️ Введите ваш город:",
-        reply_markup=shortcuts.cancel()
+        # reply_markup=shortcuts.cancel()
     )
     await state.set_state(DavinciRegistration.waiting_for_city)
 
