@@ -1221,6 +1221,13 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     text = "Добро пожаловать, {hello}".format(hello=html.escape(message.from_user.full_name))
     kwargs = {}
 
+    if shortcuts.have_one_module(bot_db, "leo"):
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🫰 Знакомства")
+        builder.button(text="💸Заработать")
+        builder.adjust(2)
+        kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
+
     if shortcuts.have_one_module(bot_db, "download"):
         builder = ReplyKeyboardBuilder()
         builder.button(text='💸Заработать')
