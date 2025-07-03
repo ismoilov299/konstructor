@@ -77,7 +77,7 @@ def init_bot_handlers():
         except Exception as e:
             logger.error(f"Error in cmd_start for user {user.id}: {e}")
             await message.answer(
-                "❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.\n"
+                "❌ Произошла ошибка. Попробуйте еще раз.\n"
                 "/start",
                 parse_mode="HTML"
             )
@@ -118,10 +118,10 @@ def init_bot_handlers():
             f"• ⚙️ Управлять ими профессионально\n"
             f"• 📊 Просматривать подробную статистику\n"
             f"• 💰 Зарабатывать на рефералах\n\n"
-            f"🎯 <b>Доступно 9 модулей:</b>\n"
-            f"💸 Рефералы • 🎬 Кино • 🎵 Музыка • 📥 Загрузчик\n"
-            f"💬 ChatGPT • ❤️ Знакомства • 🔮 Гороскоп\n"
-            f"👤 Анонимный чат • 📱 SMS сервис\n\n"
+            f"🎯 <b>Доступно 6 модулей:</b>\n"
+            f"💸 Рефералы • 🎬 Кино  • 📥 Загрузчик\n"
+            f"💬 ChatGPT • ❤️ Знакомства • \n"
+            f"👤 Анонимный чат • \n\n"
             f"<b>Для начала зарегистрируйтесь:</b>",
             reply_markup=kb,
             parse_mode="HTML"
@@ -212,8 +212,8 @@ def init_bot_handlers():
         await callback.message.edit_text(
             faq_text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="❓ Задать вопрос", url="https://t.me/support_username")],
-                [InlineKeyboardButton(text="📖 Инструкция", url="https://docs.example.com")],
+                [InlineKeyboardButton(text="❓ Задать вопрос", url="https://t.me/ismoilov299")],
+                [InlineKeyboardButton(text="📖 Инструкция", url="https://ismoilov299.uz")],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main")]
             ]),
             parse_mode="HTML"
