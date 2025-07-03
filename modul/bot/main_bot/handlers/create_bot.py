@@ -183,21 +183,14 @@ async def show_module_info(callback: CallbackQuery, state: FSMContext):
 
     text = f"{info['description']}"
 
-    # Agar modul mavjud bo'lsa, yaratish tugmasini ko'rsatamiz
-    if info.get('available', False):
-        # Сохраняем выбранный модуль в state
-        await state.update_data(selected_module=module_key)
+    # Сохраняем выбранный модуль в state (барча модуллар учун)
+    await state.update_data(selected_module=module_key)
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⚙️ Создать", callback_data="start_create_with_module")],
-            [InlineKeyboardButton(text="◀️ Назад к модулям", callback_data="create_bot")]
-        ])
-    else:
-        # Agar modul mavjud bo'lmasa, faqat orqaga qaytish tugmasini ko'rsatamiz
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔔 Уведомить о запуске", callback_data=f"notify_launch:{module_key}")],
-            [InlineKeyboardButton(text="◀️ Назад к модулям", callback_data="create_bot")]
-        ])
+    # Barcha modullar uchun "⚙️ Создать" tugmasini ko'rsatamiz
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚙️ Создать", callback_data="start_create_with_module")],
+        [InlineKeyboardButton(text="◀️ Назад к модулям", callback_data="create_bot")]
+    ])
 
     await callback.message.edit_text(
         text,
@@ -205,28 +198,6 @@ async def show_module_info(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML"
     )
     await callback.answer()
-
-
-@create_bot_router.callback_query(F.data.startswith("notify_launch:"))
-async def notify_module_launch(callback: CallbackQuery, state: FSMContext):
-    """Уведомление о запуске модуля"""
-    module_key = callback.data.split(":")[1]
-
-    module_names = {
-        'leo': '💞 Дайвинчик',
-        'music': '💬 Asker Бот',
-        'download': '💾 DownLoader',
-        'chatgpt': '💡 ChatGPT'
-    }
-
-    module_name = module_names.get(module_key, 'модуль')
-
-    await callback.answer(
-        f"🔔 Вы будете уведомлены, когда {module_name} станет доступен!",
-        show_alert=True
-    )
-
-
 
 # @create_bot_router.callback_query(F.data.startswith("module_info:"))
 # async def show_module_info(callback: CallbackQuery, state: FSMContext):
@@ -346,9 +317,72 @@ async def notify_module_launch(callback: CallbackQuery, state: FSMContext):
 #     await callback.answer()
 
 
+# @create_bot_router.callback_query(F.data == "start_create_with_module")
+# async def start_create_with_module(callback: CallbackQuery, state: FSMContext):
+#     """Показ инструкции и запрос токена"""
+#     await state.set_state(CreateBotStates.waiting_for_token)
+#
+#     text = (
+#         "📋 <b>Следуйте инструкции, чтобы создать бота:</b>\n\n"
+#         "1️⃣ Запустите @BotFather\n"
+#         "2️⃣ Нажмите кнопку /start\n"
+#         "3️⃣ Введите команду /newbot\n"
+#         "4️⃣ Придумайте название для бота\n"
+#         "5️⃣ Создайте уникальный ник с окончанием *bot \n"
+#         "    (например: @JustRefBot)\n"
+#         "6️⃣ Получите HTTP API токен, скопируйте его и отправьте в это диалоговое окно ⬇️\n\n"
+#         "🔤 <b>Отправьте токен:</b>"
+#     )
+#
+#     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+#         [InlineKeyboardButton(text="◀️ Назад к модулям", callback_data="create_bot")]
+#     ])
+#
+#     await callback.message.edit_text(
+#         text,
+#         reply_markup=keyboard,
+#         parse_mode="HTML"
+#     )
+#     await callback.answer()
+
 @create_bot_router.callback_query(F.data == "start_create_with_module")
 async def start_create_with_module(callback: CallbackQuery, state: FSMContext):
     """Показ инструкции и запрос токена"""
+    data = await state.get_data()
+    selected_module = data.get('selected_module')
+
+    # Доступные модули
+    available_modules = ['refs', 'kino']
+
+    if selected_module not in available_modules:
+        module_names = {
+            'leo': '💞 Дайвинчик',
+            'music': '💬 Asker Бот',
+            'download': '💾 DownLoader',
+            'chatgpt': '💡 ChatGPT'
+        }
+
+        module_name = module_names.get(selected_module, 'Модуль')
+
+        await callback.message.edit_text(
+            f"⚠️ <b>{module_name} временно недоступен</b>\n\n"
+            f"🚧 <b>Модуль находится в разработке</b>\n\n"
+            f"📅 <b>Ожидаемый запуск:</b> В ближайшие дни\n"
+            # f"🔔 <b>Уведомления:</b> Вы получите сообщение, как только модуль станет доступен\n\n"
+            f"💡 <b>Пока что вы можете:</b>\n"
+            f"• Создать реферальный бот 👥\n"
+            f"• Создать кинотеатр бот 🎥\n\n"
+            f"Спасибо за понимание! 🙏",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад к модулям", callback_data="create_bot")],
+                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
+            ]),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        return
+
+    # Agar modul mavjud bo'lsa, odatdagidek davom etamiz
     await state.set_state(CreateBotStates.waiting_for_token)
 
     text = (
