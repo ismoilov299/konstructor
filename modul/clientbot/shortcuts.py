@@ -49,7 +49,7 @@ def have_one_module(bot, module_name: str):
         "enable_anon",
         "enable_sms",
         "enable_refs",
-        "enable_kino"
+        "enable_kino",
         "enable_davinci",
     ]
     if getattr(bot, f"enable_{module_name}"):
