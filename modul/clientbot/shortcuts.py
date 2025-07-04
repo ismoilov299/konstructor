@@ -79,6 +79,7 @@ def get_bot_by_token(token: str):
     return models.Bot.objects.filter(token=token).select_related('owner').first()
 
 
+
 @sync_to_async
 def get_bot_owner(bot: Bot):
     current_bot = get_current_bot(bot)
