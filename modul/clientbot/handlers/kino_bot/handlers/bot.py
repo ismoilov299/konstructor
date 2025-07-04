@@ -913,15 +913,15 @@ async def start_kino_bot(message: Message, state: FSMContext, bot: Bot):
         if not shortcuts.have_one_module(bot_db, "kino"):
             return
 
-        sub_status = await check_subs(message.from_user.id, bot)
-        if not sub_status:
-            kb = await get_subs_kb(bot)
-            await message.answer(
-                '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
-                reply_markup=kb,
-                parse_mode="HTML"
-            )
-            return
+        # sub_status = await check_subs(message.from_user.id, bot)
+        # if not sub_status:
+        #     kb = await get_subs_kb(bot)
+        #     await message.answer(
+        #         '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы:</b>',
+        #         reply_markup=kb,
+        #         parse_mode="HTML"
+        #     )
+        #     return
 
         await state.set_state(SearchFilmForm.query)
         earn_kb = ReplyKeyboardBuilder()
