@@ -41,7 +41,7 @@ async def create_bot_menu(callback: CallbackQuery, state: FSMContext):
     modules = [
         ("refs", "Реферальный 👥"),
         ("leo", "Дайвинчик 💞"),
-        ("music", "Asker Бот 💬"),
+        ("anon", "Asker Бот 💬"),
         ("kino", "Кинотеатр 🎥"),
         ("download", "DownLoader 💾"),
         ("chatgpt", "ChatGPT 💡")
