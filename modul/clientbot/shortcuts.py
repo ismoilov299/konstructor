@@ -40,14 +40,10 @@ def get_fsm_context(bot: Bot, chat_id: int, user_id: int = None):
 
 def have_one_module(bot, module_name: str):
     modules = [
-        "enable_promotion",
-        "enable_music",
         "enable_download",
         "enable_leo",
         "enable_chatgpt",
-        "enable_horoscope",
         "enable_anon",
-        "enable_sms",
         "enable_refs",
         "enable_kino",
         "enable_davinci",
