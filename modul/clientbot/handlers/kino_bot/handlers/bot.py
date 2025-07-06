@@ -1818,140 +1818,137 @@ def get_best_formats(formats):
     return video_formats, audio_format
 
 
-async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
-    status_message = await message.answer("⏳ Получаю информацию о видео...")
-
+async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
+    """Main YouTube handler"""
     try:
-        # Store the URL in state
-        await state.update_data(youtube_url=url)
+        # Initial processing message
+        progress_msg = await message.answer("🔍 Анализирую YouTube видео...")
 
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-        }
+        # Extract video info and formats
+        try:
+            video_info, formats = await get_youtube_formats(url)
+        except Exception as e:
+            error_msg = str(e).lower()
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = await asyncio.get_event_loop().run_in_executor(
-                executor,
-                lambda: ydl.extract_info(url, download=False)
-            )
-
-            title = info.get('title', 'Video')
-            formats = info.get('formats', [])
-
-            # Get formats
-            video_formats = []
-            audio_format = None
-            seen_qualities = set()
-
-            # First collect all video formats
-            for fmt in formats:
-                if not isinstance(fmt, dict):
-                    continue
-
-                vcodec = fmt.get('vcodec', 'none')
-                acodec = fmt.get('acodec', 'none')
-
-                # Video format (either with audio or video-only)
-                if vcodec != 'none':
-                    height = fmt.get('height', 0)
-                    if height and height not in seen_qualities:
-                        seen_qualities.add(height)
-                        video_formats.append(fmt)
-                # Get best audio format
-                elif acodec != 'none' and vcodec == 'none':
-                    if not audio_format or (fmt.get('abr', 0) > audio_format.get('abr', 0)):
-                        audio_format = fmt
-
-            # Sort video formats by quality
-            video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
-
-            # Build keyboard with format choices
-            builder = InlineKeyboardBuilder()
-            valid_formats = []
-
-            # Add all video formats
-            for fmt in video_formats:
-                if not fmt.get('format_id'):
-                    continue
-
-                height = fmt.get('height', 0)
-                quality_text = f"{height}p" if height else fmt.get('format_note', 'Medium')
-
-                # Check if format has both audio and video
-                vcodec = fmt.get('vcodec', 'none')
-                acodec = fmt.get('acodec', 'none')
-                format_text = "🎬 " if vcodec != 'none' and acodec != 'none' else "🎥 "
-
-                filesize = fmt.get('filesize', 0)
-                if not filesize:
-                    filesize = fmt.get('filesize_approx', 0)
-
-                filesize_text = ""
-                if filesize > 0:
-                    size_mb = filesize / (1024 * 1024)
-                    if size_mb > 1024:
-                        filesize_text = f" ({size_mb / 1024:.1f} GB)"
-                    else:
-                        filesize_text = f" ({size_mb:.1f} MB)"
-
-                valid_formats.append(fmt)
-                builder.button(
-                    text=f"{format_text}{quality_text}{filesize_text}",
-                    callback_data=FormatCallback(
-                        format_id=fmt['format_id'],
-                        type='video',
-                        quality=str(quality_text),
-                        index=len(valid_formats) - 1
-                    ).pack()
-                )
-
-            # Finally add the best audio format at the end
-            if audio_format and audio_format.get('format_id'):
-                # Get audio quality info
-                abr = audio_format.get('abr', 0)
-                audio_quality = f"{abr}Kbps" if abr else "Аудио"
-
-                # Get file size
-                filesize = audio_format.get('filesize', 0)
-                if not filesize:
-                    filesize = audio_format.get('filesize_approx', 0)
-
-                filesize_text = ""
-                if filesize > 0:
-                    size_mb = filesize / (1024 * 1024)
-                    filesize_text = f" ({size_mb:.1f} MB)"
-
-                valid_formats.append(audio_format)
-                builder.button(
-                    text=f"🎵 Аудио {audio_quality}{filesize_text}",
-                    callback_data=FormatCallback(
-                        format_id=audio_format['format_id'],
-                        type='audio',
-                        quality=str(audio_quality),
-                        index=len(valid_formats) - 1
-                    ).pack()
-                )
-
-            builder.adjust(1)  # One button per row for better readability
-
-            if valid_formats:
-                await state.update_data(formats=valid_formats, title=title)
-
-                # Just show the title and no additional explanation
-                await status_message.edit_text(
-                    f"🎥 <b>{title}</b>\n\n"
-                    f"Выберите формат:",
-                    reply_markup=builder.as_markup(),
-                    parse_mode="HTML"
+            if 'sign in to confirm' in error_msg or 'not a bot' in error_msg:
+                await progress_msg.edit_text(
+                    "❌ YouTube заблокировал доступ к этому видео.\n\n"
+                    "🔒 Возможные причины:\n"
+                    "• Видео требует авторизации\n"
+                    "• Видео недоступно в вашем регионе\n"
+                    "• YouTube обнаружил автоматическую загрузку\n\n"
+                    "💡 Попробуйте:\n"
+                    "• Другое видео\n"
+                    "• Повторить через некоторое время\n"
+                    "• Использовать прямую ссылку на видео"
                 )
             else:
-                await status_message.edit_text("❗ Не найдены подходящие форматы")
+                await progress_msg.edit_text(
+                    f"❌ Ошибка при обработке YouTube видео:\n{str(e)[:100]}...\n\n"
+                    "Попробуйте позже или используйте другую ссылку."
+                )
+            return
+
+        if not video_info or not formats:
+            await progress_msg.edit_text(
+                "❌ Не удалось получить информацию о видео.\n"
+                "Возможно, видео приватное или удалено."
+            )
+            return
+
+        # Create format selection keyboard
+        keyboard = InlineKeyboardBuilder()
+
+        # Group formats by type
+        video_formats = [f for f in formats if f['type'] == 'video']
+        audio_formats = [f for f in formats if f['type'] == 'audio']
+
+        # Add video formats
+        if video_formats:
+            keyboard.row(InlineKeyboardButton(text="📹 Видео форматы:", callback_data="ignore"))
+
+            for i, fmt in enumerate(video_formats):
+                size_text = ""
+                if fmt['filesize'] > 0:
+                    size_mb = fmt['filesize'] / (1024 * 1024)
+                    if size_mb > 1024:
+                        size_text = f" ({size_mb/1024:.1f} GB)"
+                    else:
+                        size_text = f" ({size_mb:.1f} MB)"
+
+                button_text = f"{fmt['quality']} {fmt['ext'].upper()}{size_text}"
+                keyboard.row(InlineKeyboardButton(
+                    text=button_text,
+                    callback_data=f"yt_dl_{i}_video_{fmt['quality']}"
+                ))
+
+        # Add audio formats
+        if audio_formats:
+            if video_formats:
+                keyboard.row(InlineKeyboardButton(text="🎵 Аудио форматы:", callback_data="ignore"))
+
+            start_index = len(video_formats)
+            for i, fmt in enumerate(audio_formats):
+                size_text = ""
+                if fmt['filesize'] > 0:
+                    size_mb = fmt['filesize'] / (1024 * 1024)
+                    size_text = f" ({size_mb:.1f} MB)"
+
+                button_text = f"🎵 {fmt['quality']} {fmt['ext'].upper()}{size_text}"
+                keyboard.row(InlineKeyboardButton(
+                    text=button_text,
+                    callback_data=f"yt_dl_{start_index + i}_audio_{fmt['quality']}"
+                ))
+
+        # Add cancel button
+        keyboard.row(InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_download"))
+
+        # Format video info
+        duration_str = ""
+        if video_info['duration']:
+            minutes, seconds = divmod(video_info['duration'], 60)
+            hours, minutes = divmod(minutes, 60)
+            if hours:
+                duration_str = f" • {hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                duration_str = f" • {minutes:02d}:{seconds:02d}"
+
+        view_count_str = ""
+        if video_info['view_count']:
+            if video_info['view_count'] > 1_000_000:
+                view_count_str = f" • {video_info['view_count']/1_000_000:.1f}M просмотров"
+            elif video_info['view_count'] > 1_000:
+                view_count_str = f" • {video_info['view_count']/1_000:.1f}K просмотров"
+            else:
+                view_count_str = f" • {video_info['view_count']} просмотров"
+
+        info_text = (
+            f"🎥 <b>{video_info['title']}</b>\n\n"
+            f"👤 <b>Канал:</b> {video_info['uploader']}\n"
+            f"⏱ <b>Длительность:</b>{duration_str}\n"
+            f"👁 <b>Просмотры:</b>{view_count_str}\n\n"
+            f"📥 <b>Выберите формат для скачивания:</b>"
+        )
+
+        # Store data in state
+        await state.update_data(
+            youtube_url=url,
+            youtube_formats=formats,
+            youtube_info=video_info
+        )
+
+        await progress_msg.edit_text(
+            info_text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode="HTML"
+        )
 
     except Exception as e:
-        logger.error(f"YouTube handler error: {str(e)}")
-        await status_message.edit_text("❗ Ошибка при получении форматов")
+        logger.error(f"YouTube handler error: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при обработке YouTube видео.\n"
+            "Попробуйте позже."
+        )
 
 
 async def download_video(url: str, format_id: str, state: FSMContext, progress_msg=None):
@@ -2120,56 +2117,400 @@ COOKIES_FILE = "/tmp/youtube_cookies.txt"
 
 
 def create_youtube_cookies_file():
-    """Create a basic YouTube cookies file if one doesn't exist"""
-    if os.path.exists(COOKIES_FILE):
-        return
-
-    # These are just minimal cookies to help avoid bot detection
-    # They don't provide full authentication but help reduce detection
-    basic_cookies = [
-        {
-            "domain": ".youtube.com",
-            "expirationDate": time.time() + 3600 * 24 * 365,
-            "name": "CONSENT",
-            "value": "YES+cb",
-            "path": "/",
-            "httpOnly": False,
-            "secure": True
-        },
-        {
-            "domain": ".youtube.com",
-            "expirationDate": time.time() + 3600 * 24 * 365,
-            "name": "VISITOR_INFO1_LIVE",
-            "value": "y_GfyCBHGcU",
-            "path": "/",
-            "httpOnly": True,
-            "secure": True
-        },
-        {
-            "domain": ".youtube.com",
-            "expirationDate": time.time() + 3600 * 24 * 365,
-            "name": "PREF",
-            "value": "f4=4000000&tz=Europe%2FMoscow",
-            "path": "/",
-            "httpOnly": False,
-            "secure": True
-        }
-    ]
-
+    """Create an improved YouTube cookies file to avoid bot detection"""
     try:
-        with open(COOKIES_FILE, 'w') as f:
-            for cookie in basic_cookies:
-                domain = cookie["domain"]
-                flag = "TRUE" if cookie.get("httpOnly", False) else "FALSE"
-                path = cookie.get("path", "/")
-                secure = "TRUE" if cookie.get("secure", False) else "FALSE"
-                expiry = int(cookie.get("expirationDate", time.time() + 3600 * 24 * 365))
-                name = cookie["name"]
-                value = cookie["value"]
-                f.write(f"{domain}\tTRUE\t{path}\t{secure}\t{expiry}\t{name}\t{value}\n")
-        logger.info(f"Created basic YouTube cookies file at {COOKIES_FILE}")
+        # Create cookies content with more realistic values
+        cookies_content = """# Netscape HTTP Cookie File
+.youtube.com	TRUE	/	FALSE	1999999999	CONSENT	YES+cb.20240101-00-p0.en+FX+000
+.youtube.com	TRUE	/	FALSE	1999999999	VISITOR_INFO1_LIVE	y_GfyCBHGcU
+.youtube.com	TRUE	/	FALSE	1999999999	PREF	f4=4000000&tz=UTC&f6=40000000
+.youtube.com	TRUE	/	TRUE	1999999999	__Secure-YEC	Cgs4OTQ3NDcyNjMwNBIBTQ%3D%3D
+.youtube.com	TRUE	/	FALSE	1999999999	GPS	1
+.youtube.com	TRUE	/	FALSE	1999999999	YSC	y_GfyCBHGcU
+.youtube.com	TRUE	/	FALSE	1999999999	SIDCC	AJi4QfF7VhEF0w
+"""
+
+        with open(COOKIES_FILE, 'w', encoding='utf-8') as f:
+            f.write(cookies_content)
+
+        logger.info(f"Created YouTube cookies file: {COOKIES_FILE}")
+        return True
+
     except Exception as e:
         logger.error(f"Failed to create cookies file: {e}")
+        return False
+
+
+def get_youtube_ydl_options(format_id=None, audio_only=False):
+    """Get optimized yt-dlp options for YouTube"""
+
+    # Create cookies file if it doesn't exist
+    if not os.path.exists(COOKIES_FILE):
+        create_youtube_cookies_file()
+
+    # User agents rotation
+    user_agents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ]
+
+    import random
+
+    opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'writeinfojson': False,
+        'writesubtitles': False,
+        'writeautomaticsub': False,
+        'writethumbnail': False,
+
+        # Anti-bot measures
+        'http_headers': {
+            'User-Agent': random.choice(user_agents),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+            'Keep-Alive': '300',
+            'Connection': 'keep-alive',
+        },
+
+        # Use cookies
+        'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+
+        # Network and retry settings
+        'socket_timeout': 30,
+        'retries': 3,
+        'fragment_retries': 3,
+        'extractor_retries': 3,
+
+        # Rate limiting to avoid detection
+        'sleep_interval': 1,
+        'max_sleep_interval': 3,
+        'sleep_interval_requests': 1,
+        'sleep_interval_subtitles': 1,
+
+        # Geo bypass
+        'geo_bypass': True,
+        'geo_bypass_country': 'US',
+    }
+
+    # Format selection
+    if audio_only:
+        opts['format'] = 'bestaudio[ext=m4a]/bestaudio/best'
+    elif format_id:
+        opts['format'] = format_id
+    else:
+        # Default to reasonable quality
+        opts['format'] = 'best[height<=720]/best[height<=480]/best'
+
+    return opts
+
+
+async def extract_youtube_info(url):
+    """Extract YouTube video information without downloading"""
+    try:
+        def extract_info():
+            ydl_opts = get_youtube_ydl_options()
+            with YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=False)
+
+        info = await asyncio.get_event_loop().run_in_executor(executor, extract_info)
+        return info
+
+    except Exception as e:
+        logger.error(f"YouTube info extraction failed: {e}")
+
+        # Try with minimal options as fallback
+        try:
+            def extract_minimal():
+                minimal_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False,
+                    'format': 'worst',
+                    'http_headers': {
+                        'User-Agent': 'yt-dlp/2023.12.30',
+                    },
+                    'geo_bypass': True,
+                }
+                with YoutubeDL(minimal_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
+
+            info = await asyncio.get_event_loop().run_in_executor(executor, extract_minimal)
+            logger.info("Fallback extraction succeeded")
+            return info
+
+        except Exception as e2:
+            logger.error(f"Fallback extraction also failed: {e2}")
+            return None
+
+
+async def get_youtube_formats(url):
+    """Get available YouTube formats"""
+    try:
+        info = await extract_youtube_info(url)
+        if not info:
+            return None, []
+
+        title = info.get('title', 'Unknown Video')
+        duration = info.get('duration', 0)
+        uploader = info.get('uploader', 'Unknown')
+        view_count = info.get('view_count', 0)
+
+        # Process formats
+        formats = info.get('formats', [])
+        video_formats = []
+        audio_formats = []
+
+        # Filter video formats
+        for fmt in formats:
+            if not fmt.get('url'):
+                continue
+
+            format_id = fmt.get('format_id', '')
+            ext = fmt.get('ext', 'mp4')
+            filesize = fmt.get('filesize') or fmt.get('filesize_approx') or 0
+
+            # Video formats
+            if fmt.get('vcodec') and fmt.get('vcodec') != 'none':
+                height = fmt.get('height', 0)
+                fps = fmt.get('fps', 0)
+
+                if height and height > 0:
+                    quality_label = f"{height}p"
+                    if fps and fps > 30:
+                        quality_label += f"{int(fps)}"
+
+                    video_formats.append({
+                        'format_id': format_id,
+                        'quality': quality_label,
+                        'ext': ext,
+                        'filesize': filesize,
+                        'height': height,
+                        'type': 'video'
+                    })
+
+            # Audio formats
+            elif fmt.get('acodec') and fmt.get('acodec') != 'none':
+                abr = fmt.get('abr', 0)
+                if abr and abr > 0:
+                    audio_formats.append({
+                        'format_id': format_id,
+                        'quality': f"{int(abr)}kbps",
+                        'ext': ext,
+                        'filesize': filesize,
+                        'type': 'audio'
+                    })
+
+        # Sort and limit formats
+        video_formats.sort(key=lambda x: x['height'], reverse=True)
+        audio_formats.sort(key=lambda x: int(x['quality'].replace('kbps', '')), reverse=True)
+
+        # Limit to prevent message size issues
+        video_formats = video_formats[:6]
+        audio_formats = audio_formats[:3]
+
+        video_info = {
+            'title': title,
+            'duration': duration,
+            'uploader': uploader,
+            'view_count': view_count,
+            'thumbnail': info.get('thumbnail')
+        }
+
+        return video_info, video_formats + audio_formats
+
+    except Exception as e:
+        logger.error(f"Error getting YouTube formats: {e}")
+        return None, []
+
+
+async def process_youtube_callback(callback: CallbackQuery, state: FSMContext, bot):
+    """Process YouTube format selection callback"""
+    try:
+        # Parse callback data: yt_dl_<index>_<type>_<quality>
+        parts = callback.data.split('_')
+        if len(parts) < 4:
+            await callback.answer("❌ Неверные данные")
+            return
+
+        format_index = int(parts[2])
+        format_type = parts[3]
+        quality = '_'.join(parts[4:]) if len(parts) > 4 else 'unknown'
+
+        # Get data from state
+        data = await state.get_data()
+        url = data.get('youtube_url')
+        formats = data.get('youtube_formats', [])
+        video_info = data.get('youtube_info', {})
+
+        if not url or not formats or format_index >= len(formats):
+            await callback.answer("❌ Данные не найдены")
+            return
+
+        selected_format = formats[format_index]
+
+        # Update message
+        await callback.message.edit_text(
+            f"⏳ Подготовка к загрузке...\n\n"
+            f"🎥 <b>{video_info.get('title', 'Video')}</b>\n"
+            f"📋 <b>Формат:</b> {quality} {selected_format['ext'].upper()}\n"
+            f"📦 <b>Тип:</b> {'Видео' if format_type == 'video' else 'Аудио'}",
+            parse_mode="HTML"
+        )
+
+        await callback.answer()
+
+        # Progress callback
+        async def progress_callback(text):
+            try:
+                await callback.message.edit_text(
+                    f"{text}\n\n"
+                    f"🎥 <b>{video_info.get('title', 'Video')}</b>\n"
+                    f"📋 <b>Формат:</b> {quality} {selected_format['ext'].upper()}",
+                    parse_mode="HTML"
+                )
+            except:
+                pass
+
+        # Download the video
+        try:
+            file_path, info = await download_youtube_video(
+                url,
+                selected_format['format_id'],
+                progress_callback
+            )
+
+            # Check file size (50 MB Telegram limit)
+            file_size = os.path.getsize(file_path)
+            if file_size > 50 * 1024 * 1024:
+                await callback.message.edit_text(
+                    f"❌ Файл слишком большой для Telegram\n"
+                    f"📦 Размер: {file_size / (1024 * 1024):.1f} MB (макс: 50 MB)\n\n"
+                    f"Выберите формат с меньшим качеством."
+                )
+                os.remove(file_path)
+                return
+
+            # Send file
+            caption = (
+                f"🎥 {video_info.get('title', 'Video')}\n"
+                f"👤 {video_info.get('uploader', 'Unknown')}\n"
+                f"📋 {quality} {selected_format['ext'].upper()}\n"
+                f"📦 {file_size / (1024 * 1024):.1f} MB\n\n"
+                f"📥 Скачано через @{(await bot.get_me()).username}"
+            )
+
+            with open(file_path, 'rb') as video_file:
+                if format_type == 'video':
+                    await bot.send_video(
+                        chat_id=callback.message.chat.id,
+                        video=video_file,
+                        caption=caption,
+                        supports_streaming=True
+                    )
+                else:
+                    await bot.send_audio(
+                        chat_id=callback.message.chat.id,
+                        audio=video_file,
+                        caption=caption,
+                        title=video_info.get('title', 'Audio')
+                    )
+
+            # Cleanup
+            os.remove(file_path)
+            os.rmdir(os.path.dirname(file_path))
+
+            await callback.message.delete()
+            await state.clear()
+
+            # Analytics
+            from modul.clientbot import shortcuts
+            await shortcuts.add_to_analitic_data((await bot.get_me()).username, url)
+
+        except Exception as e:
+            logger.error(f"YouTube download error: {e}")
+            await callback.message.edit_text(
+                f"❌ Ошибка при загрузке:\n{str(e)[:200]}...\n\n"
+                f"Попробуйте выбрать другой формат."
+            )
+
+    except Exception as e:
+        logger.error(f"YouTube callback error: {e}")
+        await callback.answer("❌ Произошла ошибка")
+
+from modul.loader import client_bot_router
+from aiogram import F
+
+@client_bot_router.callback_query(F.data.startswith("yt_dl_"))
+async def youtube_download_callback(callback: CallbackQuery, state: FSMContext):
+    """Handle YouTube download callbacks"""
+    await process_youtube_callback(callback, state, callback.bot)
+
+@client_bot_router.callback_query(F.data == "cancel_download")
+async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
+    """Handle download cancellation"""
+    await callback.message.edit_text("❌ Загрузка отменена.")
+    await callback.answer("Отменено")
+    await state.clear()
+
+@client_bot_router.callback_query(F.data == "ignore")
+async def ignore_callback(callback: CallbackQuery):
+    """Ignore section header callbacks"""
+    await callback.answer()
+
+import tempfile
+async def download_youtube_video(url, format_id, progress_callback=None):
+    """Download YouTube video with specified format"""
+    try:
+        temp_dir = tempfile.mkdtemp(prefix='youtube_')
+        output_template = os.path.join(temp_dir, '%(title)s.%(ext)s')
+
+        ydl_opts = get_youtube_ydl_options(format_id)
+        ydl_opts.update({
+            'outtmpl': output_template,
+            'writeinfojson': True,
+        })
+
+        # Add progress hook
+        if progress_callback:
+            def progress_hook(d):
+                if d['status'] == 'downloading':
+                    percent = d.get('_percent_str', '0%')
+                    speed = d.get('_speed_str', 'N/A')
+                    asyncio.create_task(progress_callback(f"⏬ Загрузка: {percent} ({speed})"))
+                elif d['status'] == 'finished':
+                    asyncio.create_task(progress_callback("✅ Обработка файла..."))
+
+            ydl_opts['progress_hooks'] = [progress_hook]
+
+        def download():
+            with YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=True)
+
+        info = await asyncio.get_event_loop().run_in_executor(executor, download)
+
+        if not info:
+            raise Exception("Download failed - no info returned")
+
+        # Find the downloaded file
+        downloaded_file = None
+        for file in os.listdir(temp_dir):
+            if not file.endswith('.info.json'):
+                downloaded_file = os.path.join(temp_dir, file)
+                break
+
+        if not downloaded_file or not os.path.exists(downloaded_file):
+            raise Exception("Downloaded file not found")
+
+        return downloaded_file, info
+
+    except Exception as e:
+        logger.error(f"YouTube download error: {e}")
+        raise
 
 
 
