@@ -1818,137 +1818,137 @@ def get_best_formats(formats):
     return video_formats, audio_format
 
 
-async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
-    """Main YouTube handler"""
-    try:
-        # Initial processing message
-        progress_msg = await message.answer("🔍 Анализирую YouTube видео...")
-
-        # Extract video info and formats
-        try:
-            video_info, formats = await get_youtube_formats(url)
-        except Exception as e:
-            error_msg = str(e).lower()
-
-            if 'sign in to confirm' in error_msg or 'not a bot' in error_msg:
-                await progress_msg.edit_text(
-                    "❌ YouTube заблокировал доступ к этому видео.\n\n"
-                    "🔒 Возможные причины:\n"
-                    "• Видео требует авторизации\n"
-                    "• Видео недоступно в вашем регионе\n"
-                    "• YouTube обнаружил автоматическую загрузку\n\n"
-                    "💡 Попробуйте:\n"
-                    "• Другое видео\n"
-                    "• Повторить через некоторое время\n"
-                    "• Использовать прямую ссылку на видео"
-                )
-            else:
-                await progress_msg.edit_text(
-                    f"❌ Ошибка при обработке YouTube видео:\n{str(e)[:100]}...\n\n"
-                    "Попробуйте позже или используйте другую ссылку."
-                )
-            return
-
-        if not video_info or not formats:
-            await progress_msg.edit_text(
-                "❌ Не удалось получить информацию о видео.\n"
-                "Возможно, видео приватное или удалено."
-            )
-            return
-
-        # Create format selection keyboard
-        keyboard = InlineKeyboardBuilder()
-
-        # Group formats by type
-        video_formats = [f for f in formats if f['type'] == 'video']
-        audio_formats = [f for f in formats if f['type'] == 'audio']
-
-        # Add video formats
-        if video_formats:
-            keyboard.row(InlineKeyboardButton(text="📹 Видео форматы:", callback_data="ignore"))
-
-            for i, fmt in enumerate(video_formats):
-                size_text = ""
-                if fmt['filesize'] > 0:
-                    size_mb = fmt['filesize'] / (1024 * 1024)
-                    if size_mb > 1024:
-                        size_text = f" ({size_mb/1024:.1f} GB)"
-                    else:
-                        size_text = f" ({size_mb:.1f} MB)"
-
-                button_text = f"{fmt['quality']} {fmt['ext'].upper()}{size_text}"
-                keyboard.row(InlineKeyboardButton(
-                    text=button_text,
-                    callback_data=f"yt_dl_{i}_video_{fmt['quality']}"
-                ))
-
-        # Add audio formats
-        if audio_formats:
-            if video_formats:
-                keyboard.row(InlineKeyboardButton(text="🎵 Аудио форматы:", callback_data="ignore"))
-
-            start_index = len(video_formats)
-            for i, fmt in enumerate(audio_formats):
-                size_text = ""
-                if fmt['filesize'] > 0:
-                    size_mb = fmt['filesize'] / (1024 * 1024)
-                    size_text = f" ({size_mb:.1f} MB)"
-
-                button_text = f"🎵 {fmt['quality']} {fmt['ext'].upper()}{size_text}"
-                keyboard.row(InlineKeyboardButton(
-                    text=button_text,
-                    callback_data=f"yt_dl_{start_index + i}_audio_{fmt['quality']}"
-                ))
-
-        # Add cancel button
-        keyboard.row(InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_download"))
-
-        # Format video info
-        duration_str = ""
-        if video_info['duration']:
-            minutes, seconds = divmod(video_info['duration'], 60)
-            hours, minutes = divmod(minutes, 60)
-            if hours:
-                duration_str = f" • {hours:02d}:{minutes:02d}:{seconds:02d}"
-            else:
-                duration_str = f" • {minutes:02d}:{seconds:02d}"
-
-        view_count_str = ""
-        if video_info['view_count']:
-            if video_info['view_count'] > 1_000_000:
-                view_count_str = f" • {video_info['view_count']/1_000_000:.1f}M просмотров"
-            elif video_info['view_count'] > 1_000:
-                view_count_str = f" • {video_info['view_count']/1_000:.1f}K просмотров"
-            else:
-                view_count_str = f" • {video_info['view_count']} просмотров"
-
-        info_text = (
-            f"🎥 <b>{video_info['title']}</b>\n\n"
-            f"👤 <b>Канал:</b> {video_info['uploader']}\n"
-            f"⏱ <b>Длительность:</b>{duration_str}\n"
-            f"👁 <b>Просмотры:</b>{view_count_str}\n\n"
-            f"📥 <b>Выберите формат для скачивания:</b>"
-        )
-
-        # Store data in state
-        await state.update_data(
-            youtube_url=url,
-            youtube_formats=formats,
-            youtube_info=video_info
-        )
-
-        await progress_msg.edit_text(
-            info_text,
-            reply_markup=keyboard.as_markup(),
-            parse_mode="HTML"
-        )
-
-    except Exception as e:
-        logger.error(f"YouTube handler error: {e}")
-        await message.answer(
-            "❌ Произошла ошибка при обработке YouTube видео.\n"
-            "Попробуйте позже."
-        )
+# async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
+#     """Main YouTube handler"""
+#     try:
+#         # Initial processing message
+#         progress_msg = await message.answer("🔍 Анализирую YouTube видео...")
+#
+#         # Extract video info and formats
+#         try:
+#             video_info, formats = await get_youtube_formats(url)
+#         except Exception as e:
+#             error_msg = str(e).lower()
+#
+#             if 'sign in to confirm' in error_msg or 'not a bot' in error_msg:
+#                 await progress_msg.edit_text(
+#                     "❌ YouTube заблокировал доступ к этому видео.\n\n"
+#                     "🔒 Возможные причины:\n"
+#                     "• Видео требует авторизации\n"
+#                     "• Видео недоступно в вашем регионе\n"
+#                     "• YouTube обнаружил автоматическую загрузку\n\n"
+#                     "💡 Попробуйте:\n"
+#                     "• Другое видео\n"
+#                     "• Повторить через некоторое время\n"
+#                     "• Использовать прямую ссылку на видео"
+#                 )
+#             else:
+#                 await progress_msg.edit_text(
+#                     f"❌ Ошибка при обработке YouTube видео:\n{str(e)[:100]}...\n\n"
+#                     "Попробуйте позже или используйте другую ссылку."
+#                 )
+#             return
+#
+#         if not video_info or not formats:
+#             await progress_msg.edit_text(
+#                 "❌ Не удалось получить информацию о видео.\n"
+#                 "Возможно, видео приватное или удалено."
+#             )
+#             return
+#
+#         # Create format selection keyboard
+#         keyboard = InlineKeyboardBuilder()
+#
+#         # Group formats by type
+#         video_formats = [f for f in formats if f['type'] == 'video']
+#         audio_formats = [f for f in formats if f['type'] == 'audio']
+#
+#         # Add video formats
+#         if video_formats:
+#             keyboard.row(InlineKeyboardButton(text="📹 Видео форматы:", callback_data="ignore"))
+#
+#             for i, fmt in enumerate(video_formats):
+#                 size_text = ""
+#                 if fmt['filesize'] > 0:
+#                     size_mb = fmt['filesize'] / (1024 * 1024)
+#                     if size_mb > 1024:
+#                         size_text = f" ({size_mb/1024:.1f} GB)"
+#                     else:
+#                         size_text = f" ({size_mb:.1f} MB)"
+#
+#                 button_text = f"{fmt['quality']} {fmt['ext'].upper()}{size_text}"
+#                 keyboard.row(InlineKeyboardButton(
+#                     text=button_text,
+#                     callback_data=f"yt_dl_{i}_video_{fmt['quality']}"
+#                 ))
+#
+#         # Add audio formats
+#         if audio_formats:
+#             if video_formats:
+#                 keyboard.row(InlineKeyboardButton(text="🎵 Аудио форматы:", callback_data="ignore"))
+#
+#             start_index = len(video_formats)
+#             for i, fmt in enumerate(audio_formats):
+#                 size_text = ""
+#                 if fmt['filesize'] > 0:
+#                     size_mb = fmt['filesize'] / (1024 * 1024)
+#                     size_text = f" ({size_mb:.1f} MB)"
+#
+#                 button_text = f"🎵 {fmt['quality']} {fmt['ext'].upper()}{size_text}"
+#                 keyboard.row(InlineKeyboardButton(
+#                     text=button_text,
+#                     callback_data=f"yt_dl_{start_index + i}_audio_{fmt['quality']}"
+#                 ))
+#
+#         # Add cancel button
+#         keyboard.row(InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_download"))
+#
+#         # Format video info
+#         duration_str = ""
+#         if video_info['duration']:
+#             minutes, seconds = divmod(video_info['duration'], 60)
+#             hours, minutes = divmod(minutes, 60)
+#             if hours:
+#                 duration_str = f" • {hours:02d}:{minutes:02d}:{seconds:02d}"
+#             else:
+#                 duration_str = f" • {minutes:02d}:{seconds:02d}"
+#
+#         view_count_str = ""
+#         if video_info['view_count']:
+#             if video_info['view_count'] > 1_000_000:
+#                 view_count_str = f" • {video_info['view_count']/1_000_000:.1f}M просмотров"
+#             elif video_info['view_count'] > 1_000:
+#                 view_count_str = f" • {video_info['view_count']/1_000:.1f}K просмотров"
+#             else:
+#                 view_count_str = f" • {video_info['view_count']} просмотров"
+#
+#         info_text = (
+#             f"🎥 <b>{video_info['title']}</b>\n\n"
+#             f"👤 <b>Канал:</b> {video_info['uploader']}\n"
+#             f"⏱ <b>Длительность:</b>{duration_str}\n"
+#             f"👁 <b>Просмотры:</b>{view_count_str}\n\n"
+#             f"📥 <b>Выберите формат для скачивания:</b>"
+#         )
+#
+#         # Store data in state
+#         await state.update_data(
+#             youtube_url=url,
+#             youtube_formats=formats,
+#             youtube_info=video_info
+#         )
+#
+#         await progress_msg.edit_text(
+#             info_text,
+#             reply_markup=keyboard.as_markup(),
+#             parse_mode="HTML"
+#         )
+#
+#     except Exception as e:
+#         logger.error(f"YouTube handler error: {e}")
+#         await message.answer(
+#             "❌ Произошла ошибка при обработке YouTube видео.\n"
+#             "Попробуйте позже."
+#         )
 
 
 async def download_video(url: str, format_id: str, state: FSMContext, progress_msg=None):
@@ -2114,6 +2114,573 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
 
 
 COOKIES_FILE = "/tmp/youtube_cookies.txt"
+
+
+def get_browser_user_agents():
+    """Get realistic browser user agents"""
+    return [
+        # Latest Chrome
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+
+        # Latest Firefox
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0',
+
+        # Latest Safari
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+
+        # Mobile browsers
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
+        'Mozilla/5.0 (Android 14; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0',
+    ]
+
+import random
+import string
+
+def generate_random_string(length=16):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+def create_realistic_cookies():
+    """Create cookies that mimic real browser behavior"""
+    try:
+        timestamp = int(time.time())
+        session_id = random.randint(100000000000000, 999999999999999)
+
+        cookies_content = f"""# Netscape HTTP Cookie File
+# Generated by yt-dlp
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tCONSENT\tYES+cb.{time.strftime('%Y%m%d')}-{random.randint(10, 99)}-p0.en+FX+{random.randint(100, 999)}
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tVISITOR_INFO1_LIVE\t{random.choice(['Gt8aKOhOigw', 'K4N8DY4wRLU', 'y_GfyCBHGcU', 'Kj8dHB4s3Dk'])}
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tPREF\tf4=4000000&f6=40000000&tz=UTC&f7=100&hl=en&gl=US
+.youtube.com\tTRUE\t/\tTRUE\t{timestamp + 31536000}\t__Secure-YEC\tCgtZZjhYUWdPaWd3NCIhEhgSFhML
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tGPS\t1
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tYSC\t{random.choice(['y_GfyCBHGcU', 'Kj8dHB4s3Dk', 'F5s8DJfhG2k', 'N3k8DJfhG7m'])}
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tSIDCC\tAJi4QfH{random.randint(1000000, 9999999)}
+.youtube.com\tTRUE\t/\tTRUE\t{timestamp + 31536000}\t__Secure-1PSIDCC\tAJi4QfH{random.randint(1000000, 9999999)}
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tHSID\tA{session_id}
+.youtube.com\tTRUE\t/\tTRUE\t{timestamp + 31536000}\tSSID\tA{session_id + 1}
+.youtube.com\tTRUE\t/\tTRUE\t{timestamp + 31536000}\tAPISID\t{generate_random_string()}
+.youtube.com\tTRUE\t/\tTRUE\t{timestamp + 31536000}\tSAPISID\t{generate_random_string()}
+.youtube.com\tTRUE\t/\tFALSE\t{timestamp + 31536000}\tLOGIN_INFO\tAFmmF2swRgIhAK{random.randint(100000, 999999)}
+"""
+
+        with open(COOKIES_FILE, 'w', encoding='utf-8') as f:
+            f.write(cookies_content)
+
+        logger.info(f"Created realistic YouTube cookies: {COOKIES_FILE}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to create cookies: {e}")
+        return False
+
+
+def get_optimal_ydl_options():
+    """Get optimized yt-dlp options following GitHub FAQ recommendations"""
+    user_agents = get_browser_user_agents()
+    selected_ua = random.choice(user_agents)
+
+    # Create fresh cookies
+    create_realistic_cookies()
+
+    return {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+
+        # User agent (as recommended in FAQ)
+        'http_headers': {
+            'User-Agent': selected_ua,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'Cache-Control': 'max-age=0',
+        },
+
+        # Cookies (as recommended in FAQ)
+        'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+
+        # Network settings to avoid throttling
+        'socket_timeout': 60,
+        'retries': 3,
+        'fragment_retries': 3,
+        'extractor_retries': 3,
+
+        # Rate limiting to avoid detection
+        'sleep_interval': 1,
+        'max_sleep_interval': 5,
+        'sleep_interval_requests': 1,
+
+        # Geo bypass
+        'geo_bypass': True,
+        'geo_bypass_country': 'US',
+
+        # Additional anti-detection
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'player_skip': ['webpage'],
+                'include_live_dash': False,
+            }
+        },
+
+        # No metadata files to speed up
+        'writeinfojson': False,
+        'writesubtitles': False,
+        'writeautomaticsub': False,
+        'writethumbnail': False,
+    }
+
+
+async def try_youtube_extraction(url, max_attempts=3):
+    """Try YouTube extraction with different strategies"""
+
+    for attempt in range(max_attempts):
+        strategy_name = f"attempt_{attempt + 1}"
+        logger.info(f"YouTube extraction {strategy_name} for URL: {url}")
+
+        try:
+            # Wait between attempts to avoid rate limiting
+            if attempt > 0:
+                await asyncio.sleep(random.uniform(2.0, 5.0))
+
+            # Get fresh options for each attempt
+            ydl_opts = get_optimal_ydl_options()
+
+            # Modify options based on attempt
+            if attempt == 0:
+                # First attempt: full quality
+                pass
+            elif attempt == 1:
+                # Second attempt: lower quality preference
+                ydl_opts['format'] = 'best[height<=720]/best'
+                ydl_opts['extractor_args']['youtube']['player_client'] = ['android']
+            else:
+                # Third attempt: minimal quality
+                ydl_opts['format'] = 'worst'
+                ydl_opts['extractor_args']['youtube']['player_client'] = ['android']
+                ydl_opts.pop('cookiefile', None)  # Try without cookies
+
+            def extract_info():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
+
+            info = await asyncio.get_event_loop().run_in_executor(executor, extract_info)
+
+            if info:
+                logger.info(f"Successfully extracted YouTube info on {strategy_name}")
+                return info
+
+        except Exception as e:
+            error_msg = str(e).lower()
+            logger.warning(f"YouTube extraction {strategy_name} failed: {e}")
+
+            # Check for specific errors
+            if 'sign in to confirm' in error_msg or 'not a bot' in error_msg:
+                logger.warning("Bot detection encountered, trying next strategy")
+                continue
+            elif 'private' in error_msg or 'unavailable' in error_msg:
+                logger.error("Video is private or unavailable")
+                break
+            elif 'age' in error_msg:
+                logger.warning("Age restriction detected")
+                continue
+
+    logger.error("All YouTube extraction attempts failed")
+    return None
+
+
+@client_bot_router.callback_query(F.data.startswith("yt_download_"))
+async def process_youtube_download_production(callback: CallbackQuery, state: FSMContext):
+    """Process YouTube download with production error handling"""
+    try:
+        await callback.answer()
+
+        # Parse format index
+        format_index = int(callback.data.split('_')[2])
+
+        # Get state data
+        data = await state.get_data()
+        url = data.get('youtube_url')
+        formats = data.get('youtube_formats', [])
+        info = data.get('youtube_info', {})
+
+        if not url or not formats or format_index >= len(formats):
+            await callback.message.edit_text("❌ Данные для загрузки не найдены")
+            return
+
+        selected_format = formats[format_index]
+        title = info.get('title', 'Video')
+
+        # Update message to show download progress
+        await callback.message.edit_text(
+            f"⏳ <b>Подготовка к загрузке...</b>\n\n"
+            f"🎥 <b>{title}</b>\n"
+            f"📋 <b>Формат:</b> {selected_format['quality']} {selected_format['ext'].upper()}\n"
+            f"📦 <b>Тип:</b> {'Видео' if selected_format['type'] == 'video' else 'Аудио'}",
+            parse_mode="HTML"
+        )
+
+        # Download the file
+        await download_youtube_file_production(callback, url, selected_format, info)
+
+    except Exception as e:
+        logger.error(f"YouTube download callback error: {e}")
+        await callback.message.edit_text("❌ Ошибка при обработке запроса на загрузку")
+
+
+async def download_youtube_file_production(callback, url, format_data, video_info):
+    """Download YouTube file with production error handling"""
+    try:
+        # Create temporary directory
+        temp_dir = tempfile.mkdtemp(prefix='youtube_prod_')
+        output_template = os.path.join(temp_dir, '%(title).50s.%(ext)s')
+
+        # Configure download options
+        ydl_opts = get_optimal_ydl_options()
+        ydl_opts.update({
+            'format': format_data['id'],
+            'outtmpl': output_template,
+        })
+
+        # Add progress hook
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                percent = d.get('_percent_str', '0%')
+                speed = d.get('_speed_str', 'N/A')
+                asyncio.create_task(update_download_progress(
+                    callback.message,
+                    f"⏬ Загрузка: {percent} ({speed})",
+                    video_info,
+                    format_data
+                ))
+            elif d['status'] == 'finished':
+                asyncio.create_task(update_download_progress(
+                    callback.message,
+                    "✅ Подготовка файла к отправке...",
+                    video_info,
+                    format_data
+                ))
+
+        ydl_opts['progress_hooks'] = [progress_hook]
+
+        # Download
+        def download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=True)
+
+        download_info = await asyncio.get_event_loop().run_in_executor(executor, download)
+
+        # Find downloaded file
+        downloaded_file = None
+        for file in os.listdir(temp_dir):
+            if not file.endswith('.info.json') and os.path.isfile(os.path.join(temp_dir, file)):
+                downloaded_file = os.path.join(temp_dir, file)
+                break
+
+        if not downloaded_file or not os.path.exists(downloaded_file):
+            await callback.message.edit_text("❌ Загруженный файл не найден")
+            return
+
+        # Check file size
+        file_size = os.path.getsize(downloaded_file)
+        if file_size > 50 * 1024 * 1024:  # 50 MB Telegram limit
+            await callback.message.edit_text(
+                f"❌ <b>Файл слишком большой для Telegram</b>\n\n"
+                f"📦 <b>Размер:</b> {file_size / (1024 * 1024):.1f} MB\n"
+                f"📏 <b>Лимит Telegram:</b> 50 MB\n\n"
+                f"Выберите формат с меньшим качеством.",
+                parse_mode="HTML"
+            )
+            os.remove(downloaded_file)
+            return
+
+        # Send file
+        title = video_info.get('title', 'Video')
+        uploader = video_info.get('uploader', 'Unknown')
+
+        caption = (
+            f"🎥 {title}\n"
+            f"👤 {uploader}\n"
+            f"📋 {format_data['quality']} {format_data['ext'].upper()}\n"
+            f"📦 {file_size / (1024 * 1024):.1f} MB\n\n"
+            f"📥 Скачано через @{(await callback.bot.get_me()).username}"
+        )
+
+        with open(downloaded_file, 'rb') as file:
+            if format_data['type'] == 'video':
+                await callback.bot.send_video(
+                    chat_id=callback.message.chat.id,
+                    video=file,
+                    caption=caption,
+                    supports_streaming=True
+                )
+            else:
+                await callback.bot.send_audio(
+                    chat_id=callback.message.chat.id,
+                    audio=file,
+                    caption=caption,
+                    title=title
+                )
+
+        # Cleanup
+        os.remove(downloaded_file)
+        os.rmdir(temp_dir)
+
+        await callback.message.delete()
+        # await state.clear()
+
+        # Analytics
+        from modul.clientbot import shortcuts
+        await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, url)
+
+    except Exception as e:
+        logger.error(f"YouTube download error: {e}")
+        await callback.message.edit_text(
+            f"❌ <b>Ошибка при загрузке</b>\n\n"
+            f"<code>{str(e)[:100]}...</code>\n\n"
+            f"Попробуйте выбрать другой формат или повторите позже.",
+            parse_mode="HTML"
+        )
+
+@client_bot_router.callback_query(F.data == "too_large")
+async def handle_too_large_callback(callback: CallbackQuery):
+    """Handle too large file selection"""
+    await callback.answer(
+        "Этот файл слишком большой для Telegram (более 50 MB). "
+        "Выберите формат с меньшим качеством.",
+        show_alert=True
+    )
+
+# Use this function instead of the old handle_youtube
+async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
+    """Wrapper to use production YouTube handler"""
+    await handle_youtube_production(message, url, me, bot, state)
+
+async def update_download_progress(message, text, video_info, format_data):
+    """Update download progress message"""
+    try:
+        title = video_info.get('title', 'Video')
+        await message.edit_text(
+            f"{text}\n\n"
+            f"🎥 <b>{title}</b>\n"
+            f"📋 <b>Формат:</b> {format_data['quality']} {format_data['ext'].upper()}",
+            parse_mode="HTML"
+        )
+    except:
+        pass
+
+
+async def handle_youtube_production(message: Message, url: str, me, bot, state: FSMContext):
+    """Production-ready YouTube handler"""
+    try:
+        # Initial message
+        progress_msg = await message.answer("🔍 Получаю информацию о YouTube видео...")
+
+        # Extract video information
+        try:
+            info = await try_youtube_extraction(url)
+
+            if not info:
+                await progress_msg.edit_text(
+                    "❌ <b>Не удалось загрузить видео с YouTube</b>\n\n"
+                    "🛡️ <b>Возможные причины:</b>\n"
+                    "• YouTube обнаружил автоматическую загрузку\n"
+                    "• Видео требует авторизации\n"
+                    "• Географические ограничения\n"
+                    "• Возрастные ограничения\n"
+                    "• Видео приватное или удалено\n\n"
+                    "💡 <b>Рекомендации:</b>\n"
+                    "• Попробуйте публичное видео\n"
+                    "• Используйте короткие видео (до 10 минут)\n"
+                    "• Повторите попытку через 10-15 минут\n"
+                    "• Попробуйте другие платформы (Instagram, TikTok)\n\n"
+                    "🔧 <b>Для разработчиков:</b>\n"
+                    "Рассмотрите использование browser cookies с опцией <code>--cookies-from-browser</code>",
+                    parse_mode="HTML"
+                )
+                return
+
+            # Extract video details
+            title = info.get('title', 'Unknown Video')
+            duration = info.get('duration', 0)
+            uploader = info.get('uploader', 'Unknown')
+            view_count = info.get('view_count', 0)
+            formats = info.get('formats', [])
+
+            # Filter usable formats
+            video_formats = []
+            audio_formats = []
+
+            for fmt in formats:
+                if not fmt.get('url'):
+                    continue
+
+                vcodec = fmt.get('vcodec', 'none')
+                acodec = fmt.get('acodec', 'none')
+                height = fmt.get('height', 0)
+                abr = fmt.get('abr', 0)
+                filesize = fmt.get('filesize') or fmt.get('filesize_approx') or 0
+
+                # Filter video formats (reasonable quality for Telegram)
+                if vcodec != 'none' and height > 0 and height <= 1080:
+                    video_formats.append({
+                        'format_id': fmt.get('format_id'),
+                        'height': height,
+                        'ext': fmt.get('ext', 'mp4'),
+                        'filesize': filesize,
+                        'fps': fmt.get('fps', 0)
+                    })
+
+                # Filter audio formats
+                elif acodec != 'none' and vcodec == 'none' and abr > 0:
+                    audio_formats.append({
+                        'format_id': fmt.get('format_id'),
+                        'abr': abr,
+                        'ext': fmt.get('ext', 'm4a'),
+                        'filesize': filesize
+                    })
+
+            # Sort and limit formats
+            video_formats.sort(key=lambda x: x['height'], reverse=True)
+            audio_formats.sort(key=lambda x: x['abr'], reverse=True)
+
+            # Take best formats for each category
+            best_formats = []
+
+            # Add video formats (limit to 4 best)
+            for vf in video_formats[:4]:
+                quality = f"{vf['height']}p"
+                if vf['fps'] > 30:
+                    quality += f"{int(vf['fps'])}"
+
+                size_text = ""
+                if vf['filesize'] > 0:
+                    size_mb = vf['filesize'] / (1024 * 1024)
+                    if size_mb > 1024:
+                        size_text = f" ({size_mb / 1024:.1f} GB)"
+                    elif size_mb > 0:
+                        size_text = f" ({size_mb:.0f} MB)"
+
+                best_formats.append({
+                    'id': vf['format_id'],
+                    'type': 'video',
+                    'quality': quality,
+                    'ext': vf['ext'],
+                    'label': f"📹 {quality} {vf['ext'].upper()}{size_text}",
+                    'filesize': vf['filesize']
+                })
+
+            # Add best audio format
+            if audio_formats:
+                af = audio_formats[0]
+                size_text = ""
+                if af['filesize'] > 0:
+                    size_mb = af['filesize'] / (1024 * 1024)
+                    size_text = f" ({size_mb:.0f} MB)"
+
+                best_formats.append({
+                    'id': af['format_id'],
+                    'type': 'audio',
+                    'quality': f"{int(af['abr'])}kbps",
+                    'ext': af['ext'],
+                    'label': f"🎵 Аудио {int(af['abr'])}kbps {af['ext'].upper()}{size_text}",
+                    'filesize': af['filesize']
+                })
+
+            if not best_formats:
+                await progress_msg.edit_text(
+                    f"❌ <b>Видео найдено, но нет доступных форматов</b>\n\n"
+                    f"🎥 <b>{title}</b>\n"
+                    f"👤 <b>Канал:</b> {uploader}\n\n"
+                    f"Возможно, видео защищено от скачивания.",
+                    parse_mode="HTML"
+                )
+                return
+
+            # Create download keyboard
+            keyboard = InlineKeyboardBuilder()
+
+            for i, fmt in enumerate(best_formats):
+                # Check if file is too large (45 MB limit to be safe)
+                if fmt['filesize'] > 45 * 1024 * 1024:
+                    label = f"⚠️ {fmt['label']} (слишком большой)"
+                    callback_data = "too_large"
+                else:
+                    label = fmt['label']
+                    callback_data = f"yt_download_{i}"
+
+                keyboard.row(InlineKeyboardButton(
+                    text=label,
+                    callback_data=callback_data
+                ))
+
+            keyboard.row(InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_download"))
+
+            # Format info message
+            duration_str = ""
+            if duration:
+                minutes, seconds = divmod(duration, 60)
+                hours, minutes = divmod(minutes, 60)
+                if hours:
+                    duration_str = f" • {hours:02d}:{minutes:02d}:{seconds:02d}"
+                else:
+                    duration_str = f" • {minutes:02d}:{seconds:02d}"
+
+            view_count_str = ""
+            if view_count:
+                if view_count > 1_000_000:
+                    view_count_str = f" • {view_count / 1_000_000:.1f}M просмотров"
+                elif view_count > 1_000:
+                    view_count_str = f" • {view_count / 1_000:.1f}K просмотров"
+                else:
+                    view_count_str = f" • {view_count} просмотров"
+
+            info_text = (
+                f"✅ <b>Видео успешно загружено!</b>\n\n"
+                f"🎥 <b>{title}</b>\n"
+                f"👤 <b>Канал:</b> {uploader}{duration_str}{view_count_str}\n\n"
+                f"📥 <b>Выберите качество для скачивания:</b>"
+            )
+
+            # Store data in state
+            await state.update_data(
+                youtube_url=url,
+                youtube_info=info,
+                youtube_formats=best_formats
+            )
+
+            await progress_msg.edit_text(
+                info_text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode="HTML"
+            )
+
+        except Exception as e:
+            logger.error(f"YouTube processing error: {e}")
+            await progress_msg.edit_text(
+                f"❌ <b>Ошибка при обработке видео</b>\n\n"
+                f"🔧 <b>Техническая информация:</b>\n"
+                f"<code>{str(e)[:100]}...</code>\n\n"
+                f"Попробуйте повторить через несколько минут.",
+                parse_mode="HTML"
+            )
+
+    except Exception as e:
+        logger.error(f"YouTube handler error: {e}")
+        await message.answer(
+            "❌ Произошла неожиданная ошибка при обработке YouTube видео."
+        )
 
 
 def create_youtube_cookies_file():
