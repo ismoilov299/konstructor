@@ -643,6 +643,7 @@ async def show_refs_handler(call: CallbackQuery):
 
 @client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
 async def admin_get_stats(call: CallbackQuery):
+    print('stats called')
     try:
         bot_token = call.bot.token
         print(f"Bot token: {bot_token}")
