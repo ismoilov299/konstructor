@@ -17,7 +17,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from modul.clientbot import shortcuts
 from modul.clientbot.handlers.annon_bot.adminservice import get_users_count, get_channels_for_admin
-from modul.models import Bot as BotModel, User, UserTG
+from modul.models import Bot as BotModel, User, UserTG, ClientBotUser
 from modul.loader import client_bot_router
 from asgiref.sync import sync_to_async
 
@@ -241,15 +241,14 @@ async def search_user(message: Message, state: FSMContext, bot: Bot):
 
 
 # SERVICE FUNCTIONS
+
 @sync_to_async
 def get_bot_users_count(bot_id: int) -> int:
+    """Bot foydalanuvchilar sonini olish"""
     try:
+        # Har xil bot turlari uchun foydalanuvchilar
         refs_users = UserTG.objects.filter(bot_id=bot_id).count()
-        try:
-            from modul.models import ClientBotUser
-            client_users = ClientBotUser.objects.filter(bot_id=bot_id).count()
-        except:
-            client_users = 0
+        client_users = ClientBotUser.objects.filter(bot_id=bot_id).count()
         return refs_users + client_users
     except Exception as e:
         logger.error(f"Get users count error: {e}")
