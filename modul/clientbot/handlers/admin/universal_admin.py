@@ -49,40 +49,42 @@ class AdminStates(StatesGroup):
 
 
 # MAIN ADMIN COMMAND
-@client_bot_router.message(Command('admin'), AdminFilter())
-async def admin_panel_main(message: Message, bot: Bot):
-    """Admin panel asosiy menu"""
-    try:
-        bot_db = await shortcuts.get_bot(bot)
-        if not bot_db:
-            await message.answer("❌ Bot ma'lumotlari topilmadi")
-            return
+def admin_panel():
+    """Admin panel handler"""
 
-        # Statistika olish
-        users_count = await get_bot_users_count(bot_db.id)
-        pending_payments = 0  # Placeholder
+    @client_bot_router.message(Command('admin'), AdminFilter())
+    async def admin_panel_main(message: Message, bot: Bot):
+        try:
+            bot_db = await shortcuts.get_bot(bot)
+            if not bot_db:
+                await message.answer("❌ Bot ma'lumotlari topilmadi")
+                return
 
-        # Keyboard
-        builder = InlineKeyboardBuilder()
-        builder.button(text="👥 Управление пользователями", callback_data="admin_users")
-        builder.button(text="💰 Заявки на вывод", callback_data="admin_payments")
-        builder.button(text="⚙️ Настройки бота", callback_data="admin_settings")
-        builder.button(text="📢 Обязательные подписки", callback_data="admin_channels")
-        builder.button(text="📤 Рассылка", callback_data="admin_mailing")
-        builder.button(text="📊 Статистика", callback_data="admin_statistics")
-        builder.button(text="❌ Закрыть", callback_data="admin_cancel")
-        builder.adjust(2, 2, 2, 1)
+            # Statistika olish
+            users_count = await get_bot_users_count(bot_db.id)
+            pending_payments = 0  # Placeholder
 
-        await message.answer(
-            f"🕵️‍♂️ <b>Пользователей в боте</b>: {users_count}\n"
-            f"💶<b>Заявок на вывод</b>: {pending_payments}",
-            parse_mode="HTML",
-            reply_markup=builder.as_markup()
-        )
+            # Keyboard
+            builder = InlineKeyboardBuilder()
+            builder.button(text="👥 Управление пользователями", callback_data="admin_users")
+            builder.button(text="💰 Заявки на вывод", callback_data="admin_payments")
+            builder.button(text="⚙️ Настройки бота", callback_data="admin_settings")
+            builder.button(text="📢 Обязательные подписки", callback_data="admin_channels")
+            builder.button(text="📤 Рассылка", callback_data="admin_mailing")
+            builder.button(text="📊 Статистика", callback_data="admin_statistics")
+            builder.button(text="❌ Закрыть", callback_data="admin_cancel")
+            builder.adjust(2, 2, 2, 1)
 
-    except Exception as e:
-        logger.error(f"Admin panel error: {e}")
-        await message.answer("❌ Произошла ошибка")
+            await message.answer(
+                f"🕵️‍♂️ <b>Пользователей в боте</b>: {users_count}\n"
+                f"💶<b>Заявок на вывод</b>: {pending_payments}",
+                parse_mode="HTML",
+                reply_markup=builder.as_markup()
+            )
+
+        except Exception as e:
+            logger.error(f"Admin panel error: {e}")
+            await message.answer("❌ Произошла ошибка")
 
 
 # ADMIN CALLBACKS

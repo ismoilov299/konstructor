@@ -12,7 +12,7 @@ from aiogram.types import Update
 
 from modul import models
 from modul.bot.main_bot.main import init_bot_handlers
-from modul.clientbot.handlers.annon_bot.handlers.admin import admin_panel
+from modul.clientbot.handlers.admin.universal_admin import admin_panel
 # from modul.clientbot.handlers.annon_bot.handlers.admin import admin_panel
 from modul.clientbot.handlers.annon_bot.handlers.bot import anon_bot_handlers
 from modul.clientbot.handlers.chat_gpt_bot.handlers.main import chat_gpt_bot_handlers
@@ -43,17 +43,16 @@ async def setup_routers():
     logger.info("Setting up routers")
     if not hasattr(dp, 'routers_setup'):
         try:
-            # Router'larni tozalash
             if hasattr(dp, 'sub_routers'):
                 dp.sub_routers.clear()
 
             # Handler'larni sozlash
+            admin_panel()
             chat_gpt_bot_handlers()
             # start_bot_client()
 
 
 
-            admin_panel()
             init_bot_handlers()
             anon_bot_handlers()
             davinchi_bot_handlers()
