@@ -1,6 +1,6 @@
 # modul/clientbot/handlers/admin/universal_admin.py
 
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.filters import Command, StateFilter, BaseFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -15,31 +15,29 @@ from enum import Enum
 from typing import Optional, List, Union
 from pydantic import BaseModel
 
-from modul.models import ClientBotUser, Bot as BotModel, Withdrawals, AdminInfo, Channels, UserTG, Bot
+from modul.models import ClientBotUser, Bot as BotModel, Withdrawals, AdminInfo, Channels, UserTG
 from modul.loader import client_bot_router
 from modul.clientbot import shortcuts
+from modul.clientbot.handlers.refs.data.states import ChangeAdminInfo
 import logging
 import traceback
 
 logger = logging.getLogger(__name__)
 
-
-# States (добавьте в ваш states файл)
-class SendMessagesForm:
-    message = "message"
-
-
-class ChangeAdminInfo:
-    imp = "imp"
-    change_refs = "change_refs"
-    get_amount = "get_amount"
-    change_balance = "change_balance"
-    add_balance = "add_balance"
-    get_min = "get_min"
+# States - import qilaylik mavjud fayllardan
+try:
+    from modul.clientbot.handlers.kino_bot.handlers.bot import SendMessagesForm, AddChannelSponsorForm
+except ImportError:
+    # Agar import bo'lmasa, o'zimiz yaratamiz
+    from aiogram.fsm.state import State, StatesGroup
 
 
-class AddChannelSponsorForm:
-    channel = "channel"
+    class SendMessagesForm(StatesGroup):
+        message = State()
+
+
+    class AddChannelSponsorForm(StatesGroup):
+        channel = State()
 
 
 # Reaction types for Telegram API
