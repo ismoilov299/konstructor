@@ -11,7 +11,7 @@ from aiogram.filters import Command, CommandStart, CommandObject, Filter, BaseFi
 from aiogram.fsm.context import FSMContext
 from aiogram.filters.state import State, StatesGroup, StateFilter
 from aiogram.methods import GetChat, CreateChatInviteLink, GetChatMember
-from ...admin import *
+
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, \
     InputTextMessageContent, InlineQuery, BotCommand, ReplyKeyboardRemove, URLInputFile, BufferedInputFile
 from aiogram.utils.deep_linking import create_start_link
@@ -20,8 +20,6 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 import re
-
-from modul.clientbot.handlers.admin.universal_admin import get_bot_users_count
 from modul.clientbot.handlers.davinci_bot import *
 from yt_dlp import YoutubeDL
 
@@ -251,48 +249,14 @@ class AdminFilter(BaseFilter):
         return message.from_user.id == admin_id
 
 
-# @client_bot_router.message(Command('admin'), AdminFilter())
-# async def admin(message: types.Message):
-#     await message.answer('Админ панель', reply_markup=admin_kb)
-
 @client_bot_router.message(Command('admin'), AdminFilter())
-async def admin_panel_main(message: Message, bot: Bot):
-    """Admin panel asosiy menu"""
-    try:
-        bot_db = await shortcuts.get_bot(bot)
-        if not bot_db:
-            await message.answer("❌ Bot ma'lumotlari topilmadi")
-            return
-
-        # Statistika olish
-        users_count = await get_bot_users_count(bot_db.id)
-        pending_payments = 0  # Placeholder
-
-        # Keyboard
-        builder = InlineKeyboardBuilder()
-        builder.button(text="👥 Управление пользователями", callback_data="admin_users")
-        builder.button(text="💰 Заявки на вывод", callback_data="admin_payments")
-        builder.button(text="⚙️ Настройки бота", callback_data="admin_settings")
-        builder.button(text="📢 Обязательные подписки", callback_data="admin_channels")
-        builder.button(text="📤 Рассылка", callback_data="admin_mailing")
-        builder.button(text="📊 Статистика", callback_data="admin_statistics")
-        builder.button(text="❌ Закрыть", callback_data="admin_cancel")
-        builder.adjust(2, 2, 2, 1)
-
-        await message.answer(
-            f"🕵️‍♂️ <b>Пользователей в боте</b>: {users_count}\n"
-            f"💶<b>Заявок на вывод</b>: {pending_payments}",
-            parse_mode="HTML",
-            reply_markup=builder.as_markup()
-        )
-
-    except Exception as e:
-        logger.error(f"Admin panel error: {e}")
-        await message.answer("❌ Произошла ошибка")
+async def admin(message: types.Message):
+    await message.answer('Админ панель', reply_markup=admin_kb)
 
 
 @client_bot_router.callback_query(F.data == 'admin_send_message', AdminFilter(), StateFilter('*'))
 async def admin_send_message(call: CallbackQuery, state: FSMContext):
+    print('admin_send_message called')
     await state.set_state(SendMessagesForm.message)
     await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)', reply_markup=cancel_kb)
 
