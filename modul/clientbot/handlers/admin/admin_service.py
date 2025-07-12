@@ -327,5 +327,98 @@ async def send_mailing_message(bot, user_ids: List[int], message_data: Dict) -> 
     }
 
 
+# modul/clientbot/handlers/annon_bot/adminservice.py
+
+from asgiref.sync import sync_to_async
+from modul.models import UserTG, Channels, ClientBotUser, Bot
+import logging
+
+
+
+@sync_to_async
+def get_channels_for_admin():
+    all_channels = Channels.objects.all()
+    if all_channels:
+        return [[i.id, i.channel_url, i.channel_id] for i in all_channels]
+    return []
+
+
+@sync_to_async
+def add_new_channel_db(url, id):
+    new_channel = Channels(channel_url=url, channel_id=id)
+    new_channel.save()
+    return True
+
+
+@sync_to_async
+def delete_channel_db(id):
+    try:
+        channel = Channels.objects.get(id=id)
+        channel.delete()
+        return True
+    except Channels.DoesNotExist:
+        return False
+
+
+@sync_to_async
+def get_all_users_tg_id():
+    users = UserTG.objects.all()
+    return [i.uid for i in users]
+
+
+@sync_to_async
+def get_users_count(bot_token=None):
+    """
+    Bot foydalanuvchilar sonini olish
+    """
+    try:
+        if bot_token:
+            # Bot tokeniga asosan botni topish
+            bot = Bot.objects.get(token=bot_token)
+            # Shu bot uchun foydalanuvchilar sonini hisoblash
+            count = ClientBotUser.objects.filter(bot=bot).count()
+            logger.info(f"Users count for bot {bot.username}: {count}")
+        else:
+            # Umumiy foydalanuvchilar soni (barcha botlar)
+            count = ClientBotUser.objects.all().count()
+            logger.info(f"Total users count across all bots: {count}")
+
+        return count
+    except Bot.DoesNotExist:
+        logger.error(f"Bot with token {bot_token} not found")
+        return 0
+    except Exception as e:
+        logger.error(f"Get users count error: {e}")
+        return 0
+
+
+# Qo'shimcha funktsiyalar
+@sync_to_async
+def get_bot_users_count_by_token(bot_token):
+    """
+    Muayyan bot uchun foydalanuvchilar soni
+    """
+    try:
+        bot = Bot.objects.get(token=bot_token)
+        return ClientBotUser.objects.filter(bot=bot).count()
+    except Bot.DoesNotExist:
+        logger.error(f"Bot with token {bot_token} not found")
+        return 0
+    except Exception as e:
+        logger.error(f"Error getting bot users count: {e}")
+        return 0
+
+
+@sync_to_async
+def get_total_users_count_all_bots():
+    """
+    Barcha botlardagi umumiy foydalanuvchilar soni
+    """
+    try:
+        return ClientBotUser.objects.all().count()
+    except Exception as e:
+        logger.error(f"Error getting total users count: {e}")
+        return 0
+
 # Export service class
 admin_service = AdminService()

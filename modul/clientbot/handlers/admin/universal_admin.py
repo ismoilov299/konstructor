@@ -16,7 +16,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.state import State, StatesGroup
 
 from modul.clientbot import shortcuts
-from modul.clientbot.handlers.annon_bot.adminservice import get_users_count, get_channels_for_admin
+from modul.clientbot.handlers.admin.admin_service import get_users_count, get_channels_for_admin
+
 from modul.models import Bot as BotModel, User, UserTG, ClientBotUser
 from modul.loader import client_bot_router
 from asgiref.sync import sync_to_async
