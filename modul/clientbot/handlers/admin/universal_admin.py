@@ -42,7 +42,6 @@ class AdminStates(StatesGroup):
 # MAIN ADMIN COMMAND
 def admin_panel():
     """Admin panel handler"""
-
     @client_bot_router.message(Command('admin'), AdminFilter())
     async def admin_panel_main(message: Message, bot: Bot):
         try:
@@ -64,7 +63,7 @@ def admin_panel():
             builder.button(text="📤 Рассылка", callback_data="admin_mailing")
             builder.button(text="📊 Статистика", callback_data="admin_statistics")
             builder.button(text="❌ Закрыть", callback_data="admin_cancel")
-            builder.adjust(2, 2, 2, 1)
+            builder.adjust(1, 2, 1, 2, 1)
 
             await message.answer(
                 f"🕵️‍♂️ <b>Пользователей в боте</b>: {users_count}\n"
@@ -243,7 +242,6 @@ async def search_user(message: Message, state: FSMContext, bot: Bot):
 # SERVICE FUNCTIONS
 @sync_to_async
 def get_bot_users_count(bot_id: int) -> int:
-    """Bot foydalanuvchilar sonini olish"""
     try:
         refs_users = UserTG.objects.filter(bot_id=bot_id).count()
         try:
