@@ -24,20 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class AdminFilter(BaseFilter):
-    """Admin huquqlarini tekshirish filtri"""
-
     async def __call__(self, message: Message, bot: Bot) -> bool:
-        try:
-            bot_db = await shortcuts.get_bot(bot)
-            if not bot_db:
-                return False
-
-            owner_id = bot_db.owner.uid
-            return message.from_user.id == owner_id
-        except Exception as e:
-            logger.error(f"AdminFilter error: {e}")
-            return False
-
+        bot_db = await shortcuts.get_bot(bot)
+        admin_id = bot_db.owner.uid
+        return message.from_user.id == admin_id
 
 class AdminStates(StatesGroup):
     """Admin panel states"""
@@ -46,6 +36,7 @@ class AdminStates(StatesGroup):
     add_balance = State()
     change_referrals = State()
     mailing_message = State()
+
 
 
 # MAIN ADMIN COMMAND
