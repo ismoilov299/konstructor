@@ -353,4 +353,215 @@ def unban_user_by_id(user_id: int, bot: Bot) -> bool:
         return False
 
 
+# Admin panel callback handler'larini qo'shing
+
+@client_bot_router.callback_query(F.data == "admin_users")
+async def admin_users_handler(callback: CallbackQuery):
+    """Пользователи управления"""
+    try:
+        # Foydalanuvchilar ro'yxatini olish
+        users_count = await get_users_count()  # Bu funktsiya mavjud bo'lishi kerak
+
+        text = f"👥 Управление пользователями\n\n"
+        text += f"📊 Общее количество пользователей: {users_count}\n\n"
+        text += "Выберите действие:"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📊 Статистика пользователей", callback_data="users_stats")
+        builder.button(text="🔍 Найти пользователя", callback_data="find_user")
+        builder.button(text="📋 Список пользователей", callback_data="users_list")
+        builder.button(text="🚫 Заблокировать пользователя", callback_data="ban_user")
+        builder.button(text="🔄 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@client_bot_router.callback_query(F.data == "admin_payments")
+async def admin_payments_handler(callback: CallbackQuery):
+    """Заявки на вывод средств"""
+    try:
+        # Pending payments ni olish
+        pending_payments = await get_pending_payments()  # Bu funktsiya yaratilishi kerak
+
+        text = f"💰 Заявки на вывод средств\n\n"
+        if pending_payments:
+            text += f"📋 Активных заявок: {len(pending_payments)}\n\n"
+            for payment in pending_payments[:5]:  # Faqat 5 ta ko'rsatish
+                text += f"• ID: {payment['id']} - {payment['amount']} руб.\n"
+        else:
+            text += "📭 Нет активных заявок на вывод\n\n"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📋 Все заявки", callback_data="all_payments")
+        builder.button(text="✅ Одобрить заявку", callback_data="approve_payment")
+        builder.button(text="❌ Отклонить заявку", callback_data="reject_payment")
+        builder.button(text="🔄 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@client_bot_router.callback_query(F.data == "admin_settings")
+async def admin_settings_handler(callback: CallbackQuery):
+    """Настройки бота"""
+    try:
+        # Bot sozlamalarini olish
+        bot_settings = await get_bot_settings()  # Bu funktsiya yaratilishi kerak
+
+        text = f"⚙️ Настройки бота\n\n"
+        text += f"🤖 Название бота: {bot_settings.get('name', 'Не установлено')}\n"
+        text += f"💸 Минимальная выплата: {bot_settings.get('min_payout', 'Не установлено')} руб.\n"
+        text += f"💰 Реферальная награда: {bot_settings.get('ref_reward', 'Не установлено')} руб.\n\n"
+        text += "Выберите параметр для изменения:"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📝 Изменить название", callback_data="change_bot_name")
+        builder.button(text="💸 Изменить мин. выплату", callback_data="change_min_payout")
+        builder.button(text="💰 Изменить реф. награду", callback_data="change_ref_reward")
+        builder.button(text="🔄 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@client_bot_router.callback_query(F.data == "admin_channels")
+async def admin_channels_handler(callback: CallbackQuery):
+    """Обязательные подписки"""
+    try:
+        # Majburiy obunalar ro'yxatini olish
+        channels = await get_channels_for_admin()  # Bu funktsiya mavjud
+
+        text = f"📢 Обязательные подписки\n\n"
+        if channels:
+            text += f"📋 Активных каналов: {len(channels)}\n\n"
+            for i, channel in enumerate(channels, 1):
+                text += f"{i}. {channel[1]} (ID: {channel[0]})\n"
+        else:
+            text += "📭 Обязательных подписок нет\n\n"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="➕ Добавить канал", callback_data="add_channel")
+        builder.button(text="🗑 Удалить канал", callback_data="delete_channel")
+        builder.button(text="📋 Список каналов", callback_data="channels_list")
+        builder.button(text="🔄 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@client_bot_router.callback_query(F.data == "admin_mailing")
+async def admin_mailing_handler(callback: CallbackQuery):
+    """Рассылка сообщений"""
+    try:
+        text = f"📤 Рассылка сообщений\n\n"
+        text += "Выберите тип рассылки:"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📝 Текстовая рассылка", callback_data="text_mailing")
+        builder.button(text="🖼 Рассылка с фото", callback_data="photo_mailing")
+        builder.button(text="📊 Статистика рассылок", callback_data="mailing_stats")
+        builder.button(text="🔄 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@client_bot_router.callback_query(F.data == "admin_statistics")
+async def admin_statistics_handler(callback: CallbackQuery):
+    """Статистика бота"""
+    try:
+        # Statistika ma'lumotlarini olish
+        stats = await get_bot_statistics()  # Bu funktsiya yaratilishi kerak
+
+        text = f"📊 Статистика бота\n\n"
+        text += f"👥 Общее количество пользователей: {stats.get('total_users', 0)}\n"
+        text += f"📈 Новых пользователей сегодня: {stats.get('new_users_today', 0)}\n"
+        text += f"💰 Общая сумма выплат: {stats.get('total_payouts', 0)} руб.\n"
+        text += f"🔄 Активных пользователей: {stats.get('active_users', 0)}\n"
+        text += f"📢 Каналов в подписках: {stats.get('channels_count', 0)}\n"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📈 Подробная статистика", callback_data="detailed_stats")
+        builder.button(text="📊 Экспорт данных", callback_data="export_stats")
+        builder.button(text="🔄 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@client_bot_router.callback_query(F.data == "admin_cancel")
+async def admin_cancel_handler(callback: CallbackQuery):
+    """Admin panelni yopish"""
+    try:
+        await callback.message.delete()
+        await callback.answer("Панель админа закрыта")
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+@client_bot_router.callback_query(F.data == "admin_panel")
+async def back_to_admin_panel(callback: CallbackQuery):
+    """Admin panelga qaytish"""
+    try:
+        count = await get_users_count()
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="👥 Управление пользователями", callback_data="admin_users")
+        builder.button(text="💰 Заявки на вывод", callback_data="admin_payments")
+        builder.button(text="⚙️ Настройки бота", callback_data="admin_settings")
+        builder.button(text="📢 Обязательные подписки", callback_data="admin_channels")
+        builder.button(text="📤 Рассылка", callback_data="admin_mailing")
+        builder.button(text="📊 Статистика", callback_data="admin_statistics")
+        builder.button(text="❌ Закрыть", callback_data="admin_cancel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(
+            f"🕵 Панель админа\nКоличество юзеров в боте: {count}",
+            reply_markup=builder.as_markup()
+        )
+    except Exception as e:
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
+
+
+# Yordamchi funktsiyalar (agar mavjud bo'lmasa yaratish kerak)
+async def get_pending_payments():
+    """Pending payments ni olish"""
+    # Bu yerda database'dan pending payments ni olish kerak
+    return []
+
+
+async def get_bot_settings():
+    """Bot sozlamalarini olish"""
+    # Bu yerda bot sozlamalarini olish kerak
+    return {
+        'name': 'My Bot',
+        'min_payout': 100,
+        'ref_reward': 10
+    }
+
+
+async def get_bot_statistics():
+    """Bot statistikasini olish"""
+    # Bu yerda bot statistikasini olish kerak
+    return {
+        'total_users': 0,
+        'new_users_today': 0,
+        'total_payouts': 0,
+        'active_users': 0,
+        'channels_count': 0
+    }
+
 logger.info("✅ Universal admin panel handlers loaded")
