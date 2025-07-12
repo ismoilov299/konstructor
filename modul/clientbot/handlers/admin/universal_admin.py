@@ -366,6 +366,9 @@ async def send_message_to_users(bot, users, text):
 def admin_panel():
     """Admin panel router setup"""
 
+    # Debug uchun
+    print("Setting up admin panel handlers...")
+
     # Main admin command
     @client_bot_router.message(Command('admin'), AdminFilter())
     async def admin_menu(message: Message):
@@ -377,141 +380,184 @@ def admin_panel():
                 f"🕵 Панель админа\nКоличество юзеров в боте: {count}",
                 reply_markup=await admin_kb()
             )
+            print(f"Admin menu sent to user {message.from_user.id}")
         except Exception as e:
             logger.error(f"Admin menu error: {e}")
             await message.answer("❗ Произошла ошибка при открытии админ панели.")
 
-    # User management
-    @client_bot_router.callback_query(F.data == "admin_users", AdminFilter())
-    async def admin_users_handler(callback: CallbackQuery):
-        try:
-            bot_token = callback.bot.token
-            users_count = await get_users_count(bot_token)
+    # Debug handler - har qanday callback'ni ushlash
+    @client_bot_router.callback_query()
+    async def debug_callback_handler(callback: CallbackQuery):
+        print(f"Callback received: {callback.data} from user {callback.from_user.id}")
 
-            text = f"👥 Управление пользователями\n\n"
-            text += f"📊 Общее количество: {users_count}\n\n"
-            text += "Выберите действие:"
+        # Agar admin callback bo'lsa
+        if callback.data.startswith("admin_"):
+            await handle_admin_callbacks(callback)
+        else:
+            # Boshqa handler'larga o'tkazish
+            return False
 
-            builder = InlineKeyboardBuilder()
-            builder.button(text="🔍 Найти пользователя", callback_data="imp")
-            builder.button(text="📊 Статистика", callback_data="admin_get_stats")
-            builder.button(text="🔙 Назад", callback_data="admin_panel")
-            builder.adjust(1)
 
-            await callback.message.edit_text(text, reply_markup=builder.as_markup())
-        except Exception as e:
-            logger.error(f"Admin users error: {e}")
-            await callback.answer("Ошибка при загрузке управления пользователями")
+async def handle_admin_callbacks(callback: CallbackQuery):
+    """Admin callback'larni boshqarish"""
+    try:
+        data = callback.data
+        print(f"Handling admin callback: {data}")
 
-    # Payments management
-    @client_bot_router.callback_query(F.data == "admin_payments", AdminFilter())
-    async def admin_payments_handler(callback: CallbackQuery):
-        try:
-            text = f"💰 Управление выплатами\n\nВыберите действие:"
+        if data == "admin_users":
+            await admin_users_handler(callback)
+        elif data == "admin_payments":
+            await admin_payments_handler(callback)
+        elif data == "admin_settings":
+            await admin_settings_handler(callback)
+        elif data == "admin_channels":
+            await admin_channels_handler(callback)
+        elif data == "admin_mailing":
+            await admin_mailing_handler(callback)
+        elif data == "admin_statistics":
+            await admin_statistics_handler(callback)
+        elif data == "admin_panel":
+            await back_to_admin_panel(callback)
+        elif data == "admin_cancel":
+            await admin_cancel_handler(callback)
+        else:
+            await callback.answer("Неизвестная команда")
 
-            builder = InlineKeyboardBuilder()
-            builder.button(text="📋 Все заявки", callback_data="all_payments")
-            builder.button(text="🔙 Назад", callback_data="admin_panel")
-            builder.adjust(1)
+    except Exception as e:
+        logger.error(f"Error handling admin callback {callback.data}: {e}")
+        await callback.answer("Произошла ошибка")
 
-            await callback.message.edit_text(text, reply_markup=builder.as_markup())
-        except Exception as e:
-            logger.error(f"Admin payments error: {e}")
-            await callback.answer("Ошибка при загрузке управления выплатами")
 
-    # Settings management
-    @client_bot_router.callback_query(F.data == "admin_settings", AdminFilter())
-    async def admin_settings_handler(callback: CallbackQuery):
-        try:
-            text = f"⚙️ Настройки бота\n\nВыберите параметр:"
+# Admin callback handlers
+async def admin_users_handler(callback: CallbackQuery):
+    try:
+        bot_token = callback.bot.token
+        users_count = await get_users_count(bot_token)
 
-            builder = InlineKeyboardBuilder()
-            builder.button(text="💰 Изменить награду за реферала", callback_data="change_money")
-            builder.button(text="💸 Изменить мин. выплату", callback_data="change_min")
-            builder.button(text="🔙 Назад", callback_data="admin_panel")
-            builder.adjust(1)
+        text = f"👥 Управление пользователями\n\n"
+        text += f"📊 Общее количество: {users_count}\n\n"
+        text += "Выберите действие:"
 
-            await callback.message.edit_text(text, reply_markup=builder.as_markup())
-        except Exception as e:
-            logger.error(f"Admin settings error: {e}")
-            await callback.answer("Ошибка при загрузке настроек")
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔍 Найти пользователя", callback_data="imp")
+        builder.button(text="📊 Статистика", callback_data="admin_get_stats")
+        builder.button(text="🔙 Назад", callback_data="admin_panel")
+        builder.adjust(1)
 
-    # Channels management
-    @client_bot_router.callback_query(F.data == "admin_channels", AdminFilter())
-    async def admin_channels_handler(callback: CallbackQuery):
-        try:
-            text = f"📢 Управление каналами\n\nВыберите действие:"
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Admin users error: {e}")
+        await callback.answer("Ошибка при загрузке управления пользователями")
 
-            builder = InlineKeyboardBuilder()
-            builder.button(text="➕ Добавить канал", callback_data="admin_add_channel")
-            builder.button(text="🗑 Удалить канал", callback_data="admin_delete_channel")
-            builder.button(text="🔙 Назад", callback_data="admin_panel")
-            builder.adjust(1)
 
-            await callback.message.edit_text(text, reply_markup=builder.as_markup())
-        except Exception as e:
-            logger.error(f"Admin channels error: {e}")
-            await callback.answer("Ошибка при загрузке управления каналами")
+async def admin_payments_handler(callback: CallbackQuery):
+    try:
+        text = f"💰 Управление выплатами\n\nВыберите действие:"
 
-    # Mailing management
-    @client_bot_router.callback_query(F.data == "admin_mailing", AdminFilter())
-    async def admin_mailing_handler(callback: CallbackQuery):
-        try:
-            text = f"📤 Рассылка сообщений\n\nВыберите действие:"
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📋 Все заявки", callback_data="all_payments")
+        builder.button(text="🔙 Назад", callback_data="admin_panel")
+        builder.adjust(1)
 
-            builder = InlineKeyboardBuilder()
-            builder.button(text="📝 Отправить сообщение", callback_data="admin_send_message")
-            builder.button(text="🔙 Назад", callback_data="admin_panel")
-            builder.adjust(1)
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Admin payments error: {e}")
+        await callback.answer("Ошибка при загрузке управления выплатами")
 
-            await callback.message.edit_text(text, reply_markup=builder.as_markup())
-        except Exception as e:
-            logger.error(f"Admin mailing error: {e}")
-            await callback.answer("Ошибка при загрузке рассылки")
 
-    # Statistics
-    @client_bot_router.callback_query(F.data == "admin_statistics", AdminFilter())
-    async def admin_statistics_handler(callback: CallbackQuery):
-        try:
-            bot_token = callback.bot.token
-            users_count = await get_users_count(bot_token)
+async def admin_settings_handler(callback: CallbackQuery):
+    try:
+        text = f"⚙️ Настройки бота\n\nВыберите параметр:"
 
-            text = f"📊 Статистика бота\n\n"
-            text += f"👥 Пользователей: {users_count}\n"
+        builder = InlineKeyboardBuilder()
+        builder.button(text="💰 Изменить награду за реферала", callback_data="change_money")
+        builder.button(text="💸 Изменить мин. выплату", callback_data="change_min")
+        builder.button(text="🔙 Назад", callback_data="admin_panel")
+        builder.adjust(1)
 
-            builder = InlineKeyboardBuilder()
-            builder.button(text="🔄 Обновить", callback_data="admin_get_stats")
-            builder.button(text="🔙 Назад", callback_data="admin_panel")
-            builder.adjust(1)
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Admin settings error: {e}")
+        await callback.answer("Ошибка при загрузке настроек")
 
-            await callback.message.edit_text(text, reply_markup=builder.as_markup())
-        except Exception as e:
-            logger.error(f"Admin statistics error: {e}")
-            await callback.answer("Ошибка при загрузке статистики")
 
-    # Back to admin panel
-    @client_bot_router.callback_query(F.data == "admin_panel", AdminFilter())
-    async def back_to_admin_panel(callback: CallbackQuery):
-        try:
-            bot_token = callback.bot.token
-            count = await get_users_count(bot_token)
+async def admin_channels_handler(callback: CallbackQuery):
+    try:
+        text = f"📢 Управление каналами\n\nВыберите действие:"
 
-            await callback.message.edit_text(
-                f"🕵 Панель админа\nКоличество юзеров в боте: {count}",
-                reply_markup=await admin_kb()
-            )
-        except Exception as e:
-            logger.error(f"Back to admin panel error: {e}")
-            await callback.answer("Ошибка при возврате к админ панели")
+        builder = InlineKeyboardBuilder()
+        builder.button(text="➕ Добавить канал", callback_data="admin_add_channel")
+        builder.button(text="🗑 Удалить канал", callback_data="admin_delete_channel")
+        builder.button(text="🔙 Назад", callback_data="admin_panel")
+        builder.adjust(1)
 
-    # Cancel admin panel
-    @client_bot_router.callback_query(F.data == "admin_cancel", AdminFilter())
-    async def admin_cancel_handler(callback: CallbackQuery):
-        try:
-            await callback.message.delete()
-            await callback.answer("Панель админа закрыта")
-        except Exception as e:
-            await callback.answer("Панель закрыта")
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Admin channels error: {e}")
+        await callback.answer("Ошибка при загрузке управления каналами")
+
+
+async def admin_mailing_handler(callback: CallbackQuery):
+    try:
+        text = f"📤 Рассылка сообщений\n\nВыберите действие:"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📝 Отправить сообщение", callback_data="admin_send_message")
+        builder.button(text="🔙 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Admin mailing error: {e}")
+        await callback.answer("Ошибка при загрузке рассылки")
+
+
+async def admin_statistics_handler(callback: CallbackQuery):
+    try:
+        bot_token = callback.bot.token
+        users_count = await get_users_count(bot_token)
+
+        text = f"📊 Статистика бота\n\n"
+        text += f"👥 Пользователей: {users_count}\n"
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 Обновить", callback_data="admin_get_stats")
+        builder.button(text="🔙 Назад", callback_data="admin_panel")
+        builder.adjust(1)
+
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Admin statistics error: {e}")
+        await callback.answer("Ошибка при загрузке статистики")
+
+
+async def back_to_admin_panel(callback: CallbackQuery):
+    try:
+        bot_token = callback.bot.token
+        count = await get_users_count(bot_token)
+
+        await callback.message.edit_text(
+            f"🕵 Панель админа\nКоличество юзеров в боте: {count}",
+            reply_markup=await admin_kb()
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Back to admin panel error: {e}")
+        await callback.answer("Ошибка при возврате к админ панели")
+
+
+async def admin_cancel_handler(callback: CallbackQuery):
+    try:
+        await callback.message.delete()
+        await callback.answer("Панель админа закрыта")
+    except Exception as e:
+        await callback.answer("Панель закрыта")
 
     # ALL EXISTING HANDLERS FROM YOUR CODE:
 
