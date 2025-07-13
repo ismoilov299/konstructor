@@ -1,6 +1,7 @@
 # Debug callback handler - barcha callback'larni kuzatish uchun
 
 
+
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, StateFilter, BaseFilter
 from aiogram.types import Message, CallbackQuery
@@ -386,55 +387,6 @@ def admin_panel():
             logger.error(f"Admin users error: {e}")
             await callback.answer("Ошибка при загрузке управления пользователями")
 
-    @client_bot_router.callback_query()
-    async def debug_all_callbacks(callback: CallbackQuery):
-        print(f"DEBUG: Any callback received: {callback.data} from user {callback.from_user.id}")
-
-        # Agar admin callback bo'lsa
-        if callback.data.startswith("admin_") or callback.data in ["imp", "all_payments", "change_money", "change_min",
-                                                                   "admin_get_stats"]:
-            # Admin filter tekshiruvi
-            admin_filter = AdminFilter()
-            is_admin = await admin_filter(callback)
-
-            if is_admin:
-                print(f"Handling admin callback: {callback.data}")
-
-                # Manual callback handling
-                try:
-                    if callback.data == "admin_users":
-                        await admin_users_callback(callback)
-                    elif callback.data == "admin_payments":
-                        await admin_payments_callback(callback)
-                    elif callback.data == "admin_settings":
-                        await admin_settings_callback(callback)
-                    elif callback.data == "admin_channels":
-                        await admin_channels_callback(callback)
-                    elif callback.data == "admin_mailing":
-                        await admin_mailing_callback(callback)
-                    elif callback.data == "admin_statistics":
-                        await admin_statistics_callback(callback)
-                    elif callback.data == "admin_panel":
-                        await admin_panel_callback(callback)
-                    elif callback.data == "admin_cancel":
-                        await admin_cancel_callback(callback)
-                    else:
-                        print(f"No handler found for {callback.data}")
-                        await callback.answer("Функция в разработке")
-
-                except Exception as e:
-                    print(f"Error handling callback {callback.data}: {e}")
-                    await callback.answer("Произошла ошибка")
-
-                return True  # Callback handled
-            else:
-                print(f"User {callback.from_user.id} is not admin")
-                await callback.answer("У вас нет прав администратора")
-                return True
-
-        # Boshqa callback'lar uchun False return qilamiz
-        return False  # modul/clientbot/handlers/admin/universal_admin.py
-
     async def admin_payments_callback(callback: CallbackQuery):
         try:
             text = f"💰 Управление выплатами\n\nВыберите действие:"
@@ -587,6 +539,216 @@ def admin_panel():
             f'Не удалось отправить: {fail_count}'
         )
 
+    @client_bot_router.callback_query()
+    async def debug_all_callbacks(callback: CallbackQuery):
+        print(f"DEBUG: Any callback received: {callback.data} from user {callback.from_user.id}")
+
+        # Agar admin callback bo'lsa
+        if callback.data.startswith("admin_") or callback.data in ["imp", "all_payments", "change_money", "change_min",
+                                                                   "admin_get_stats"]:
+            # Admin filter tekshiruvi
+            admin_filter = AdminFilter()
+            is_admin = await admin_filter(callback)
+
+            if is_admin:
+                print(f"Handling admin callback: {callback.data}")
+
+                # Manual callback handling
+                try:
+                    if callback.data == "admin_users":
+                        await admin_users_callback(callback)
+                    elif callback.data == "admin_payments":
+                        await admin_payments_callback(callback)
+                    elif callback.data == "admin_settings":
+                        await admin_settings_callback(callback)
+                    elif callback.data == "admin_channels":
+                        await admin_channels_callback(callback)
+                    elif callback.data == "admin_mailing":
+                        await admin_mailing_callback(callback)
+                    elif callback.data == "admin_statistics":
+                        await admin_statistics_callback(callback)
+                    elif callback.data == "admin_panel":
+                        await admin_panel_callback(callback)
+                    elif callback.data == "admin_cancel":
+                        await admin_cancel_callback(callback)
+
+                    # Qo'shimcha admin callback'lar
+                    elif callback.data == "imp":
+                        await callback.message.edit_text("Введите ID пользователя", reply_markup=await cancel_kb())
+                        # State set qilish kerak, ammo universal handler'da FSMContext yo'q
+                        print("imp callback - need to set state ChangeAdminInfo.imp")
+
+                    elif callback.data == "all_payments":
+                        active_payments = await get_pending_payments()
+                        if active_payments:
+                            for payment in active_payments:
+                                await callback.message.answer(
+                                    text=f"<b>Заявка на выплату № {payment[0]}</b>\n"
+                                         f"ID пользователя: <code>{payment[1]}</code>\n"
+                                         f"Сумма: {payment[2]} руб.\n"
+                                         f"Карта: <code>{payment[3]}</code>\n"
+                                         f"Банк: {payment[4]}",
+                                    parse_mode="HTML",
+                                    reply_markup=await payments_action_in(payment[0])
+                                )
+                        else:
+                            await callback.message.edit_text('Нет заявок на выплату.', reply_markup=await admin_kb())
+                        await callback.answer()
+
+                    elif callback.data == "admin_send_message":
+                        await callback.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)',
+                                                         reply_markup=await cancel_kb())
+                        # State set qilish kerak: SendMessagesForm.message
+                        print("admin_send_message callback - need to set state SendMessagesForm.message")
+                        await callback.answer()
+
+                    elif callback.data == "change_money":
+                        await callback.message.edit_text('Введите новую награду за рефералов:',
+                                                         reply_markup=await cancel_kb())
+                        # State set qilish kerak: ChangeAdminInfo.get_amount
+                        print("change_money callback - need to set state ChangeAdminInfo.get_amount")
+                        await callback.answer()
+
+                    elif callback.data == "change_min":
+                        await callback.message.edit_text("Введите новую минимальную выплату:",
+                                                         reply_markup=await cancel_kb())
+                        # State set qilish kerak: ChangeAdminInfo.get_min
+                        print("change_min callback - need to set state ChangeAdminInfo.get_min")
+                        await callback.answer()
+
+                    elif callback.data == "admin_add_channel":
+                        await callback.message.edit_text('Отправьте id канала\n\n'
+                                                         'Убедитесь в том, что бот является администратором в канале\n\n'
+                                                         '@username_to_id_bot id канала можно получить у этого бота',
+                                                         reply_markup=await cancel_kb())
+                        # State set qilish kerak: AddChannelSponsorForm.channel
+                        print("admin_add_channel callback - need to set state AddChannelSponsorForm.channel")
+                        await callback.answer()
+
+                    elif callback.data == "admin_delete_channel":
+                        channels = await get_all_channels_sponsors()
+                        kb = await get_remove_channel_sponsor_kb(channels, callback.bot)
+                        await callback.message.edit_text('Выберите канал для удаления', reply_markup=kb)
+                        await callback.answer()
+
+                    elif callback.data == "admin_get_stats":
+                        try:
+                            bot_token = callback.bot.token
+                            bot_db = await shortcuts.get_bot_by_token(bot_token)
+                            if bot_db:
+                                total_users = ClientBotUser.objects.filter(bot=bot_db).count()
+                                new_text = f'<b>Количество пользователей в боте:</b> {total_users}'
+                                await callback.message.edit_text(text=new_text, reply_markup=await admin_kb(),
+                                                                 parse_mode='HTML')
+                            else:
+                                await callback.answer("Бот не найден в базе данных")
+                        except Exception as e:
+                            logger.error(f"Ошибка получения статистики: {e}")
+                            await callback.answer("Ошибка при получении статистики")
+                        await callback.answer()
+
+                    elif callback.data == "cancel":
+                        await callback.message.edit_text('Отменено')
+                        await callback.answer()
+
+                    # Accept/decline payment callbacks
+                    elif callback.data.startswith("accept_"):
+                        payment_id = int(callback.data.replace("accept_", ""))
+                        user_info = await status_accepted(payment_id)
+                        if user_info:
+                            await callback.message.edit_reply_markup(reply_markup=await accepted_in())
+                            await callback.bot.send_message(user_info[0],
+                                                            f"Ваша завявка на выплату {user_info[1]} была подтверждена ✅")
+                        else:
+                            await callback.answer("Ошибка: Не удалось подтвердить заявку", show_alert=True)
+                        await callback.answer()
+
+                    elif callback.data.startswith("decline_"):
+                        payment_id = int(callback.data.replace("decline_", ""))
+                        user_info = await status_declined(payment_id)
+                        if user_info:
+                            await callback.message.edit_reply_markup(reply_markup=await declined_in())
+                            await callback.bot.send_message(user_info[0],
+                                                            f"Ваша завявка на выплату {user_info[1]} была отклонена❌")
+                        else:
+                            await callback.answer("Ошибка: Не удалось отклонить заявку", show_alert=True)
+                        await callback.answer()
+
+                    # User management callbacks
+                    elif callback.data.startswith("ban_"):
+                        user_id = int(callback.data.replace("ban_", ""))
+                        await ban_unban_db(user_id, True)
+                        await callback.message.edit_reply_markup(reply_markup=await imp_menu_in(user_id, True))
+                        await callback.answer()
+
+                    elif callback.data.startswith("razb_"):
+                        user_id = int(callback.data.replace("razb_", ""))
+                        await ban_unban_db(user_id, False)
+                        await callback.message.edit_reply_markup(reply_markup=await imp_menu_in(user_id, False))
+                        await callback.answer()
+
+                    elif callback.data.startswith("addbalance_"):
+                        user_id = int(callback.data.replace("addbalance_", ""))
+                        await callback.message.edit_text(
+                            "Введите сумму для добавления к балансу. Для дробных чисел используйте точку.",
+                            reply_markup=await cancel_kb())
+                        # State: ChangeAdminInfo.add_balance + user_id
+                        print(f"addbalance_{user_id} callback - need to set state")
+                        await callback.answer()
+
+                    elif callback.data.startswith("changebalance_"):
+                        user_id = int(callback.data.replace("changebalance_", ""))
+                        await callback.message.edit_text(
+                            "Введите новую сумму баланса. Для дробных чисел используйте точку.",
+                            reply_markup=await cancel_kb())
+                        # State: ChangeAdminInfo.change_balance + user_id
+                        print(f"changebalance_{user_id} callback - need to set state")
+                        await callback.answer()
+
+                    elif callback.data.startswith("changerefs_"):
+                        user_id = int(callback.data.replace("changerefs_", ""))
+                        await callback.message.edit_text("Введите новое количество рефералов:",
+                                                         reply_markup=await cancel_kb())
+                        # State: ChangeAdminInfo.change_refs + user_id
+                        print(f"changerefs_{user_id} callback - need to set state")
+                        await callback.answer()
+
+                    elif callback.data.startswith("showrefs_"):
+                        user_id = int(callback.data.replace("showrefs_", ""))
+                        try:
+                            file_data, filename = await convert_to_excel(user_id, callback.bot.token)
+                            document = BufferedInputFile(file_data, filename=filename)
+                            await callback.message.answer_document(document)
+                        except Exception as e:
+                            await callback.message.answer(f"🚫 Произошла ошибка при создании файла: {e}")
+                        await callback.answer()
+
+                    elif callback.data.startswith("remove_channel"):
+                        channel_id = int(callback.data.split('|')[-1])
+                        try:
+                            await remove_channel_sponsor(channel_id)
+                            await callback.message.edit_text('Канал был удален!', reply_markup=await admin_kb())
+                        except Exception as e:
+                            logger.error(f"Error removing channel: {e}")
+                            await callback.message.answer("Произошла ошибка при удалении канала.")
+                        await callback.answer()
+
+                    else:
+                        print(f"No handler found for {callback.data}")
+                        await callback.answer("Функция в разработке")
+
+                except Exception as e:
+                    print(f"Error handling callback {callback.data}: {e}")
+                    await callback.answer("Произошла ошибка")
+
+                return True  # Callback handled
+            else:
+                print(f"User {callback.from_user.id} is not admin")
+                await callback.answer("У вас нет прав администратора")
+                return True
+
+        # Boshqa callback'lar uchun False return qilamiz
+        return False  # modul/clientbot/handlers/admin/universal_admin.py
     @client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
     async def manage_user_handler(call: CallbackQuery, state: FSMContext):
         await call.message.edit_text("Введите ID пользователя", reply_markup=await cancel_kb())
