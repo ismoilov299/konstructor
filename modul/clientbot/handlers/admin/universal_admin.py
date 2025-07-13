@@ -83,7 +83,7 @@ async def send_message_to_users(bot, users, text):
             await bot.send_message(chat_id=user_id, text=text)
         except TelegramAPIError as e:
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
-def anon_bot_handlers():
+def admin_panel():
     @client_bot_router.message(Command('admin'), AdminFilter())
     async def admin(message: types.Message):
         await message.answer('Админ панель', reply_markup=admin_kb)
