@@ -416,7 +416,7 @@ async def handle_admin_callbacks(callback: CallbackQuery):
             await admin_settings_handler(callback)
         elif data == "admin_channels":
             await admin_channels_handler(callback)
-        elif data == "admin_mailing":
+        elif data == "admin_send_message":
             await admin_mailing_handler(callback)
         elif data == "admin_statistics":
             await admin_statistics_handler(callback)
