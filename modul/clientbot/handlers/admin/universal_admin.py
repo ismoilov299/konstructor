@@ -398,36 +398,36 @@ def admin_panel():
             # Boshqa handler'larga o'tkazish
             return False
 
+    @client_bot_router.callback_query(AdminFilter(), StateFilter('*'))
+    async def handle_admin_callbacks(callback: CallbackQuery):
+        """Admin callback'larni boshqarish"""
+        print(f"Handling admin callback: {callback.data} from user {callback.from_user.id}")
+        try:
+            data = callback.data
+            print(f"Handling admin callback: {data}")
 
-async def handle_admin_callbacks(callback: CallbackQuery):
-    """Admin callback'larni boshqarish"""
-    print(f"Handling admin callback: {callback.data} from user {callback.from_user.id}")
-    try:
-        data = callback.data
-        print(f"Handling admin callback: {data}")
+            if data == "admin_users":
+                await admin_users_handler(callback)
+            elif data == "admin_payments":
+                await admin_payments_handler(callback)
+            elif data == "admin_settings":
+                await admin_settings_handler(callback)
+            elif data == "admin_channels":
+                await admin_channels_handler(callback)
+            elif data == "admin_mailing":
+                await admin_mailing_handler(callback)
+            elif data == "admin_statistics":
+                await admin_statistics_handler(callback)
+            elif data == "admin_panel":
+                await back_to_admin_panel(callback)
+            elif data == "admin_cancel":
+                await admin_cancel_handler(callback)
+            else:
+                await callback.answer("Неизвестная команда")
 
-        if data == "admin_users":
-            await admin_users_handler(callback)
-        elif data == "admin_payments":
-            await admin_payments_handler(callback)
-        elif data == "admin_settings":
-            await admin_settings_handler(callback)
-        elif data == "admin_channels":
-            await admin_channels_handler(callback)
-        elif data == "admin_mailing":
-            await admin_mailing_handler(callback)
-        elif data == "admin_statistics":
-            await admin_statistics_handler(callback)
-        elif data == "admin_panel":
-            await back_to_admin_panel(callback)
-        elif data == "admin_cancel":
-            await admin_cancel_handler(callback)
-        else:
-            await callback.answer("Неизвестная команда")
-
-    except Exception as e:
-        logger.error(f"Error handling admin callback {callback.data}: {e}")
-        await callback.answer("Произошла ошибка")
+        except Exception as e:
+            logger.error(f"Error handling admin callback {callback.data}: {e}")
+            await callback.answer("Произошла ошибка")
 
 
 # Admin callback handlers
