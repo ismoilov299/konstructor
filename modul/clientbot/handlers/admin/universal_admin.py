@@ -368,8 +368,17 @@ def admin_panel():
 
     # Debug uchun
     print("Setting up admin panel handlers...")
+    @client_bot_router.callback_query(AdminFilter(), StateFilter('*'))
+    async def debug_callback_handler(callback: CallbackQuery):
+        async def debug_callback_handler(callback: CallbackQuery):
+            print(f"Callback received: {callback.data} from user {callback.from_user.id}")
 
-    # Main admin command
+            # Agar admin callback bo'lsa
+            if callback.data.startswith("admin_"):
+                await handle_admin_callbacks(callback)
+            else:
+                # Boshqa handler'larga o'tkazish
+                return False
     @client_bot_router.message(Command('admin'), AdminFilter())
     async def admin_menu(message: Message):
         print(f"Admin command received from user {message.from_user.id}")
@@ -387,47 +396,40 @@ def admin_panel():
             await message.answer("❗ Произошла ошибка при открытии админ панели.")
 
     # Debug handler - har qanday callback'ni ushlash
-    @client_bot_router.callback_query()
-    async def debug_callback_handler(callback: CallbackQuery):
-        print(f"Callback received: {callback.data} from user {callback.from_user.id}")
 
-        # Agar admin callback bo'lsa
-        if callback.data.startswith("admin_"):
-            await handle_admin_callbacks(callback)
+
+
+
+@client_bot_router.callback_query(AdminFilter(), StateFilter('*'))
+async def handle_admin_callbacks(callback: CallbackQuery):
+    """Admin callback'larni boshqarish"""
+    print(f"Handling admin callback: {callback.data} from user {callback.from_user.id}")
+    try:
+        data = callback.data
+        print(f"Handling admin callback: {data}")
+
+        if data == "admin_users":
+            await admin_users_handler(callback)
+        elif data == "admin_payments":
+            await admin_payments_handler(callback)
+        elif data == "admin_settings":
+            await admin_settings_handler(callback)
+        elif data == "admin_channels":
+            await admin_channels_handler(callback)
+        elif data == "admin_mailing":
+            await admin_mailing_handler(callback)
+        elif data == "admin_statistics":
+            await admin_statistics_handler(callback)
+        elif data == "admin_panel":
+            await back_to_admin_panel(callback)
+        elif data == "admin_cancel":
+            await admin_cancel_handler(callback)
         else:
-            # Boshqa handler'larga o'tkazish
-            return False
+            await callback.answer("Неизвестная команда")
 
-    @client_bot_router.callback_query(AdminFilter(), StateFilter('*'))
-    async def handle_admin_callbacks(callback: CallbackQuery):
-        """Admin callback'larni boshqarish"""
-        print(f"Handling admin callback: {callback.data} from user {callback.from_user.id}")
-        try:
-            data = callback.data
-            print(f"Handling admin callback: {data}")
-
-            if data == "admin_users":
-                await admin_users_handler(callback)
-            elif data == "admin_payments":
-                await admin_payments_handler(callback)
-            elif data == "admin_settings":
-                await admin_settings_handler(callback)
-            elif data == "admin_channels":
-                await admin_channels_handler(callback)
-            elif data == "admin_mailing":
-                await admin_mailing_handler(callback)
-            elif data == "admin_statistics":
-                await admin_statistics_handler(callback)
-            elif data == "admin_panel":
-                await back_to_admin_panel(callback)
-            elif data == "admin_cancel":
-                await admin_cancel_handler(callback)
-            else:
-                await callback.answer("Неизвестная команда")
-
-        except Exception as e:
-            logger.error(f"Error handling admin callback {callback.data}: {e}")
-            await callback.answer("Произошла ошибка")
+    except Exception as e:
+        logger.error(f"Error handling admin callback {callback.data}: {e}")
+        await callback.answer("Произошла ошибка")
 
 
 # Admin callback handlers
