@@ -77,6 +77,44 @@ def get_user_bots(uid: int):
 
 
 @sync_to_async
+def create_user_directly(uid, username, first_name, last_name="", profile_image_url=None):
+    """
+    Foydalanuvchini to'g'ridan-to'g'ri bazaga qo'shish
+    """
+    try:
+        # User modelida yaratish
+        user = User.objects.create(
+            uid=uid,
+            username=username if username else None,
+            first_name=first_name,
+            last_name=last_name if last_name else None,
+        )
+
+        # UserTG modelida ham yaratish (agar kerak bo'lsa)
+        user_tg, created = UserTG.objects.get_or_create(
+            uid=uid,
+            defaults={
+                'username': username if username else None,
+                'first_name': first_name,
+                'last_name': last_name if last_name else None,
+                'balance': 0,
+                'paid': 0,
+                'refs': 0,
+                'invited': "Никто",
+                'invited_id': None,
+                'banned': False
+            }
+        )
+
+        logger.info(f"User {uid} created successfully: {user.username or user.first_name}")
+        return user
+
+    except Exception as e:
+        logger.error(f"Error creating user {uid}: {e}")
+        return None
+
+
+@sync_to_async
 def get_bot_by_id(bot_id: int, owner_uid: int):
     """
     Получение бота по ID и UID владельца

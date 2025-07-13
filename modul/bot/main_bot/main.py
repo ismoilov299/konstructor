@@ -10,7 +10,7 @@ from asgiref.sync import sync_to_async
 from modul.config import settings_conf
 from modul.loader import main_bot_router, client_bot_router
 from modul.models import User
-from modul.bot.main_bot.services.user_service import get_user_by_uid
+from modul.bot.main_bot.services.user_service import get_user_by_uid, create_user_directly
 from modul.bot.main_bot.handlers.create_bot import create_bot_router
 from modul.bot.main_bot.handlers.manage_bots import manage_bots_router
 
@@ -69,10 +69,34 @@ def init_bot_handlers():
                     reply_markup=await main_menu(),
                     parse_mode="HTML"
                 )
-                logger.info(f"Main menu shown to user {user.id}")
+                logger.info(f"Main menu shown to existing user {user.id}")
             else:
-                # Yangi foydalanuvchi - ro'yxatdan o'tkazish
-                await handle_new_user_registration(message, user)
+                # Yangi foydalanuvchi - avtomatik ro'yxatdan o'tkazish
+                new_user = await handle_auto_registration(message, user)
+                if new_user:
+                    await message.answer(
+                        f"👋 <b>Добро пожаловать, {user.first_name}!</b>\n\n"
+                        f"🤖 <b>Конструктор ботов</b> - создавайте и управляйте своими Telegram ботами!\n\n"
+                        f"🎉 <b>Вы успешно зарегистрированы!</b>\n\n"
+                        f"🔧 <b>Возможности:</b>\n"
+                        f"• Создание ботов за 2-3 минуты\n"
+                        f"• 6 профессиональных модулей\n"
+                        f"• Полная панель управления\n"
+                        f"• Автоматическая настройка\n\n"
+                        f"🎯 <b>Доступно 6 модулей:</b>\n"
+                        f"💸 Рефералы • 🎬 Кино • 📥 Загрузчик\n"
+                        f"💬 ChatGPT • ❤️ Знакомства • 👤 Анонимный чат\n\n"
+                        f"Выберите действие:",
+                        reply_markup=await main_menu(),
+                        parse_mode="HTML"
+                    )
+                    logger.info(f"Main menu shown to new registered user {user.id}")
+                else:
+                    await message.answer(
+                        "❌ Произошла ошибка при регистрации. Попробуйте еще раз.\n"
+                        "/start",
+                        parse_mode="HTML"
+                    )
 
         except Exception as e:
             logger.error(f"Error in cmd_start for user {user.id}: {e}")
@@ -82,51 +106,44 @@ def init_bot_handlers():
                 parse_mode="HTML"
             )
 
-    async def handle_new_user_registration(message: Message, user):
-        """Yangi foydalanuvchi ro'yxatdan o'tkazish"""
-        telegram_id = user.id
-        first_name = user.first_name
-        last_name = user.last_name or "Не указано"
-        username = user.username or "Не указано"
-
-        # Foydalanuvchi rasmini olish
-        photo_link = None
+    async def handle_auto_registration(message: Message, user):
+        """Yangi foydalanuvchini avtomatik ro'yxatdan o'tkazish"""
         try:
-            user_photos = await message.bot.get_user_profile_photos(telegram_id)
-            if user_photos.total_count > 0:
-                photo_id = user_photos.photos[0][-1].file_id
-                photo_url = await message.bot.get_file(photo_id)
-                photo_link = f"https://api.telegram.org/file/bot{settings_conf.BOT_TOKEN}/{photo_url.file_path}"
+            telegram_id = user.id
+            first_name = user.first_name or "Пользователь"
+            last_name = user.last_name or ""
+            username = user.username or ""
+
+            # Foydalanuvchi rasmini olish
+            photo_url = None
+            try:
+                user_photos = await message.bot.get_user_profile_photos(telegram_id)
+                if user_photos.total_count > 0:
+                    photo_id = user_photos.photos[0][-1].file_id
+                    photo_file = await message.bot.get_file(photo_id)
+                    photo_url = f"https://api.telegram.org/file/bot{message.bot.token}/{photo_file.file_path}"
+            except Exception as e:
+                logger.warning(f"Could not get user photo for {telegram_id}: {e}")
+
+            # Foydalanuvchini to'g'ridan-to'g'ri bazaga qo'shish
+            new_user = await create_user_directly(
+                uid=telegram_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+                profile_image_url=photo_url
+            )
+
+            if new_user:
+                logger.info(f"User {telegram_id} auto-registered successfully")
+                return new_user
+            else:
+                logger.error(f"Failed to auto-register user {telegram_id}")
+                return None
+
         except Exception as e:
-            logger.warning(f"Could not get user photo for {telegram_id}: {e}")
-
-        # Ro'yxatdan o'tish linki
-        registration_url = (
-            f"{webhook_url}?"
-            f"id={telegram_id}&first_name={first_name}&last_name={last_name}&username={username}"
-        )
-        if photo_link:
-            registration_url += f"&photo_url={photo_link}"
-
-        kb = await registration_keyboard(registration_url)
-
-        await message.answer(
-            f"👋 <b>Привет, {first_name}!</b>\n\n"
-            f"🤖 <b>Конструктор ботов</b> - добро пожаловать!\n\n"
-            f"Здесь вы можете:\n"
-            f"• 🚀 Создавать собственные Telegram боты\n"
-            f"• ⚙️ Управлять ими профессионально\n"
-            f"• 📊 Просматривать подробную статистику\n"
-            f"• 💰 Зарабатывать на рефералах\n\n"
-            f"🎯 <b>Доступно 6 модулей:</b>\n"
-            f"💸 Рефералы • 🎬 Кино  • 📥 Загрузчик\n"
-            f"💬 ChatGPT • ❤️ Знакомства • \n"
-            f"👤 Анонимный чат • \n\n"
-            f"<b>Для начала зарегистрируйтесь:</b>",
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-        logger.info(f"Registration message sent to new user {telegram_id}")
+            logger.error(f"Error in auto registration for user {telegram_id}: {e}")
+            return None
 
     @main_bot_router.callback_query(F.data == "back_to_main")
     async def back_to_main(callback: CallbackQuery, state: FSMContext):
