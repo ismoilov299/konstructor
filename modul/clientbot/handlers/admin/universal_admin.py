@@ -1,6 +1,4 @@
-# Debug callback handler - barcha callback'larni kuzatish uchun
-
-
+# modul/clientbot/handlers/admin/universal_admin.py
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, StateFilter, BaseFilter
@@ -489,63 +487,40 @@ def admin_panel():
         except Exception as e:
             await callback.answer("Панель закрыта")
 
-    # ALL EXISTING HANDLERS FROM YOUR CODE (properly indented inside admin_panel function):
+    print("Admin panel handlers registered successfully!")
 
-    @client_bot_router.callback_query(F.data == 'admin_send_message', AdminFilter(), StateFilter('*'))
-    async def admin_send_message(call: CallbackQuery, state: FSMContext):
-        await state.set_state(SendMessagesForm.message)
-        await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)',
-                                     reply_markup=await cancel_kb())
-
-    @client_bot_router.message(SendMessagesForm.message)
-    async def admin_send_message_msg(message: Message, state: FSMContext):
-        await state.clear()
-        bot_db = await shortcuts.get_bot(message.bot)
-        users = await get_all_users(bot_db)
-
-        if not users:
-            await message.answer("Нет пользователей для рассылки.")
-            return
-
-        success_count = 0
-        fail_count = 0
-
-        for user_id in users:
-            try:
-                if message.text:
-                    await message.bot.send_message(chat_id=user_id, text=message.text)
-                elif message.photo:
-                    await message.bot.send_photo(chat_id=user_id, photo=message.photo[-1].file_id,
-                                                 caption=message.caption)
-                elif message.video:
-                    await message.bot.send_video(chat_id=user_id, video=message.video.file_id, caption=message.caption)
-                elif message.audio:
-                    await message.bot.send_audio(chat_id=user_id, audio=message.audio.file_id, caption=message.caption)
-                elif message.document:
-                    await message.bot.send_document(chat_id=user_id, document=message.document.file_id,
-                                                    caption=message.caption)
-                else:
-                    await message.bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id,
-                                                   message_id=message.message_id)
-
-                success_count += 1
-            except Exception as e:
-                fail_count += 1
-                logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
-
-        await message.answer(
-            f'Рассылка завершена!\n'
-            f'Успешно отправлено: {success_count}\n'
-            f'Не удалось отправить: {fail_count}'
-        )
-
+    # Universal callback handler - barcha callback'larni kuzatish uchun
     @client_bot_router.callback_query()
-    async def debug_all_callbacks(callback: CallbackQuery):
+    async def universal_admin_callback_handler(callback: CallbackQuery):
         print(f"DEBUG: Any callback received: {callback.data} from user {callback.from_user.id}")
 
-        # Agar admin callback bo'lsa
-        if callback.data.startswith("admin_") or callback.data in ["imp", "all_payments", "change_money", "change_min",
-                                                                   "admin_get_stats"]:
+        # Admin callback'larni aniqlash
+        admin_callbacks = [
+            "admin_users", "admin_payments", "admin_settings", "admin_channels",
+            "admin_mailing", "admin_statistics", "admin_panel", "admin_cancel",
+            "imp", "all_payments", "admin_send_message", "change_money", "change_min",
+            "admin_add_channel", "admin_delete_channel", "admin_get_stats", "cancel"
+        ]
+
+        # Dinamic callback'lar (prefix bilan)
+        dynamic_callbacks = [
+            "accept_", "decline_", "ban_", "razb_", "addbalance_",
+            "changebalance_", "changerefs_", "showrefs_", "remove_channel"
+        ]
+
+        is_admin_callback = False
+
+        # Static callback'larni tekshirish
+        if callback.data in admin_callbacks:
+            is_admin_callback = True
+
+        # Dynamic callback'larni tekshirish
+        for prefix in dynamic_callbacks:
+            if callback.data.startswith(prefix):
+                is_admin_callback = True
+                break
+
+        if is_admin_callback:
             # Admin filter tekshiruvi
             admin_filter = AdminFilter()
             is_admin = await admin_filter(callback)
@@ -575,8 +550,8 @@ def admin_panel():
                     # Qo'shimcha admin callback'lar
                     elif callback.data == "imp":
                         await callback.message.edit_text("Введите ID пользователя", reply_markup=await cancel_kb())
-                        # State set qilish kerak, ammo universal handler'da FSMContext yo'q
                         print("imp callback - need to set state ChangeAdminInfo.imp")
+                        await callback.answer()
 
                     elif callback.data == "all_payments":
                         active_payments = await get_pending_payments()
@@ -598,30 +573,28 @@ def admin_panel():
                     elif callback.data == "admin_send_message":
                         await callback.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)',
                                                          reply_markup=await cancel_kb())
-                        # State set qilish kerak: SendMessagesForm.message
                         print("admin_send_message callback - need to set state SendMessagesForm.message")
                         await callback.answer()
 
                     elif callback.data == "change_money":
                         await callback.message.edit_text('Введите новую награду за рефералов:',
                                                          reply_markup=await cancel_kb())
-                        # State set qilish kerak: ChangeAdminInfo.get_amount
                         print("change_money callback - need to set state ChangeAdminInfo.get_amount")
                         await callback.answer()
 
                     elif callback.data == "change_min":
                         await callback.message.edit_text("Введите новую минимальную выплату:",
                                                          reply_markup=await cancel_kb())
-                        # State set qilish kerak: ChangeAdminInfo.get_min
                         print("change_min callback - need to set state ChangeAdminInfo.get_min")
                         await callback.answer()
 
                     elif callback.data == "admin_add_channel":
-                        await callback.message.edit_text('Отправьте id канала\n\n'
-                                                         'Убедитесь в том, что бот является администратором в канале\n\n'
-                                                         '@username_to_id_bot id канала можно получить у этого бота',
-                                                         reply_markup=await cancel_kb())
-                        # State set qilish kerak: AddChannelSponsorForm.channel
+                        await callback.message.edit_text(
+                            'Отправьте id канала\n\n'
+                            'Убедитесь в том, что бот является администратором в канале\n\n'
+                            '@username_to_id_bot id канала можно получить у этого бота',
+                            reply_markup=await cancel_kb()
+                        )
                         print("admin_add_channel callback - need to set state AddChannelSponsorForm.channel")
                         await callback.answer()
 
@@ -691,8 +664,8 @@ def admin_panel():
                         user_id = int(callback.data.replace("addbalance_", ""))
                         await callback.message.edit_text(
                             "Введите сумму для добавления к балансу. Для дробных чисел используйте точку.",
-                            reply_markup=await cancel_kb())
-                        # State: ChangeAdminInfo.add_balance + user_id
+                            reply_markup=await cancel_kb()
+                        )
                         print(f"addbalance_{user_id} callback - need to set state")
                         await callback.answer()
 
@@ -700,8 +673,8 @@ def admin_panel():
                         user_id = int(callback.data.replace("changebalance_", ""))
                         await callback.message.edit_text(
                             "Введите новую сумму баланса. Для дробных чисел используйте точку.",
-                            reply_markup=await cancel_kb())
-                        # State: ChangeAdminInfo.change_balance + user_id
+                            reply_markup=await cancel_kb()
+                        )
                         print(f"changebalance_{user_id} callback - need to set state")
                         await callback.answer()
 
@@ -709,7 +682,6 @@ def admin_panel():
                         user_id = int(callback.data.replace("changerefs_", ""))
                         await callback.message.edit_text("Введите новое количество рефералов:",
                                                          reply_markup=await cancel_kb())
-                        # State: ChangeAdminInfo.change_refs + user_id
                         print(f"changerefs_{user_id} callback - need to set state")
                         await callback.answer()
 
@@ -748,11 +720,50 @@ def admin_panel():
                 return True
 
         # Boshqa callback'lar uchun False return qilamiz
-        return False  # modul/clientbot/handlers/admin/universal_admin.py
-    @client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
-    async def manage_user_handler(call: CallbackQuery, state: FSMContext):
-        await call.message.edit_text("Введите ID пользователя", reply_markup=await cancel_kb())
-        await state.set_state(ChangeAdminInfo.imp)
+        return False
+
+    # Message handlers for states (FSM handlers)
+    @client_bot_router.message(SendMessagesForm.message)
+    async def admin_send_message_msg(message: Message, state: FSMContext):
+        await state.clear()
+        bot_db = await shortcuts.get_bot(message.bot)
+        users = await get_all_users(bot_db)
+
+        if not users:
+            await message.answer("Нет пользователей для рассылки.")
+            return
+
+        success_count = 0
+        fail_count = 0
+
+        for user_id in users:
+            try:
+                if message.text:
+                    await message.bot.send_message(chat_id=user_id, text=message.text)
+                elif message.photo:
+                    await message.bot.send_photo(chat_id=user_id, photo=message.photo[-1].file_id,
+                                                 caption=message.caption)
+                elif message.video:
+                    await message.bot.send_video(chat_id=user_id, video=message.video.file_id, caption=message.caption)
+                elif message.audio:
+                    await message.bot.send_audio(chat_id=user_id, audio=message.audio.file_id, caption=message.caption)
+                elif message.document:
+                    await message.bot.send_document(chat_id=user_id, document=message.document.file_id,
+                                                    caption=message.caption)
+                else:
+                    await message.bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id,
+                                                   message_id=message.message_id)
+
+                success_count += 1
+            except Exception as e:
+                fail_count += 1
+                logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+        await message.answer(
+            f'Рассылка завершена!\n'
+            f'Успешно отправлено: {success_count}\n'
+            f'Не удалось отправить: {fail_count}'
+        )
 
     @client_bot_router.message(ChangeAdminInfo.imp)
     async def get_user_info_handler(message: Message, state: FSMContext):
@@ -793,60 +804,235 @@ def admin_panel():
             await message.answer("️️❗Ошибка! Введите числовой ID пользователя.", reply_markup=await main_menu_bt())
             await state.clear()
 
-    # Payment handlers
-    @client_bot_router.callback_query(lambda call: "accept_" in call.data, AdminFilter(), StateFilter('*'))
-    async def acception(query: CallbackQuery):
-        id_of_wa = int(query.data.replace("accept_", ""))
-        user_info = await status_accepted(id_of_wa)
+    @client_bot_router.message(ChangeAdminInfo.add_balance)
+    async def process_add_balance(message: Message, state: FSMContext):
+        if message.text == "❌Отменить":
+            await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+            await state.clear()
+            return
 
-        if user_info:
-            await query.message.edit_reply_markup(reply_markup=await accepted_in())
-            await query.bot.send_message(
-                user_info[0],
-                f"Ваша завявка на выплату {user_info[1]} была подтверждена ✅"
-            )
+        try:
+            amount = float(message.text)
+            data = await state.get_data()
+            await addbalance_db(data["user_id"], amount)
+            await message.answer(f"Баланс успешно пополнен на {amount} руб.", reply_markup=await main_menu_bt())
+            await state.clear()
+        except ValueError:
+            await message.answer("❗ Введите корректное числовое значение.")
+        except Exception as e:
+            await message.answer(f"🚫 Не удалось изменить баланс. Ошибка: {e}", reply_markup=await main_menu_bt())
+            await state.clear()
+
+    @client_bot_router.message(ChangeAdminInfo.change_balance)
+    async def process_change_balance(message: Message, state: FSMContext):
+        if message.text == "❌Отменить":
+            await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+            await state.clear()
+            return
+
+        try:
+            new_balance = float(message.text)
+            data = await state.get_data()
+            await changebalance_db(data["user_id"], new_balance)
+            await message.answer(f"Баланс успешно изменен на {new_balance} руб.", reply_markup=await main_menu_bt())
+            await state.clear()
+        except ValueError:
+            await message.answer("❗ Введите корректное числовое значение.")
+        except Exception as e:
+            await message.answer(f"🚫 Не удалось изменить баланс. Ошибка: {e}", reply_markup=await main_menu_bt())
+            await state.clear()
+
+    @client_bot_router.message(ChangeAdminInfo.change_refs)
+    async def set_new_refs_count(message: Message, state: FSMContext):
+        data = await state.get_data()
+        user_id = data.get("user_id")
+
+        if message.text == "❌Отменить":
+            await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+            await state.clear()
+            return
+
+        if message.text.isdigit():
+            new_refs_count = int(message.text)
+
+            try:
+                @sync_to_async
+                @transaction.atomic
+                def update_refs():
+                    user = UserTG.objects.select_for_update().filter(uid=user_id).first()
+                    if user:
+                        user.refs = new_refs_count
+                        user.save()
+                        return True
+                    return False
+
+                updated = await update_refs()
+
+                if updated:
+                    await message.answer(
+                        f"Количество рефералов для пользователя {user_id} успешно обновлено на {new_refs_count}.",
+                        reply_markup=await main_menu_bt())
+                else:
+                    await message.answer(f"🚫 Пользователь с ID {user_id} не найден.", reply_markup=await main_menu_bt())
+
+            except Exception as e:
+                logger.error(f"Error updating refs count for user {user_id}: {e}")
+                await message.answer("🚫 Не удалось обновить количество рефералов.", reply_markup=await main_menu_bt())
         else:
-            await query.answer("Ошибка: Не удалось подтвердить заявку", show_alert=True)
+            await message.answer("❗ Введите корректное числовое значение.")
 
-    @client_bot_router.callback_query(lambda call: "decline_" in call.data, AdminFilter(), StateFilter('*'))
-    async def declined(query: CallbackQuery):
-        id_of_wa = int(query.data.replace("decline_", ""))
-        user_info = await status_declined(id_of_wa)
+        await state.clear()
 
-        if user_info:
-            await query.message.edit_reply_markup(reply_markup=await declined_in())
-            await query.bot.send_message(
-                user_info[0],
-                f"Ваша завявка на выплату {user_info[1]} была отклонена❌"
-            )
-        else:
-            await query.answer("Ошибка: Не удалось отклонить заявку", show_alert=True)
+    @client_bot_router.message(ChangeAdminInfo.get_amount)
+    async def get_new_amount_handler(message: Message, state: FSMContext):
+        if message.text == "❌Отменить":
+            await message.answer("🚫 Действие отменено", reply_markup=await main_menu_bt())
+            await state.clear()
+            return
 
-    @client_bot_router.callback_query(F.data == 'all_payments', AdminFilter(), StateFilter('*'))
-    async def all_payments_handler(call: CallbackQuery):
-        active_payments = await get_pending_payments()
+        try:
+            new_reward = float(message.text)
+            success = await change_price(new_reward, message.bot.token)
 
-        if active_payments:
-            for payment in active_payments:
-                await call.message.answer(
-                    text=f"<b>Заявка на выплату № {payment[0]}</b>\n"
-                         f"ID пользователя: <code>{payment[1]}</code>\n"
-                         f"Сумма: {payment[2]} руб.\n"
-                         f"Карта: <code>{payment[3]}</code>\n"
-                         f"Банк: {payment[4]}",
-                    parse_mode="HTML",
-                    reply_markup=await payments_action_in(payment[0])
+            if success:
+                await message.answer(
+                    f"Награда за реферала успешно изменена на {new_reward:.2f} руб.",
+                    reply_markup=await main_menu_bt()
                 )
-        else:
-            await call.message.edit_text('Нет заявок на выплату.', reply_markup=await admin_kb())
+            else:
+                await message.answer(
+                    "🚫 Не удалось изменить награду за реферала.",
+                    reply_markup=await main_menu_bt()
+                )
+            await state.clear()
 
-    # Continue with other handlers...
+        except ValueError:
+            await message.answer("❗ Введите корректное числовое значение.")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении награды за реферала: {e}")
+            await message.answer("🚫 Не удалось изменить награду за реферала.", reply_markup=await main_menu_bt())
+            await state.clear()
 
-    print("Admin panel handlers registered successfully!")
+    @client_bot_router.message(ChangeAdminInfo.get_min)
+    async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
+        data = await state.get_data()
+        edit_msg = data.get('edit_msg')
 
-    # Debug callback handler - barcha callback'larni kuzatish uchun
-    @client_bot_router.callback_query()
-    async def debug_all_callbacks(callback: CallbackQuery):
-        print(f"DEBUG: Any callback received: {callback.data} from user {callback.from_user.id}")
-        # Bu handler faqat debug uchun, boshqa handler'larga yo'naltirish uchun False return qilamiz
-        return False
+        if message.text == "❌Отменить":
+            await message.delete()
+            if edit_msg:
+                await edit_msg.delete()
+            await state.clear()
+            await start(message, state, bot)
+            return
+
+        try:
+            new_min_payout = float(message.text)
+            await change_min_amount(new_min_payout)
+
+            await message.delete()
+            if edit_msg:
+                await edit_msg.delete()
+
+            await message.answer(
+                f"Минимальная выплата успешно изменена на {new_min_payout:.1f} руб."
+            )
+            await state.clear()
+            await start(message, state, bot)
+
+        except ValueError:
+            await message.answer("❗ Введите корректное числовое значение.")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении минимальной выплаты: {e}")
+            await message.answer("🚫 Не удалось изменить минимальную выплату.")
+            await state.clear()
+            await start(message, state, bot)
+
+    @client_bot_router.message(AddChannelSponsorForm.channel)
+    async def admin_add_channel_msg(message: Message, state: FSMContext):
+        try:
+            channel_id = int(message.text)
+            bot = message.bot
+
+            # Получаем информацию о канале
+            chat_data = await bot(GetChat(chat_id=channel_id, flags={"raw": True}))
+            chat_info = await bot(GetChat(chat_id=channel_id))
+
+            # Проверяем, что это канал
+            if chat_info.type != "channel":
+                await message.answer(
+                    "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
+                    reply_markup=await cancel_kb()
+                )
+                return
+
+            # Проверяем права бота
+            bot_member = await bot(GetChatMember(chat_id=channel_id, user_id=bot.id))
+            if bot_member.status not in ["administrator", "creator"]:
+                await message.answer(
+                    "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
+                    reply_markup=await cancel_kb()
+                )
+                return
+
+            # Получаем invite link
+            invite_link = chat_info.invite_link
+            if not invite_link:
+                link_data = await bot(CreateChatInviteLink(chat_id=channel_id))
+                invite_link = link_data.invite_link
+
+            # Добавляем канал в базу
+            await create_channel_sponsor(channel_id)
+            await state.clear()
+
+            # Формируем ответ
+            channel_info = [
+                "✅ Канал успешно добавлен!",
+                f"📣 Название: {chat_info.title}",
+                f"🆔 ID: {channel_id}",
+                f"🔗 Ссылка: {invite_link}"
+            ]
+
+            # Добавляем информацию о реакциях если доступно
+            if chat_info.available_reactions:
+                try:
+                    reactions = chat_info.available_reactions
+                    if reactions:
+                        reaction_types = [
+                            r.get("type", "unknown") for r in reactions
+                        ]
+                        channel_info.append(
+                            f"💫 Доступные реакции: {', '.join(reaction_types)}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to process reactions: {e}")
+
+            await message.answer(
+                "\n\n".join(channel_info),
+                disable_web_page_preview=True
+            )
+
+        except ValueError:
+            await message.answer(
+                "Неверный формат. Пожалуйста, введите числовой ID канала.",
+                reply_markup=await cancel_kb()
+            )
+        except TelegramBadRequest as e:
+            logger.error(f"Telegram API error: {e}")
+            await message.answer(
+                "Бот не смог найти канал. Пожалуйста, проверьте ID канала.",
+                reply_markup=await cancel_kb()
+            )
+        except Exception as e:
+            logger.error(f"Channel add error: channel_id={channel_id}, error={str(e)}")
+            await message.answer(
+                "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
+                reply_markup=await cancel_kb()
+            )
+
+    # Back to main menu handler
+    @client_bot_router.message(F.text == "🔙Назад в меню")
+    async def back_to_main_menu(message: Message, state: FSMContext, bot: Bot):
+        await start(message, state, bot)
+
+    print("All admin panel handlers registered successfully!")
