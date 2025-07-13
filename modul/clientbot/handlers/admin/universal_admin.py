@@ -566,59 +566,59 @@ async def admin_cancel_handler(callback: CallbackQuery):
     # ALL EXISTING HANDLERS FROM YOUR CODE:
 
     # Send message to all users
-    @client_bot_router.callback_query(F.data == 'admin_send_message', AdminFilter(), StateFilter('*'))
-    async def admin_send_message(call: CallbackQuery, state: FSMContext):
-        await state.set_state(SendMessagesForm.message)
-        await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)',
-                                     reply_markup=await cancel_kb())
+@client_bot_router.callback_query(F.data == 'admin_send_message', AdminFilter(), StateFilter('*'))
+async def admin_send_message(call: CallbackQuery, state: FSMContext):
+    await state.set_state(SendMessagesForm.message)
+    await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)',
+                                 reply_markup=await cancel_kb())
 
-    @client_bot_router.message(SendMessagesForm.message)
-    async def admin_send_message_msg(message: Message, state: FSMContext):
-        await state.clear()
-        bot_db = await shortcuts.get_bot(message.bot)
-        users = await get_all_users(bot_db)
+@client_bot_router.message(SendMessagesForm.message)
+async def admin_send_message_msg(message: Message, state: FSMContext):
+    await state.clear()
+    bot_db = await shortcuts.get_bot(message.bot)
+    users = await get_all_users(bot_db)
 
-        if not users:
-            await message.answer("Нет пользователей для рассылки.")
-            return
+    if not users:
+        await message.answer("Нет пользователей для рассылки.")
+        return
 
-        success_count = 0
-        fail_count = 0
+    success_count = 0
+    fail_count = 0
 
-        for user_id in users:
-            try:
-                if message.text:
-                    await message.bot.send_message(chat_id=user_id, text=message.text)
-                elif message.photo:
-                    await message.bot.send_photo(chat_id=user_id, photo=message.photo[-1].file_id,
-                                                 caption=message.caption)
-                elif message.video:
-                    await message.bot.send_video(chat_id=user_id, video=message.video.file_id, caption=message.caption)
-                elif message.audio:
-                    await message.bot.send_audio(chat_id=user_id, audio=message.audio.file_id, caption=message.caption)
-                elif message.document:
-                    await message.bot.send_document(chat_id=user_id, document=message.document.file_id,
-                                                    caption=message.caption)
-                else:
-                    await message.bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id,
-                                                   message_id=message.message_id)
+    for user_id in users:
+        try:
+            if message.text:
+                await message.bot.send_message(chat_id=user_id, text=message.text)
+            elif message.photo:
+                await message.bot.send_photo(chat_id=user_id, photo=message.photo[-1].file_id,
+                                             caption=message.caption)
+            elif message.video:
+                await message.bot.send_video(chat_id=user_id, video=message.video.file_id, caption=message.caption)
+            elif message.audio:
+                await message.bot.send_audio(chat_id=user_id, audio=message.audio.file_id, caption=message.caption)
+            elif message.document:
+                await message.bot.send_document(chat_id=user_id, document=message.document.file_id,
+                                                caption=message.caption)
+            else:
+                await message.bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id,
+                                               message_id=message.message_id)
 
-                success_count += 1
-            except Exception as e:
-                fail_count += 1
-                logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+            success_count += 1
+        except Exception as e:
+            fail_count += 1
+            logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
 
-        await message.answer(
-            f'Рассылка завершена!\n'
-            f'Успешно отправлено: {success_count}\n'
-            f'Не удалось отправить: {fail_count}'
-        )
+    await message.answer(
+        f'Рассылка завершена!\n'
+        f'Успешно отправлено: {success_count}\n'
+        f'Не удалось отправить: {fail_count}'
+    )
 
     # User management handlers
-    @client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
-    async def manage_user_handler(call: CallbackQuery, state: FSMContext):
-        await call.message.edit_text("Введите ID пользователя", reply_markup=await cancel_kb())
-        await state.set_state(ChangeAdminInfo.imp)
+@client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
+async def manage_user_handler(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text("Введите ID пользователя", reply_markup=await cancel_kb())
+    await state.set_state(ChangeAdminInfo.imp)
 
     @client_bot_router.message(ChangeAdminInfo.imp)
     async def get_user_info_handler(message: Message, state: FSMContext):
