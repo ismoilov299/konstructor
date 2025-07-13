@@ -372,6 +372,7 @@ def admin_panel():
     # Main admin command
     @client_bot_router.message(Command('admin'), AdminFilter())
     async def admin_menu(message: Message):
+        print(f"Admin command received from user {message.from_user.id}")
         try:
             bot_token = message.bot.token
             count = await get_users_count(bot_token)
@@ -400,6 +401,7 @@ def admin_panel():
 
 async def handle_admin_callbacks(callback: CallbackQuery):
     """Admin callback'larni boshqarish"""
+    print(f"Handling admin callback: {callback.data} from user {callback.from_user.id}")
     try:
         data = callback.data
         print(f"Handling admin callback: {data}")
