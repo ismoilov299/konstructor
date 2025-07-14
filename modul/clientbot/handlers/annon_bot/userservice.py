@@ -33,15 +33,16 @@ def check_user(uid):
 
 @sync_to_async
 @transaction.atomic
-def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=None):
+def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=None, user_link=None):
     """
-    Eski funksiya - yangi mantiq bilan
-    MUHIM: Inviter ni belgilamaydi, faqat foydalanuvchini yaratadi
+    Anonim bot uchun foydalanuvchi qo'shish
+    MUHIM: user_link parametri ixtiyoriy
     """
     try:
         from modul.models import Bot, UserTG, ClientBotUser
 
         print(f"🔧 DEBUG: annon_bot/userservice add_user called for user {tg_id}")
+        print(f"Parameters: user_name={user_name}, invited={invited}, invited_id={invited_id}, user_link={user_link}")
 
         # Botni topish
         bot_obj = Bot.objects.get(token=bot_token)
@@ -62,8 +63,22 @@ def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=
             defaults={
                 'username': user_name,
                 'first_name': user_name,
+                'last_name': '',
+                'balance': 0,
+                'paid': 0,
+                'refs': 0,
+                'invited': invited,
+                'invited_id': invited_id,
+                'banned': False,
+                'user_link': user_link if user_link else str(tg_id),  # Default user_link
+                'greeting': "Добро пожаловать!"
             }
         )
+
+        # Agar UserTG allaqachon mavjud bo'lsa va user_link yo'q bo'lsa, yangilash
+        if not created and not user_tg.user_link and user_link:
+            user_tg.user_link = user_link
+            user_tg.save()
 
         # ClientBotUser yaratish - INVITER NI BELGILAMAYDI
         client_user = ClientBotUser.objects.create(
@@ -77,6 +92,7 @@ def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=
         )
 
         print(f"✅ DEBUG: annon_bot created ClientBotUser for {tg_id} WITH INVITER=None")
+        print(f"✅ User_link set to: {user_tg.user_link}")
         return True
 
     except Exception as e:

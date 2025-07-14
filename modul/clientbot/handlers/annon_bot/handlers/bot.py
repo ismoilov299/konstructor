@@ -291,14 +291,13 @@ async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
 
     user_exists = await check_user(message.from_user.id)
     if not user_exists:
-        # add_user funksiyasini yangilash - ClientBotUser uchun bot tokenini ham o'tkazish
         await add_user(
             tg_id=message.from_user.id,
             user_name=message.from_user.first_name,
             invited="Referral" if referral else "Никто",
             invited_id=int(referral) if referral else None,
-            bot_token=bot.token,  # Bot tokenini o'tkazish
-            user_link=link_for_db
+            bot_token=bot.token,
+            user_link=link_for_db  # user_link qo'shildi
         )
 
     if referral:
@@ -531,10 +530,12 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         link_for_db = new_link[new_link.index("=") + 1:]
 
         await add_user(
-            tg_id=callback.from_user,
+            tg_id=callback.from_user.id,  # callback.from_user emas, callback.from_user.id bo'lishi kerak
             user_name=callback.from_user.first_name,
-            user_link=link_for_db,
-            bot_token=bot.token
+            invited="Никто",
+            invited_id=None,
+            bot_token=bot.token,
+            user_link=link_for_db  # user_link qo'shildi
         )
 
         data = await state.get_data()
