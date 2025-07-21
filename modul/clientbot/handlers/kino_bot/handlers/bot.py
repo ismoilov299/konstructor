@@ -1211,14 +1211,18 @@ async def start(message: Message, state: FSMContext, bot: Bot):
     print(f"  - enable_leo: {getattr(bot_db, 'enable_leo', 'NOT_FOUND')}")
     print(f"  - enable_download: {getattr(bot_db, 'enable_download', 'NOT_FOUND')}")
     print(f"  - enable_kino: {getattr(bot_db, 'enable_kino', 'NOT_FOUND')}")
+    print(f"  - enable_refs: {getattr(bot_db, 'enable_refs', 'NOT_FOUND')}")
     print(f"  - enable_chatgpt: {getattr(bot_db, 'enable_chatgpt', 'NOT_FOUND')}")
 
     # have_one_module funksiyasini tekshirish
     print(f"DEBUG: have_one_module checks:")
     print(f"  - have_one_module(bot_db, 'leo'): {shortcuts.have_one_module(bot_db, 'leo')}")
+    print(f"  - have_one_module(bot_db, 'refs'): {shortcuts.have_one_module(bot_db, 'refs')}")
     print(f"  - have_one_module(bot_db, 'download'): {shortcuts.have_one_module(bot_db, 'download')}")
     print(f"  - have_one_module(bot_db, 'kino'): {shortcuts.have_one_module(bot_db, 'kino')}")
     print(f"  - have_one_module(bot_db, 'chatgpt'): {shortcuts.have_one_module(bot_db, 'chatgpt')}")
+    print(f"DEBUG: User {uid} started the bot with message: {message.text}")
+
 
     referral = message.text[7:] if message.text and len(message.text) > 7 else None
     print(f"Referral from command for user {uid}: {referral}")
