@@ -481,7 +481,7 @@ async def show_refs_handler(call: CallbackQuery):
         await call.message.answer(f"🚫 Произошла ошибка при создании файла: {e}")
 
 
-@client_bot_router.callback_query(F.data == 'admin_get_stats', AdminFilter(), StateFilter('*'))
+@client_bot_router.callback_query(F.data == 'admin_get_stats', StateFilter('*'))
 async def admin_get_stats(call: CallbackQuery):
     print('stats called')
     try:
