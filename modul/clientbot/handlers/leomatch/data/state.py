@@ -1,4 +1,5 @@
-from aiogram.dispatcher.fsm.state import StatesGroup, State
+# from aiogram.dispatcher.fsm.state import StatesGroup, State
+from aiogram.fsm.state import StatesGroup, State
 
 
 class LeomatchRegistration(StatesGroup):
