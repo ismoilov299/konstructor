@@ -106,7 +106,7 @@ settings_conf = Settings(_env_file=env_file)
 settings = Settings(_env_file=env_file)
 exchange = ExchangeRateRussia()
 settings.DOLLAR_CURRENCY = exchange.get_currency("R01235")
-
+DOLLAR_CURRENCY: float = 0.0
 TORTOISE_ORM = {
     "connections": {"default": settings.DB_URL},
     "apps": {
