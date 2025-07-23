@@ -12,8 +12,7 @@ from modul.clientbot.utils.functs import return_main
 from modul.clientbot.shortcuts import get_current_bot
 # from loader import client_bot_router, bot_session
 # from aiogram.dispatcher.fsm.context import FSMContext
-from aiogram.utils.i18n import gettext as _
-from aiogram.utils.i18n import lazy_gettext as __
+
 
 from modul.loader import client_bot_router, bot_session
 
@@ -21,7 +20,7 @@ from modul.loader import client_bot_router, bot_session
 async def start(message: types.Message, state: FSMContext):
     await show_profile_db(message, message.from_user.id, reply_kb.get_numbers(4, True))
     await message.answer(
-        _("1. Отредактировать мой профиль.\n2. Изменить фото/видео.\n3. Изменить текст профиля.\n4. Просмотреть профили"),
+         ("1. Отредактировать мой профиль.\n2. Изменить фото/видео.\n3. Изменить текст профиля.\n4. Просмотреть профили"),
         reply_markup=reply_kb.get_numbers(4, True))
     await state.set_state(LeomatchMain.PROFILE_MANAGE)
 
@@ -39,8 +38,8 @@ async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
 
-@client_bot_router.message(F.text == __("Выйти"), StateFilter(LeomatchMain.WAIT))
-@client_bot_router.message(F.text == __("Выйти"), StateFilter(LeomatchMain.PROFILE_MANAGE))
+@client_bot_router.message(F.text ==  ("Выйти"), StateFilter(LeomatchMain.WAIT))
+@client_bot_router.message(F.text ==  ("Выйти"), StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     await return_main(message, state)
 
@@ -48,7 +47,7 @@ async def bot_start(message: types.Message, state: FSMContext):
 @client_bot_router.message(F.text =="3", StateFilter(LeomatchMain.WAIT))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(
-        _("Тогда ты не будешь знать, кому ты нравишься... Уверены насчет деактивации?\n\n1. Да, деактивируйте мой профиль, пожалуйста.\n2. Нет, я хочу посмотреть свои матчи."),
+         ("Тогда ты не будешь знать, кому ты нравишься... Уверены насчет деактивации?\n\n1. Да, деактивируйте мой профиль, пожалуйста.\n2. Нет, я хочу посмотреть свои матчи."),
         reply_markup=reply_kb.get_numbers(2)
     )
     await state.set_state(LeomatchMain.SLEEP)
@@ -57,7 +56,7 @@ async def bot_start(message: types.Message, state: FSMContext):
 @client_bot_router.message(F.text =="1", StateFilter(LeomatchMain.SLEEP))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(
-        _("Надеюсь, вы встретили кого-нибудь с моей помощью! \nВсегда рад пообщаться. Если скучно, напиши мне - я найду для тебя кого-то особенного.\n\n1. Просмотр профилей"),
+         ("Надеюсь, вы встретили кого-нибудь с моей помощью! \nВсегда рад пообщаться. Если скучно, напиши мне - я найду для тебя кого-то особенного.\n\n1. Просмотр профилей"),
         reply_markup=reply_kb.get_numbers(1)
     )
     await update_profile(message.from_user.id, {"active": False, "search": False})
@@ -76,13 +75,13 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 @client_bot_router.message(F.text =="2", StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
-    await message.answer(_("Отправьте фото или видео (до 15 сек)"), reply_markup=reply_kb.cancel())
+    await message.answer( ("Отправьте фото или видео (до 15 сек)"), reply_markup=reply_kb.cancel())
     await state.set_state(LeomatchMain.SET_PHOTO)
 
 
 @client_bot_router.message(F.text =="3", StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
-    await message.answer(_("Введите новый текст профиля"), reply_markup=reply_kb.cancel())
+    await message.answer( ("Введите новый текст профиля"), reply_markup=reply_kb.cancel())
     await state.set_state(LeomatchMain.SET_DESCRIPTION)
 
 
@@ -91,7 +90,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await profiles.start(message, state)
 
 
-@client_bot_router.message(F.text == __("Отменить"), StateFilter(LeomatchMain.SET_DESCRIPTION))
+@client_bot_router.message(F.text ==  ("Отменить"), StateFilter(LeomatchMain.SET_DESCRIPTION))
 async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
@@ -102,7 +101,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
 
-@client_bot_router.message(F.text == __("Отменить"), StateFilter(LeomatchMain.SET_PHOTO))
+@client_bot_router.message(F.text ==  ("Отменить"), StateFilter(LeomatchMain.SET_PHOTO))
 async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
@@ -116,13 +115,13 @@ async def bot_start(message: types.Message, state: FSMContext):
         media_type = "PHOTO"
     elif message.video:
         if message.video.duration > 15:
-            await message.answer(_("Пожалуйста, пришли видео не более 15 секунд"))
+            await message.answer( ("Пожалуйста, пришли видео не более 15 секунд"))
             return
         photo = message.video.file_id
         media_type = "VIDEO"
     elif message.video_note:
         if message.video_note.duration > 15:
-            await message.answer(_("Пожалуйста, пришли видео не более 15 секунд"))
+            await message.answer( ("Пожалуйста, пришли видео не более 15 секунд"))
             return
         photo = message.video_note.file_id
         media_type = "VIDEO_NOTE"

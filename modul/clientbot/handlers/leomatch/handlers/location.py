@@ -6,10 +6,10 @@ from aiogram import types, Router, F
 # from clientbot.main import i18n
 # from clientbot.models import User, ReferralCode
 from datetime import datetime, timezone, timedelta
-from aiogram.utils.i18n import gettext as _
+# from aiogram.utils.i18n import gettext as _
 from django.db.models import Q
 
-from modul.models import User
+from modul.models import User, ReferralCode
 
 router = Router()
 
@@ -57,34 +57,34 @@ async def find_nearby_users(user: User, max_distance=10):
 
     return nearby_users
 
-@router.message(F.text == _("Найти поблизости"))
+@router.message(F.text ==  ("Найти поблизости"))
 async def nearby_users(message: types.Message):
     user_id = message.from_user.id
     user = await User.get_or_none(user_id=user_id)
     if not user:
-        await message.reply(_("Вы не зарегистрированы. Пожалуйста, зарегистрируйтесь сначала."))
+        await message.reply( ("Вы не зарегистрированы. Пожалуйста, зарегистрируйтесь сначала."))
         return
 
     if not await has_valid_views(user):
-        await message.reply(_("Вы исчерпали лимит на просмотр профилей или срок действия ваших просмотров истек. Поделитесь своим реферальным кодом, чтобы получить дополнительные просмотры."))
+        await message.reply( ("Вы исчерпали лимит на просмотр профилей или срок действия ваших просмотров истек. Поделитесь своим реферальным кодом, чтобы получить дополнительные просмотры."))
         return
 
     nearby = await find_nearby_users(user, max_distance=100)
     if nearby:
         for u in nearby:
-            await message.reply(_(f'Найден: {u[0].full_name}, возраст: {u[0].age}, локация: {u[0].address}'))
+            await message.reply( (f'Найден: {u[0].full_name}, возраст: {u[0].age}, локация: {u[0].address}'))
     else:
-        await message.reply(_("Поблизости никого нет."))
+        await message.reply( ("Поблизости никого нет."))
 
 
 
-@router.message(F.text == _("Получить реферальный код"))
+@router.message(F.text ==  ("Получить реферальный код"))
 async def referral(message: types.Message):
     user_id = message.from_user.id
     user = await User.get_or_none(user_id=user_id)
 
     if not user:
-        await message.reply(_("Вы не зарегистрированы. Пожалуйста, зарегистрируйтесь сначала."))
+        await message.reply( ("Вы не зарегистрированы. Пожалуйста, зарегистрируйтесь сначала."))
         return
 
     referral_link = await create_referral_code_for_user(user_id)
@@ -98,23 +98,23 @@ async def like_user(user_id: int):
 async def get_top_users(sex: str, limit: int = 100):
     return await User.filter(sex=sex).order_by('-likes').limit(limit)
 
-@router.message(F.text == i18n.gettext("Топ 100 девушек"))
+@router.message(F.text ==  ("Топ 100 девушек"))
 async def top_girls(message: types.Message):
     top_girls = await get_top_users(sex="FEMALE", limit=100)
     if top_girls:
-        response = i18n.gettext("\n".join([f'{i+1}. {user.full_name} - {user.likes} лайков' for i, user in enumerate(top_girls)]))
+        response =  ("\n".join([f'{i+1}. {user.full_name} - {user.likes} лайков' for i, user in enumerate(top_girls)]))
         await message.reply(response)
     else:
-        await message.reply(_("Нет данных для отображения."))
+        await message.reply( ("Нет данных для отображения."))
 
-@router.message(F.text == _("Топ 100 парней"))
+@router.message(F.text ==  ("Топ 100 парней"))
 async def top_boys(message: types.Message):
     top_boys = await get_top_users(sex="MALE", limit=100)
     if top_boys:
-        response = i18n.gettext("\n".join([f'{i+1}. {user.full_name} - {user.likes} лайков' for i, user in enumerate(top_boys)]))
+        response =  ("\n".join([f'{i+1}. {user.full_name} - {user.likes} лайков' for i, user in enumerate(top_boys)]))
         await message.reply(response)
     else:
-        await message.reply(i18n.gettext("Нет данных для отображения."))
+        await message.reply(("Нет данных для отображения."))
 
 
 

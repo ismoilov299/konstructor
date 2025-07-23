@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from random import Random
 
 from aiogram import types
-from aiogram.utils.i18n import gettext as _
+# from aiogram.utils.i18n import gettext as _
 
 from modul.clientbot import shortcuts
 from modul.clientbot.handlers.leomatch.keyboards.inline_kb import write_profile
@@ -152,10 +152,10 @@ async def bot_show_profile(to_uid: int, from_uid: str, full_name: str, age: int,
         else:
             link = from_uid
         try:
-            await bot_.send_message(to_uid, _("Начнинай общаться!"), reply_markup=write_profile(link, is_username))
+            await bot_.send_message(to_uid,  ("Начнинай общаться!"), reply_markup=write_profile(link, is_username))
         except:
             await bot_.send_message(to_uid,
-                                    _("Извините, Вы не сможете начать общение так как у пользователя приватный аккаунт"))
+                                     ("Извините, Вы не сможете начать общение так как у пользователя приватный аккаунт"))
 
 
 async def show_profile_db(message: types.Message, uid: int, keyboard=types.ReplyKeyboardMarkup, comment: str = None):

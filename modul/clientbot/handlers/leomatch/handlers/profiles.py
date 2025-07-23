@@ -8,12 +8,10 @@ from modul.clientbot.handlers.leomatch.keyboards.reply_kb import cancel
 from modul.clientbot.handlers.leomatch.data.callback_datas import LeomatchLikeAction, LeomatchProfileAction, LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum
 from modul.clientbot.handlers.leomatch.handlers.shorts import manage
 # from db.models import LeoMatchModel, User
-from aiogram.utils.i18n import gettext as _
 # from config import settings
 # from loader import client_bot_router, main_bot, main_bot_router
 # from aiogram.dispatcher.fsm.context import FSMContext
 from aiogram import types, F
-from aiogram.utils.i18n import lazy_gettext as __
 
 from modul.config import settings
 from modul.loader import client_bot_router, main_bot
@@ -36,7 +34,7 @@ async def next(message: types.Message, state:FSMContext):
         await show_profile_db(message, current, keyboard=profile_view_action(current))
         await state.set_state(LeomatchProfiles.LOOCK)
     else:
-        await message.answer(_("Нет больше пользователей"))
+        await message.answer(("Нет больше пользователей"))
         await manage(message, state)
 
 
@@ -58,19 +56,19 @@ async def next_like(message: types.Message, state: FSMContext):
     else:
         leo_me = await get_leo(me)
         if not leo_me:
-            await message.answer(_("Произошла ошибка"))
+            await message.answer(("Произошла ошибка"))
             await state.clear()
             return
         await state.clear()
-        await message.answer(_("Нет больше лайков"))
+        await message.answer( ("Нет больше лайков"))
         leo_me.count_likes = 0
         await leo_me.save()        
 
 async def like(message: types.Message, state:FSMContext, from_uid: int, to_uid: int, msg: str = None):
-    await message.answer(_("Лайк отправлен"), reply_markup=types.ReplyKeyboardRemove())
+    await message.answer( ("Лайк отправлен"), reply_markup=types.ReplyKeyboardRemove())
     res = await leo_set_like(from_uid, to_uid, msg)
     if not res:
-        await message.answer(_("Не удалось поставить лайк"))
+        await message.answer( ("Не удалось поставить лайк"))
     await next(message, state)
     
 @client_bot_router.callback_query(LeomatchProfileAction.filter(),  StateFilter(LeomatchProfiles.LOOCK))
@@ -79,13 +77,13 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
     if callback_data.action == ProfileActionEnum.LIKE:
         await like(query.message, state, query.from_user.id, callback_data.user_id)
     elif callback_data.action == ProfileActionEnum.MESSAGE:
-        await query.message.answer(_("Введите сообщение или отправьте видео (макс 15 сек)"), reply_markup=cancel())
+        await query.message.answer( ("Введите сообщение или отправьте видео (макс 15 сек)"), reply_markup=cancel())
         await state.update_data(selected_id=callback_data.user_id)
         await state.set_state(LeomatchProfiles.INPUT_MESSAGE)
     elif callback_data.action == ProfileActionEnum.REPORT:
         await query.message.delete()
         await query.message.answer(
-            _("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
+             ("Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены"),
             reply_markup=profile_alert(query.from_user.id, callback_data.user_id))
     elif callback_data.action == ProfileActionEnum.SLEEP:
         pass
@@ -93,13 +91,13 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
         await next(query.message, state)
 
 
-@client_bot_router.message(F.text == __("Отменить"), StateFilter(LeomatchProfiles.INPUT_MESSAGE))
+@client_bot_router.message(F.text ==  ("Отменить"), StateFilter(LeomatchProfiles.INPUT_MESSAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     data = await state.get_data()
     leos: list = data.get("leos")
     leos.insert(0, data.get("selected_id"))
     await state.update_data(selected_id=None, leos=leos)
-    await message.answer(_("Отменено"), reply_markup=types.ReplyKeyboardRemove())
+    await message.answer( ("Отменено"), reply_markup=types.ReplyKeyboardRemove())
     await next(message, state)
 
 
@@ -115,20 +113,20 @@ async def bot_start(message: types.Message, state: FSMContext):
     elif message.video_note:
         msg = message.video_note.file_id
     else:
-        await message.answer(_("Пожалуйста, напишите текст или отправьте видео"))
+        await message.answer( ("Пожалуйста, напишите текст или отправьте видео"))
         return
     await like(message, state, message.from_user.id, selected_id, msg)
 
 
-@client_bot_router.message(F.text == __("Да"), StateFilter(LeomatchProfiles.MANAGE_LIKES))
+@client_bot_router.message(F.text ==  ("Да"), StateFilter(LeomatchProfiles.MANAGE_LIKES))
 async def bot_start(message: types.Message, state: FSMContext):
-    await message.answer(_("Вот акканты, кому Вы понравились:"), reply_markup=types.ReplyKeyboardRemove())
+    await message.answer( ("Вот акканты, кому Вы понравились:"), reply_markup=types.ReplyKeyboardRemove())
     await next_like(message, state)
 
 
-@client_bot_router.message(F.text == __("Нет"), StateFilter(LeomatchProfiles.MANAGE_LIKES))
+@client_bot_router.message(F.text ==  ("Нет"), StateFilter(LeomatchProfiles.MANAGE_LIKES))
 async def bot_start(message: types.Message):
-    await message.answer(_("Все лайки удалены"), reply_markup=types.ReplyKeyboardRemove())
+    await message.answer( ("Все лайки удалены"), reply_markup=types.ReplyKeyboardRemove())
     await clear_all_likes(message.from_user.id)
 
 
@@ -150,10 +148,10 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
         except:
             await next_like(query.message, state)
         try:
-            await query.message.answer(_("Начнинай общаться!"), reply_markup=write_profile(link, is_username))
+            await query.message.answer( ("Начнинай общаться!"), reply_markup=write_profile(link, is_username))
         except:
             await query.message.answer(
-                _("Извините, Вы не сможете начать общение так как у пользователя приватный аккаунт"))
+                 ("Извините, Вы не сможете начать общение так как у пользователя приватный аккаунт"))
     elif callback_data.action == LikeActionEnum.REPORT:
         pass
     await state.set_data({"me": query.from_user.id})
@@ -170,13 +168,13 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
         await show_media(main_bot, settings.ADMIN, callback_data.account_id)
         await main_bot.send_message(
             chat_id=settings.ADMIN,
-            text=_("Пользователь: @{sender_user} ({sender_user_id}) пожаловался на \n"
+            text= ("Пользователь: @{sender_user} ({sender_user_id}) пожаловался на \n"
                    "Пользователя: @{account_user} ({account_user_id})\n").format(sender_user=sender_user.username,
                                                                                  sender_user_id=sender_user.uid,
                                                                                  account_user=account_user.username,
                                                                                  account_user_id=account_user.uid),
             reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
         )
-        await query.message.edit_text(_("Жалоба отправлена"))
+        await query.message.edit_text( ("Жалоба отправлена"))
     await state.update_data(me=query.from_user.id)
     await next(query.message, state)
