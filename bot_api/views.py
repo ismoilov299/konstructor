@@ -49,16 +49,11 @@ async def setup_routers():
             # Handler'larni sozlash
             admin_panel()
             chat_gpt_bot_handlers()
-            # start_bot_client()
-
-
-
             init_bot_handlers()
             anon_bot_handlers()
             # davinchi_bot_handlers()
             setup_main_bot_filter(main_bot_router, client_bot_router)
 
-            # Router'larni qo'shish
             if main_bot_router not in dp.sub_routers:
                 dp.include_router(main_bot_router)
             if client_bot_router not in dp.sub_routers:
