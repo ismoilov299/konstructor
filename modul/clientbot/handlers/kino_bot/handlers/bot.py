@@ -20,7 +20,7 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 import re
-from modul.clientbot.handlers.davinci_bot import *
+# from modul.clientbot.handlers.davinci_bot import *
 from yt_dlp import YoutubeDL
 
 from modul import models
@@ -33,6 +33,10 @@ from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_info_db
 from modul.clientbot.handlers.kino_bot.shortcuts import *
 from modul.clientbot.handlers.kino_bot.keyboards.kb import *
 from modul.clientbot.handlers.kino_bot.api import *
+from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
+from modul.clientbot.handlers.leomatch.handlers.profile import bot_start
+from modul.clientbot.handlers.leomatch_backup.handlers.registration import bot_start_lets_leo
+from modul.clientbot.handlers.leomatch_backup.handlers.start import bot_start_cancel
 # from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 # from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 # from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
@@ -1748,9 +1752,9 @@ async def inline_film_requests(query: InlineQuery):
     await query.answer(inline_answer, cache_time=240, is_personal=True)
 
 
-# client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства",DavinchiBotFilter())
-# client_bot_router.message.register(bot_start_cancel, F.text == ("Я не хочу никого искать"), LeomatchRegistration.BEGIN)
-# client_bot_router.message.register(bot_start_lets_leo, F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
+client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства",DavinchiBotFilter())
+client_bot_router.message.register(bot_start_cancel, F.text == ("Я не хочу никого искать"), LeomatchRegistration.BEGIN)
+client_bot_router.message.register(bot_start_lets_leo, F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 
 
 @sync_to_async
