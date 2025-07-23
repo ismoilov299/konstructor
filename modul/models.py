@@ -45,14 +45,15 @@ class CustomUserManager(BaseUserManager):
 
         return self.create_user(uid, username, first_name, last_name, profile_image, password, **extra_fields)
 from tortoise import fields
-from django.db import models
+from django.db import models  # ✅ To'g'ri import
+
 class ReferralCode(models.Model):
-    code = fields.CharField(max_length=255, unique=True)
-    user = fields.ForeignKeyField('data.User', related_name="referral_codes", on_delete=fields.CASCADE)
-    created_at = fields.DatetimeField(auto_now_add=True)
+    code = models.CharField(max_length=255, unique=True)
+    user = models.ForeignKey('User', related_name="referral_codes", on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        table = "referral_codes"
+        db_table = "referral_codes"
 
 
 class User(AbstractBaseUser, PermissionsMixin):
