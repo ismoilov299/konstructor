@@ -1,5 +1,6 @@
 import os
 from aiogram import types, Bot, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
@@ -38,20 +39,20 @@ async def save_media(message: types.Message, state: FSMContext, url: str, type: 
     await state.set_state(LeomatchRegistration.FINAL)
 
 
-@client_bot_router.message(F.text == __("Давай, начнем!"), state=LeomatchRegistration.BEGIN)
+@client_bot_router.message(F.text == __("Давай, начнем!"), StateFilter(LeomatchRegistration.BEGIN))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(
         _("Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните"))
     await begin_registration(message, state)
 
 
-@client_bot_router.message(F.text == __("Отменить"), state=LeomatchRegistration.AGE)
+@client_bot_router.message(F.text == __("Отменить"), StateFilter(LeomatchRegistration.AGE))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(_("Отменена регистрация!"), )
     await return_main(message, state)
 
 
-@client_bot_router.message(state=LeomatchRegistration.AGE)
+@client_bot_router.message(StateFilter(LeomatchRegistration.AGE))
 async def bot_start(message: types.Message, state: FSMContext):
     try:
         age = int(message.text)
@@ -66,42 +67,42 @@ async def bot_start(message: types.Message, state: FSMContext):
         await message.answer(_("Пожалуйста, введите возрост цифрами"), )
 
 
-@client_bot_router.message(F.text == __("Я парень"), state=LeomatchRegistration.SEX)
+@client_bot_router.message(F.text == __("Я парень"), StateFilter(LeomatchRegistration.SEX))
 async def bot_start(message: types.Message, state: FSMContext):
     await set_sex("MALE", message, state)
 
 
-@client_bot_router.message(F.text == __("Я девушка"), state=LeomatchRegistration.SEX)
+@client_bot_router.message(F.text == __("Я девушка"), StateFilter(LeomatchRegistration.SEX))
 async def bot_start(message: types.Message, state: FSMContext):
     await set_sex("FEMALE", message, state)
 
 
-@client_bot_router.message(state=LeomatchRegistration.SEX)
+@client_bot_router.message(StateFilter(LeomatchRegistration.SEX))
 async def bot_start(message: types.Message):
     await message.answer(_("Пожалуйста, укажите Ваш пол, нажав на кнопку"), )
 
 
-@client_bot_router.message(F.text == __("Парня"), state=LeomatchRegistration.WHICH_SEARCH)
+@client_bot_router.message(F.text == __("Парня"), StateFilter(LeomatchRegistration.WHICH_SEARCH))
 async def bot_start(message: types.Message, state: FSMContext):
     await set_which_search("MALE", message, state)
 
 
-@client_bot_router.message(F.text == __("Девушку"), state=LeomatchRegistration.WHICH_SEARCH)
+@client_bot_router.message(F.text == __("Девушку"), StateFilter(LeomatchRegistration.WHICH_SEARCH))
 async def bot_start(message: types.Message, state: FSMContext):
     await set_which_search("FEMALE", message, state)
 
 
-@client_bot_router.message(F.text == __("Мне всё равно"), state=LeomatchRegistration.WHICH_SEARCH)
+@client_bot_router.message(F.text == __("Мне всё равно"), StateFilter(LeomatchRegistration.WHICH_SEARCH))
 async def bot_start(message: types.Message, state: FSMContext):
     await set_which_search("ANY", message, state)
 
 
-@client_bot_router.message(state=LeomatchRegistration.WHICH_SEARCH)
+@client_bot_router.message(StateFilter(LeomatchRegistration.WHICH_SEARCH))
 async def bot_start(message: types.Message):
     await message.answer(_("Пожалуйста, укажите кого Вы ищите, нажав на кнопку"), )
 
 
-@client_bot_router.message(state=LeomatchRegistration.CITY)
+@client_bot_router.message(StateFilter(LeomatchRegistration.CITY))
 async def bot_start(message: types.Message, state: FSMContext):
     city = message.text
     await state.update_data(city=city)
@@ -111,7 +112,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await state.set_state(LeomatchRegistration.FULL_NAME)
 
 
-@client_bot_router.message(state=LeomatchRegistration.FULL_NAME)
+@client_bot_router.message(StateFilter(LeomatchRegistration.FULL_NAME))
 async def bot_start(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if len(name) > 15:
@@ -128,7 +129,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await state.set_state(LeomatchRegistration.ABOUT_ME)
 
 
-@client_bot_router.message(F.text == __("Оставить текущее"), state=LeomatchRegistration.ABOUT_ME)
+@client_bot_router.message(F.text == __("Оставить текущее"), StateFilter(LeomatchRegistration.ABOUT_ME))
 async def bot_start(message: types.Message, state: FSMContext):
     leo = await get_leo(message.from_user.id)
     if not leo:
@@ -138,7 +139,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await now_send_photo(message, state)
 
 
-@client_bot_router.message(state=LeomatchRegistration.ABOUT_ME)
+@client_bot_router.message(StateFilter(LeomatchRegistration.ABOUT_ME))
 async def bot_start(message: types.Message, state: FSMContext):
     if len(message.text) > 300:
         await message.answer(_("Пожалуйста, введите описание не более 300 символов"))
@@ -147,7 +148,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await now_send_photo(message, state)
 
 
-@client_bot_router.message(F.text == __("Оставить текущее"), state=LeomatchRegistration.SEND_PHOTO)
+@client_bot_router.message(F.text == __("Оставить текущее"), StateFilter(LeomatchRegistration.SEND_PHOTO))
 async def bot_start(message: types.Message, state: FSMContext):
     leo = await get_leo(message.from_user.id)
     if not leo:
@@ -156,7 +157,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await save_media(message, state, leo.photo, leo.media_type.value)
 
 
-@client_bot_router.message(state=LeomatchRegistration.SEND_PHOTO)
+@client_bot_router.message(StateFilter(LeomatchRegistration.SEND_PHOTO))
 async def bot_start(message: types.Message, state: FSMContext):
     if not message.photo and not message.video:
         await message.answer(_("Пожалуйста, пришли фото или видео"))
@@ -181,7 +182,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await save_media(message, state, url, type)
 
 
-@client_bot_router.message(F.text == __("Да"), state=LeomatchRegistration.FINAL)
+@client_bot_router.message(F.text == __("Да"), StateFilter(LeomatchRegistration.FINAL))
 async def bot_start(message: types.Message, state: FSMContext):
     data = await state.get_data()
     photo = data['photo']
@@ -204,11 +205,11 @@ async def bot_start(message: types.Message, state: FSMContext):
     await manage(message, state)
 
 
-@client_bot_router.message(F.text == __("Изменить анкету"), state=LeomatchRegistration.FINAL)
+@client_bot_router.message(F.text == __("Изменить анкету"), StateFilter(LeomatchRegistration.FINAL))
 async def bot_start(message: types.Message, state: FSMContext):
     await begin_registration(message, state)
 
 
-@client_bot_router.message(state=LeomatchRegistration.ABOUT_ME)
+@client_bot_router.message(StateFilter(LeomatchRegistration.ABOUT_ME))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(_("Пожалуйста, нажмите на кнопку"), reply_markup=reply_kb.final_registration())
