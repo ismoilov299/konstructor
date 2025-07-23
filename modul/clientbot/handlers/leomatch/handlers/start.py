@@ -17,7 +17,7 @@ from modul.loader import client_bot_router
 from modul.models import LeoMatchModel
 
 
-@client_bot_router.message_handler(F.text == __("🫰 Знакомства"), state='*')
+@client_bot_router.message(F.text == __("🫰 Знакомства"))
 async def bot_start(message: types.Message, state: FSMContext):
     has_user = await exists_leo(message.from_user.id)
     if not has_user:
