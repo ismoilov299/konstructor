@@ -1,4 +1,5 @@
-from aiogram.dispatcher.filters.callback_data import CallbackData
+# from aiogram.dispatcher.filters.callback_data import CallbackData
+from aiogram.filters.callback_data import CallbackData
 from strenum import StrEnum
 
 class ProfileActionEnum(StrEnum):
