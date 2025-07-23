@@ -26,7 +26,8 @@ def get_client(uid: int):
 def get_leo_sync(user):
     if user:
         try:
-            return LeoMatchModel.objects.get(user=user)  # Django syntax
+            # .get() o'rniga .first() ishlatamiz
+            return LeoMatchModel.objects.filter(user=user).first()
         except LeoMatchModel.DoesNotExist:
             return None
     return None
