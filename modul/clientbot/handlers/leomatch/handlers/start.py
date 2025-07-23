@@ -38,6 +38,6 @@ async def bot_start(message: types.Message, state: FSMContext):
         await message.answer(_("Попробуйте наш WebAPP знакомства"), reply_markup=kbrds.as_markup())
 
 
-@client_bot_router.message_handler(F.text == __("Я не хочу никого искать"), state=LeomatchRegistration.BEGIN)
+@client_bot_router.message(F.text == __("Я не хочу никого искать"), state=LeomatchRegistration.BEGIN)
 async def bot_start(message: types.Message, state: FSMContext):
     await return_main(message, state)
