@@ -10,6 +10,6 @@ dp = Dispatcher()
 client_bot_router = Router()
 main_bot_router = Router()
 
-# dp.include_router(client_bot_router)
-# dp.include_router(main_bot_router)
+dp.include_router(client_bot_router)
+dp.include_router(main_bot_router)
 # shazam = Shazam()/
