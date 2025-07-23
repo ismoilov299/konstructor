@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from random import Random
 
 from aiogram import types
+from asgiref.sync import sync_to_async
+
 # from aiogram.utils.i18n import gettext as _
 
 from modul.clientbot import shortcuts
@@ -12,40 +14,62 @@ from modul.loader import bot_session
 from modul.models import User, LeoMatchModel, SexEnum, Bot, MediaTypeEnum, LeoMatchLikesBasketModel
 
 
-async def get_client(uid: str):
-    return await User.filter(uid=uid).first()
 
+@sync_to_async
+def get_client(uid: int):
+    try:
+        return User.objects.get(uid=uid)  # Django syntax
+    except User.DoesNotExist:
+        return None
 
-async def get_leo(uid: str):
+@sync_to_async
+def get_leo_sync(user):
+    if user:
+        try:
+            return LeoMatchModel.objects.get(user=user)  # Django syntax
+        except LeoMatchModel.DoesNotExist:
+            return None
+    return None
+
+async def get_leo(uid: int):
     user = await get_client(uid)
     if user:
-        leo = await LeoMatchModel.filter(user=user).first()
+        leo = await get_leo_sync(user)
         return leo
     return None
 
 
+@sync_to_async
+def search_leo_sync(leo_me):
+    from django.db.models import Q
+    kwargs = {}
+    if leo_me.which_search != SexEnum.ANY.value:
+        kwargs['sex'] = leo_me.which_search
+
+    return list(LeoMatchModel.objects.filter(
+        blocked=False,
+        age__range=(leo_me.age - 3, leo_me.age + 3),
+        search=True,
+        active=True,
+        **kwargs
+    ).exclude(
+        Q(which_search__in=[leo_me.sex, SexEnum.ANY.value]) | Q(id=leo_me.id)
+    ).order_by('?')[:50])  # Django random order
+
+
 async def search_leo(me: int):
     leo_me = await get_leo(me)
-    kwargs = {}
-    if leo_me.which_search.value != SexEnum.ANY.value:
-        kwargs['sex'] = leo_me.which_search
-    return await LeoMatchModel.filter(blocked=False, age__range=(leo_me.age - 3, leo_me.age + 3), search=True,
-                                      active=True, **kwargs).exclude(
-        which_search__not_in=[leo_me.sex, SexEnum.ANY.value], id=leo_me.id).annotate(order=Random()).order_by(
-        'order').limit(50)
-
+    return await search_leo_sync(leo_me)
 
 async def get_leos_id(me: int):
     users_id = []
     leos = await search_leo(me)
     for leo in leos:
-        #     has = await LeoMatchLikesBasketModel.filter(from_user=leo_me, to_user=leo).first()
-        #     if not has:
-        users_id.append((await leo.user).uid)
+        users_id.append(leo.user.uid)
     return users_id
 
 
-async def exists_leo(uid: str):
+async def exists_leo(uid: int):
     return await get_leo(uid) is not None
 
 
