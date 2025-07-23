@@ -1,3 +1,4 @@
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 
 from modul.clientbot.handlers.leomatch.data.state import LeomatchProfiles
@@ -72,7 +73,7 @@ async def like(message: types.Message, state:FSMContext, from_uid: int, to_uid: 
         await message.answer(_("Не удалось поставить лайк"))
     await next(message, state)
     
-@client_bot_router.callback_query(LeomatchProfileAction.filter(), state=LeomatchProfiles.LOOCK)
+@client_bot_router.callback_query(LeomatchProfileAction.filter(),  StateFilter(LeomatchProfiles.LOOCK))
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAction):
     await state.update_data(me=query.from_user.id)
     if callback_data.action == ProfileActionEnum.LIKE:
@@ -159,7 +160,7 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
     await delete_like(callback_data.user_id, query.from_user.id)
     await next_like(query.message, state)
 
-@client_bot_router.callback_query(LeomatchProfileAlert.filter(), state=LeomatchProfiles.LOOCK)
+@client_bot_router.callback_query(LeomatchProfileAlert.filter(),StateFilter(LeomatchProfiles.LOOCK))
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAlert):
     if callback_data.action == "yes":
         sender: LeoMatchModel = await get_leo(callback_data.sender_id)

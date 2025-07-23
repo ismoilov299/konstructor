@@ -1,4 +1,5 @@
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.filters import StateFilter
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
@@ -175,7 +176,7 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
         await message.answer("Произошла ошибка. Попробуйте позже.")
 
 
-@client_bot_router.callback_query(LeomatchProfileAction.filter(), LeomatchProfiles.LOOCK)
+@client_bot_router.callback_query(LeomatchProfileAction.filter(),  StateFilter(LeomatchProfiles.LOOCK))
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAction):
     try:
         await query.message.edit_reply_markup()
@@ -304,7 +305,7 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
     await next_like(query.message, state)
 
 
-@client_bot_router.callback_query(LeomatchProfileAlert.filter(), LeomatchProfiles.LOOCK)
+@client_bot_router.callback_query(LeomatchProfileAlert.filter(), StateFilter(LeomatchProfiles.LOOCK))
 async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert, state: FSMContext):
     try:
         print(f"Processing alert with action: {callback_data.action}")
