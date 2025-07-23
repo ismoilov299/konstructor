@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     WEBHOOK_URL = 'https://ismoilov299.uz/bot/webhook/{token}'
     BOT_TOKEN: str = '6746881064:AAFeVCH1odRrxqqHLkBKvW39wABT3PO37-w'
     ADMIN: int = 889121031
+    DOLLAR_CURRENCY: float = 0.0
     # ADMIN_LIST = [ADMIN, 302942780]
     # PAYS: int = -1001726742937
     # CRYPTOMUS_MERCHANT: str
@@ -106,7 +107,7 @@ settings_conf = Settings(_env_file=env_file)
 settings = Settings(_env_file=env_file)
 exchange = ExchangeRateRussia()
 settings.DOLLAR_CURRENCY = exchange.get_currency("R01235")
-DOLLAR_CURRENCY: float = 0.0
+
 TORTOISE_ORM = {
     "connections": {"default": settings.DB_URL},
     "apps": {
