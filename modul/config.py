@@ -108,15 +108,15 @@ settings = Settings(_env_file=env_file)
 exchange = ExchangeRateRussia()
 settings.DOLLAR_CURRENCY = exchange.get_currency("R01235")
 
-TORTOISE_ORM = {
-    "connections": {"default": settings.DB_URL},
-    "apps": {
-        "models": {
-            "models": ["aerich.models", "db.models"],
-            "default_connection": "default",
-        },
-    },
-}
+# TORTOISE_ORM = {
+#     "connections": {"default": settings.DB_URL},
+#     "apps": {
+#         "models": {
+#             "models": ["aerich.models", "db.models"],
+#             "default_connection": "default",
+#         },
+#     },
+# }
 
 scheduler = AsyncIOScheduler(jobstores={'default': SQLAlchemyJobStore(url="sqlite:///jobs.sqlite")},
                              executors={
