@@ -1,5 +1,6 @@
 import os
 from aiogram import types, F, Bot
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
@@ -25,7 +26,7 @@ async def start(message: types.Message, state: FSMContext):
     await state.set_state(LeomatchMain.PROFILE_MANAGE)
 
 
-@client_bot_router.message(text="1", state=LeomatchMain.WAIT)
+@client_bot_router.message(F.text =="1", StateFilter(LeomatchMain.WAIT))
 async def bot_start(message: types.Message, state: FSMContext):
     leo = await get_leo(message.from_user.id)
     if not leo.active or not leo.search:
@@ -33,18 +34,18 @@ async def bot_start(message: types.Message, state: FSMContext):
     await profiles.start(message, state)
 
 
-@client_bot_router.message(text="2", state=LeomatchMain.WAIT)
+@client_bot_router.message(F.text =="2", StateFilter(LeomatchMain.WAIT))
 async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
 
-@client_bot_router.message(F.text == __("Выйти"), state=LeomatchMain.WAIT)
-@client_bot_router.message(F.text == __("Выйти"), state=LeomatchMain.PROFILE_MANAGE)
+@client_bot_router.message(F.text == __("Выйти"), StateFilter(LeomatchMain.WAIT))
+@client_bot_router.message(F.text == __("Выйти"), StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     await return_main(message, state)
 
 
-@client_bot_router.message(text="3", state=LeomatchMain.WAIT)
+@client_bot_router.message(F.text =="3", StateFilter(LeomatchMain.WAIT))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(
         _("Тогда ты не будешь знать, кому ты нравишься... Уверены насчет деактивации?\n\n1. Да, деактивируйте мой профиль, пожалуйста.\n2. Нет, я хочу посмотреть свои матчи."),
@@ -53,7 +54,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await state.set_state(LeomatchMain.SLEEP)
 
 
-@client_bot_router.message(text="1", state=LeomatchMain.SLEEP)
+@client_bot_router.message(F.text =="1", StateFilter(LeomatchMain.SLEEP))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(
         _("Надеюсь, вы встретили кого-нибудь с моей помощью! \nВсегда рад пообщаться. Если скучно, напиши мне - я найду для тебя кого-то особенного.\n\n1. Просмотр профилей"),
@@ -63,50 +64,50 @@ async def bot_start(message: types.Message, state: FSMContext):
     await state.set_state(LeomatchMain.WAIT)
 
 
-@client_bot_router.message(text="2", state=LeomatchMain.SLEEP)
+@client_bot_router.message(F.text =="2", StateFilter(LeomatchMain.SLEEP))
 async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
 
-@client_bot_router.message(text="1", state=LeomatchMain.PROFILE_MANAGE)
+@client_bot_router.message(F.text =="1", StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     await begin_registration(message, state)
 
 
-@client_bot_router.message(text="2", state=LeomatchMain.PROFILE_MANAGE)
+@client_bot_router.message(F.text =="2", StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(_("Отправьте фото или видео (до 15 сек)"), reply_markup=reply_kb.cancel())
     await state.set_state(LeomatchMain.SET_PHOTO)
 
 
-@client_bot_router.message(text="3", state=LeomatchMain.PROFILE_MANAGE)
+@client_bot_router.message(F.text =="3", StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(_("Введите новый текст профиля"), reply_markup=reply_kb.cancel())
     await state.set_state(LeomatchMain.SET_DESCRIPTION)
 
 
-@client_bot_router.message(text="4", state=LeomatchMain.PROFILE_MANAGE)
+@client_bot_router.message(F.text == "4", StateFilter(LeomatchMain.PROFILE_MANAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     await profiles.start(message, state)
 
 
-@client_bot_router.message(F.text == __("Отменить"), state=LeomatchMain.SET_DESCRIPTION)
+@client_bot_router.message(F.text == __("Отменить"), StateFilter(LeomatchMain.SET_DESCRIPTION))
 async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
 
-@client_bot_router.message(state=LeomatchMain.SET_DESCRIPTION)
+@client_bot_router.message(StateFilter(LeomatchMain.SET_DESCRIPTION))
 async def bot_start(message: types.Message, state: FSMContext):
     await update_profile(message.from_user.id, {"about_me": message.text})
     await start(message, state)
 
 
-@client_bot_router.message(F.text == __("Отменить"), state=LeomatchMain.SET_PHOTO)
+@client_bot_router.message(F.text == __("Отменить"), StateFilter(LeomatchMain.SET_PHOTO))
 async def bot_start(message: types.Message, state: FSMContext):
     await start(message, state)
 
 
-@client_bot_router.message(state=LeomatchMain.SET_PHOTO)
+@client_bot_router.message(StateFilter(LeomatchMain.SET_PHOTO))
 async def bot_start(message: types.Message, state: FSMContext):
     photo = ""
     media_type = ""
