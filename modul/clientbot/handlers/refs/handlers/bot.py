@@ -567,6 +567,7 @@ async def info(message: Message):
         refs_count = user_info[3]  # Количество рефералов пользователя
 
         admin_user = await get_admin_user(bot_token)
+        print(admin_user, "admin_user")
         bot_user_info = await get_bot_user_info(message.from_user.id, message.bot.token)
 
         await message.bot.send_message(

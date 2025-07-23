@@ -44,6 +44,14 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('Суперпользователь должен иметь is_superuser=True.')
 
         return self.create_user(uid, username, first_name, last_name, profile_image, password, **extra_fields)
+from tortoise import fields, models
+class ReferralCode(models.Model):
+    code = fields.CharField(max_length=255, unique=True)
+    user = fields.ForeignKeyField('data.User', related_name="referral_codes", on_delete=fields.CASCADE)
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "referral_codes"
 
 
 class User(AbstractBaseUser, PermissionsMixin):

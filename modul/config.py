@@ -7,6 +7,8 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pydantic.v1 import BaseSettings
 
+from utils.exchange_rate import ExchangeRateRussia
+
 # from apscheduler.executors.asyncio import AsyncIOExecutor
 # from apscheduler.executors.pool import ProcessPoolExecutor
 # from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -101,16 +103,19 @@ class Settings(BaseSettings):
 env_file = "prod.env"
 
 settings_conf = Settings(_env_file=env_file)
-#
-# TORTOISE_ORM = {
-#     "connections": {"default": settings.DB_URL},
-#     "apps": {
-#         "models": {
-#             "models": ["aerich.models", "db.models"],
-#             "default_connection": "default",
-#         },
-#     },
-# }
+settings = Settings(_env_file=env_file)
+exchange = ExchangeRateRussia()
+settings.DOLLAR_CURRENCY = exchange.get_currency("R01235")
+
+TORTOISE_ORM = {
+    "connections": {"default": settings.DB_URL},
+    "apps": {
+        "models": {
+            "models": ["aerich.models", "db.models"],
+            "default_connection": "default",
+        },
+    },
+}
 
 scheduler = AsyncIOScheduler(jobstores={'default': SQLAlchemyJobStore(url="sqlite:///jobs.sqlite")},
                              executors={
