@@ -93,7 +93,7 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
         await next(query.message, state)
 
 
-@client_bot_router.message_handler(F.text == __("Отменить"), state=LeomatchProfiles.INPUT_MESSAGE)
+@client_bot_router.message_handler(F.text == __("Отменить"), StateFilter(LeomatchProfiles.INPUT_MESSAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     data = await state.get_data()
     leos: list = data.get("leos")
@@ -103,7 +103,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     await next(message, state)
 
 
-@client_bot_router.message_handler(state=LeomatchProfiles.INPUT_MESSAGE)
+@client_bot_router.message_handler(StateFilter(LeomatchProfiles.INPUT_MESSAGE))
 async def bot_start(message: types.Message, state: FSMContext):
     data = await state.get_data()
     selected_id = data.get("selected_id")
@@ -120,19 +120,19 @@ async def bot_start(message: types.Message, state: FSMContext):
     await like(message, state, message.from_user.id, selected_id, msg)
 
 
-@client_bot_router.message_handler(F.text == __("Да"), state=LeomatchProfiles.MANAGE_LIKES)
+@client_bot_router.message_handler(F.text == __("Да"), StateFilter(LeomatchProfiles.MANAGE_LIKES))
 async def bot_start(message: types.Message, state: FSMContext):
     await message.answer(_("Вот акканты, кому Вы понравились:"), reply_markup=types.ReplyKeyboardRemove())
     await next_like(message, state)
 
 
-@client_bot_router.message_handler(F.text == __("Нет"), state=LeomatchProfiles.MANAGE_LIKES)
+@client_bot_router.message_handler(F.text == __("Нет"), StateFilter(LeomatchProfiles.MANAGE_LIKES))
 async def bot_start(message: types.Message):
     await message.answer(_("Все лайки удалены"), reply_markup=types.ReplyKeyboardRemove())
     await clear_all_likes(message.from_user.id)
 
 
-@client_bot_router.callback_query(LeomatchProfileAction.filter(), state=LeomatchProfiles.MANAGE_LIKE)
+@client_bot_router.callback_query(LeomatchProfileAction.filter(), StateFilter(LeomatchProfiles.MANAGE_LIKE))
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchLikeAction):
     if callback_data.action == LikeActionEnum.LIKE:
         leo = await get_leo(callback_data.user_id)
