@@ -14,8 +14,9 @@ from modul.clientbot.handlers.main import save_user
 from modul.loader import client_bot_router
 from modul.clientbot.handlers.chat_gpt_bot.states import AiState, AiAdminState, ChatGptFilter
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import (get_all_names, get_all_ids,
-                                                             get_info_db, get_user_balance_db, update_balance,
-                                                             update_balance_name, default_checker)
+                                                             get_info_db, get_user_balance_db,
+                                                              default_checker, update_bc,
+                                                             update_bc_name)
 
 robot = ChatGPT()
 
@@ -61,9 +62,9 @@ async def update_balance(message: types.Message, state: FSMContext):
     if message.text:
         amount = message.text
         if "userid" in data:
-            await update_balance(tg_id=data["userid"], sign='+', amount=amount)
+            await update_bc(tg_id=data["userid"], sign='+', amount=amount)
         elif "username" in data:
-            await update_balance_name(tg_id=data["username"], sign='+', amount=amount)
+            await update_bc_name(tg_id=data["username"], sign='+', amount=amount)
         await message.answer('Successfully updated')
     else:
         await message.answer('Error updating')

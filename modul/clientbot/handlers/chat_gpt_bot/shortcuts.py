@@ -28,7 +28,7 @@ def get_info_db(tg_id):
 
 
 @sync_to_async
-def update_balance(tg_id, sign, amount):
+def update_bc(tg_id, sign, amount):
     if sign == "+":
         UserTG.objects.filter(uid=tg_id).update(balance=UserTG.balance + amount)
     elif sign == "-":
@@ -36,7 +36,7 @@ def update_balance(tg_id, sign, amount):
 
 
 @sync_to_async
-def update_balance_name(tg_id, sign, amount):
+def update_bc_name(tg_id, sign, amount):
     if sign == "+":
         UserTG.objects.filter(username=tg_id).update(balance=UserTG.balance + amount)
     elif sign == "-":

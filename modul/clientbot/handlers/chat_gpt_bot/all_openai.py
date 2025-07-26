@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-client = OpenAI(api_key="sk-vSq3Jgfsyx_G4rHwe3mvHUniY0m2BvxUy0Itd9vD7JT3BlbkFJfk7dZkM-yJcvKHxknwZwzDmY0gOS-L3uYFUZ6cQ-EA")
+client = OpenAI(api_key="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")
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.1,
