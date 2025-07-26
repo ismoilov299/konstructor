@@ -30,12 +30,7 @@ async def bot_start(message: types.Message, state: FSMContext):
             await message.answer(("Ваш аккаунт заблокирован"))
             return
         await manage(message, state)
-        kbrds = InlineKeyboardBuilder()
-        kbrds.add(
-            types.InlineKeyboardButton(text=("Запустите WebApp"),
-                                       web_app=types.WebAppInfo(url='https://simplerulet.online/waleo/'))
-        )
-        await message.answer(("Попробуйте наш WebAPP знакомства"), reply_markup=kbrds.as_markup())
+
 
 
 @client_bot_router.message(F.text == ("Я не хочу никого искать"), StateFilter(LeomatchRegistration.BEGIN))

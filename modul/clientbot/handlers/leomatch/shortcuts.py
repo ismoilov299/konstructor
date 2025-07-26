@@ -139,18 +139,31 @@ async def show_media(bot: Bot, to_account: int, from_account: int, text_before: 
         await bot.send_message(to_account, text=text)
 
 
-async def show_profile(message: types.Message, uid: str, full_name: str, age: int, city: str, about_me: str, url: str,
+async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
                        type: str, keyboard: types.ReplyKeyboardMarkup = None, comment: str = None):
-    text = f"\n\nВам сообщение: {comment}" if comment else ""  ### TODO: Перевести
+    text = f"\n\nВам сообщение: {comment}" if comment else ""
     caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
     kwargs = {}
     if keyboard:
         kwargs['reply_markup'] = keyboard
+
+    # File yo'lini tekshiring
+    video_path = f"clientbot/data/leo/{uid}.mp4"
+    photo_path = f"clientbot/data/leo/{uid}.jpg"
+
     try:
-        await message.answer_video(types.FSInputFile(f"clientbot/data/leo/{uid}.mp4"), )
-        await message.answer(caption, **kwargs)
-    except:
-        await message.answer_photo(types.FSInputFile(f"clientbot/data/leo/{uid}.jpg"), caption=caption, **kwargs)
+        # Faylning mavjudligini tekshiring
+        if type in ["VIDEO", "VIDEO_NOTE"] and os.path.exists(video_path):
+            await message.answer_video(types.FSInputFile(video_path))
+            await message.answer(caption, **kwargs)
+        elif type == "PHOTO" and os.path.exists(photo_path):
+            await message.answer_photo(types.FSInputFile(photo_path), caption=caption, **kwargs)
+        else:
+            # Agar fayl mavjud bo'lmasa, faqat matn yuboring
+            await message.answer(f"📷 {caption}", **kwargs)
+    except Exception as e:
+        # Fallback - faqat matn
+        await message.answer(f"📷 {caption}", **kwargs)
 
 
 async def bot_show_profile(to_uid: int, from_uid: str, full_name: str, age: int, city: str, about_me: str, url: str,

@@ -107,7 +107,7 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 
 @client_bot_router.message(StateFilter(LeomatchMain.SET_PHOTO))
-async def bot_start(message: types.Message, state: FSMContext):
+async def bot_start(message: types.Message, state: FSMContext,bot: Bot):
     photo = ""
     media_type = ""
     if message.photo:
@@ -126,7 +126,7 @@ async def bot_start(message: types.Message, state: FSMContext):
         photo = message.video_note.file_id
         media_type = "VIDEO_NOTE"
     await update_profile(message.from_user.id, {"photo": photo, "media_type": media_type})
-    bot = await get_current_bot()
+    bot = await get_current_bot(bot)
     async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
         media_format = "jpg" if media_type == "PHOTO" else "mp4"
         os.makedirs("clientbot/data/leo", exist_ok=True)
