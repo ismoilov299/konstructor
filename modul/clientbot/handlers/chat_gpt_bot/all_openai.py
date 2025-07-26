@@ -1,6 +1,7 @@
+from dotenv import load_dotenv
 from openai import OpenAI
-
-client = OpenAI(api_key="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")
+load_dotenv('prod.env')
+client = OpenAI(api_key='OPENAI_API_KEY')
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.1,
