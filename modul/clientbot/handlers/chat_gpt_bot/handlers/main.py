@@ -3,7 +3,7 @@ import os
 import time
 from aiogram import Bot, Dispatcher, types
 from aiogram import F
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.types import FSInputFile, Message
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -111,6 +111,17 @@ async def start_message(message: types.Message, state: FSMContext, bot: Bot):
         print(result)
         await message.answer(f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}',
                              reply_markup=bt.first_buttons())
+
+
+@client_bot_router.message(StateFilter('waiting_for_gpt4'))
+async def test_gpt4_handler(message: Message, state: FSMContext):
+    """Vaqtincha test handler"""
+    print(f"🟢 GPT-4 handler triggered!")
+    print(f"   Message: {message.text}")
+
+    await message.answer("✅ Test: GPT-4 handler ishlayapti!")
+    await state.clear()
+    print(f"   State cleared!")
 
 
 @client_bot_router.callback_query(F.data == "chat_4")
