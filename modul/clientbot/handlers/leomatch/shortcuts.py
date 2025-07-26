@@ -11,8 +11,7 @@ from modul.clientbot import shortcuts
 from modul.clientbot.handlers.leomatch.keyboards.inline_kb import write_profile
 from modul.clientbot.shortcuts import get_bot_by_username
 from modul.loader import bot_session
-from modul.models import User, LeoMatchModel, SexEnum, Bot, MediaTypeEnum, LeoMatchLikesBasketModel
-
+from modul.models import User, LeoMatchModel, SexEnum, Bot, MediaTypeEnum, LeoMatchLikesBasketModel, UserTG
 
 
 @sync_to_async
@@ -96,27 +95,77 @@ async def add_leo(uid: int, photo: str, media_type: str, sex: str, age: int, ful
     )
 
 
-async def update_leo(uid: int, photo: str, media_type: str, sex: str, age: int, full_name: str, about_me: str,
-                     city: str, which_search: str):
-    leo = await get_leo(uid)
-    bot = await shortcuts.get_bot_by_username(leo.bot_username)
-    async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
-        format = "jpg" if media_type == "PHOTO" else "mp4"
-        os.makedirs("clientbot/data/leo", exist_ok=True)
-        await bot_.download(photo, f"clientbot/data/leo/{uid}.{format}")
-    await leo.update_from_dict(
-        {
-            "user": await leo.user,
-            "photo": photo,
-            "media_type": media_type,
-            "sex": sex,
-            "age": age,
-            "full_name": full_name,
-            "about_me": about_me,
-            "city": city,
-            "which_search": which_search,
-        }
-    ).save()
+@sync_to_async
+def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search):
+    try:
+        # Debug
+        print(f"Updating LeoMatch data for user {uid}")
+        print(f"Photo: {photo}, Media Type: {media_type}")
+
+        # Проверяем, нет ли пустых значений для обязательных полей
+        if photo is None:
+            photo = f"modul/clientbot/data/leo{uid}.jpg"
+            print(f"Using default photo path: {photo}")
+
+        if media_type is None:
+            media_type = "PHOTO"
+            print(f"Using default media_type: {media_type}")
+
+        # Найдем пользователя по uid в строковом виде (это то, что сейчас используется)
+        user = UserTG.objects.filter(uid=str(uid)).first()
+
+        # Если пользователя нет, пробуем найти по id
+        if not user:
+            user = UserTG.objects.filter(id=uid).first()
+
+        # Если пользователя всё ещё нет, создаём нового
+        if not user:
+            print(f"User {uid} does not exist in UserTG table. Creating user...")
+            user = UserTG(
+                uid=str(uid),
+                username=f"user_{uid}",
+                first_name=full_name if full_name else f"User {uid}"
+            )
+            user.save()
+            print(f"Created new UserTG with ID {user.id} and UID {user.uid}")
+        else:
+            print(f"Found existing user with ID {user.id} and UID {user.uid}")
+
+        # Поиск существующей LeoMatchModel записи по user
+        leo = LeoMatchModel.objects.filter(user=user).first()
+
+        # Если записи нет - создаём новую
+        if not leo:
+            print(f"Creating new LeoMatchModel for user {uid}")
+            leo = LeoMatchModel.objects.create(
+                user=user,
+                photo=photo,
+                media_type=media_type,
+                sex=sex,
+                age=age,
+                full_name=full_name,
+                about_me=about_me,
+                city=city,
+                which_search=which_search
+            )
+            print(f"Created new LeoMatchModel for user {uid}")
+        else:
+            # Обновление существующей записи
+            leo.photo = photo
+            leo.media_type = media_type
+            leo.sex = sex
+            leo.age = age
+            leo.full_name = full_name
+            leo.about_me = about_me
+            leo.city = city
+            leo.which_search = which_search
+            leo.save()
+            print(f"Updated existing LeoMatchModel for user {uid}")
+
+        return True
+    except Exception as e:
+        print(f"Error updating LeoMatch data for user {uid}: {e}")
+        return False  # Возвращаем False вместо поднятия исключения
 
 
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
