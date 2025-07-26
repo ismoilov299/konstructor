@@ -46,10 +46,18 @@ def update_bc(tg_id, sign, amount):
 
 @sync_to_async
 def update_bc_name(tg_id, sign, amount):
-    if sign == "+":
-        UserTG.objects.filter(username=tg_id).update(balance=UserTG.balance + amount)
-    elif sign == "-":
-        UserTG.objects.filter(username=tg_id).update(balance=UserTG.balance - amount)
+    try:
+        amount = float(amount)
+
+        if sign == "+":
+            UserTG.objects.filter(username=tg_id).update(balance=F('balance') + amount)
+        elif sign == "-":
+            UserTG.objects.filter(username=tg_id).update(balance=F('balance') - amount)
+
+        return True
+    except Exception as e:
+        print(f"Error in update_bc_name: {e}")
+        return False
 
 
 @sync_to_async
