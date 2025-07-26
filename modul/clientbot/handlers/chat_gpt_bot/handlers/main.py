@@ -31,7 +31,7 @@ def chat_gpt_bot_handlers():
 
 from modul.clientbot.handlers.chat_gpt_bot.all_openai import ChatGPT
 chatgpt = ChatGPT()
-@client_bot_router.message()
+# @client_bot_router.message()
 async def debug_all_handler(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
     user_id = message.from_user.id
