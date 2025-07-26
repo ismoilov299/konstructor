@@ -113,7 +113,7 @@ async def start_message(message: types.Message, state: FSMContext, bot: Bot):
                              reply_markup=bt.first_buttons())
 
 
-@client_bot_router.message(StateFilter('waiting_for_gpt4'))
+@client_bot_router.message(StateFilter('waiting_for_gpt4'), ChatGptFilter())
 async def test_gpt4_handler(message: Message, state: FSMContext):
     """Vaqtincha test handler"""
     print(f"🟢 GPT-4 handler triggered!")
