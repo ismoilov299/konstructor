@@ -30,6 +30,23 @@ def chat_gpt_bot_handlers():
         await state.set_state(AiAdminState.check_token_and_update)
 
 
+@client_bot_router.message()
+async def debug_all_handler(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+
+    print(f"🔍 MESSAGE DEBUG:")
+    print(f"   Text: {message.text}")
+    print(f"   State: {current_state}")
+
+    if current_state == 'waiting_for_gpt3':
+        print(f"   🎯 GPT-3 aniqlandi!")
+        await gpt3(message, context=False)
+        await state.clear()
+        print(f"   ✅ GPT-3 ishladi!")
+        return
+
+    print(f"   ⏭️ Keyingi handler...")
+
 @client_bot_router.message(AiAdminState.check_token_and_update)
 async def check_token_and_update(message: types.Message, state: FSMContext):
     if message.text == 'da98s74d5qw89a4dw6854a':
