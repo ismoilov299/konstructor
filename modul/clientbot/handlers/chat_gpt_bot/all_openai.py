@@ -1,7 +1,10 @@
-from openai import OpenAI
+import os
 
-client = OpenAI(api_key="")
-#
+from dotenv import load_dotenv
+from openai import OpenAI
+load_dotenv('prod.env')
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.1,
     "max_tokens": 1000,
