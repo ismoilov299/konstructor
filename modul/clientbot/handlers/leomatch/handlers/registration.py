@@ -157,7 +157,7 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 
 @client_bot_router.message(StateFilter(LeomatchRegistration.SEND_PHOTO))
-async def bot_start(message: types.Message, state: FSMContext):
+async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     if not message.photo and not message.video:
         await message.answer(("Пожалуйста, пришли фото или видео"))
         return
@@ -173,7 +173,7 @@ async def bot_start(message: types.Message, state: FSMContext):
         url = message.video.file_id
         type = "VIDEO"
     await state.update_data(photo=url, media_type=type)
-    bot = await get_current_bot()
+    bot = await get_current_bot(bot)
     async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
         format = "jpg" if type == "PHOTO" else "mp4"
         os.makedirs("clientbot/data/leo", exist_ok=True)
