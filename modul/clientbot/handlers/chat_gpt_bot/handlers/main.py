@@ -158,24 +158,38 @@ async def chat_options_callback(callback: types.CallbackQuery, state: FSMContext
     user_id = callback.from_user.id
     user_balance = await get_user_balance_db(user_id)
 
+    print(f"🔘 CALLBACK DEBUG:")
+    print(f"   Data: {callback.data}")
+    print(f"   User: {user_id}")
+    print(f"   Balance: {user_balance}")
+
     if callback.data in ['not', 'again_gpt3'] and user_balance >= 1:
         await update_bc(tg_id=user_id, sign='-', amount=1)
         await callback.message.answer('Пришлите свой запрос:')
         await state.set_state('waiting_for_gpt3')
+        print(f"   ✅ State set to: waiting_for_gpt3")
+
     elif callback.data == 'with' and user_balance >= 2:
         await update_bc(tg_id=user_id, sign='-', amount=2)
         await callback.message.answer('Пришлите свой запрос:\nДля выхода из чата используй /start /reset')
         await state.set_state('waiting_for_gpt3_context')
+        print(f"   ✅ State set to: waiting_for_gpt3_context")
+
     elif callback.data in ['not4', 'again_gpt4'] and user_balance >= 3:
         await update_bc(tg_id=user_id, sign='-', amount=3)
         await callback.message.answer('Пришлите свой запрос:')
         await state.set_state('waiting_for_gpt4')
+        print(f"   ✅ State set to: waiting_for_gpt4")
+
     elif callback.data == 'with4' and user_balance >= 4:
         await update_bc(tg_id=user_id, sign='-', amount=4)
         await callback.message.answer('Пришлите свой запрос:\nДля выхода из чата используй /start /reset')
         await state.set_state('waiting_for_gpt4_context')
+        print(f"   ✅ State set to: waiting_for_gpt4_context")
+
     else:
         await callback.message.answer('Не хватает на балансе тыкай --> /start')
+        print(f"   ❌ Insufficient balance or unknown callback")
 
 
 @client_bot_router.callback_query(F.data.in_({"back", "back_on_menu"}))
