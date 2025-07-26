@@ -40,8 +40,8 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 @client_bot_router.message(F.text ==  ("Выйти"), StateFilter(LeomatchMain.WAIT))
 @client_bot_router.message(F.text ==  ("Выйти"), StateFilter(LeomatchMain.PROFILE_MANAGE))
-async def bot_start(message: types.Message, state: FSMContext):
-    await return_main(message, state)
+async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
+    await return_main(message, state,bot)
 
 
 @client_bot_router.message(F.text =="3", StateFilter(LeomatchMain.WAIT))
