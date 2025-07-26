@@ -259,6 +259,7 @@ async def how_to_pay_callback(callback: types.CallbackQuery):
 @client_bot_router.message(lambda message: message.text not in ['/start', '/reset'], ChatGptFilter())
 async def handle_text_input(message: Message, state: FSMContext):
     current_state = await state.get_state()
+    print(f"Current state: {current_state}")
     if current_state == 'waiting_for_gpt3':
         await gpt3(message, context=False)
     elif current_state == 'waiting_for_gpt3_context':
