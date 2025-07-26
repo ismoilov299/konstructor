@@ -2,7 +2,7 @@ import random
 import os
 import time
 from aiogram import Bot, Dispatcher, types
-from django.db.models import F
+from aiogram import F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import FSInputFile, Message
 from aiogram.utils.deep_linking import create_start_link
