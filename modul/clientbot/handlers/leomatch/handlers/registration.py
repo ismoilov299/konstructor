@@ -182,7 +182,7 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 
 @client_bot_router.message(F.text == ("Да"), StateFilter(LeomatchRegistration.FINAL))
-async def bot_start(message: types.Message, state: FSMContext):
+async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     photo = data['photo']
     media_type = data['media_type']
@@ -195,7 +195,7 @@ async def bot_start(message: types.Message, state: FSMContext):
     which_search = data['which_search']
     leo = await get_leo(message.from_user.id)
     if not leo:
-        bot = await get_current_bot()
+        bot = await get_current_bot(bot)
         await add_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search,
                       bot.username)
     else:
