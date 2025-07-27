@@ -89,8 +89,7 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             builder = InlineKeyboardBuilder()
             builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
             builder.button(text='☁ Чат с GPT-3.5', callback_data='chat_3')
-            builder.button(text='🆘 Помощь', callback_data='helper')
-            builder.button(text='⚙️ Настройки', callback_data='settings')
+
             builder.button(text='💸Заработать', callback_data='ref')
             builder.adjust(2, 1, 1, 1, 1)
             result = await get_info_db(uid)
