@@ -29,123 +29,239 @@ def chat_gpt_bot_handlers():
         await message.answer('Пришли токен')
         await state.set_state(AiAdminState.check_token_and_update)
 
+    @client_bot_router.message(ChatGptFilter())
+    async def debug_all_handler(message: types.Message, state: FSMContext):
+        current_state = await state.get_state()
+        user_id = message.from_user.id
+
+        print(f"🔍 MESSAGE DEBUG:")
+        print(f"   User: {user_id}")
+        print(f"   Text: {message.text}")
+        print(f"   State: {current_state}")
+
+        if current_state == 'waiting_for_gpt3':
+            print(f"   🎯 GPT-3.5 aniqlandi!")
+            await message.answer("⏳ Обрабатываю запрос...")
+
+            try:
+                # GPT-3.5 chaqiruvi (context=False)
+                response = chatgpt.chat_gpt(
+                    user_id=user_id,
+                    message=message.text,
+                    gpt='gpt-3.5-turbo',
+                    context=False
+                )
+
+                if response:
+                    await message.answer(f"🤖 GPT-3.5:\n{response}", reply_markup=bt.first_buttons())
+                else:
+                    await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            except Exception as e:
+                print(f"   ❌ GPT-3 xatolik: {e}")
+                await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            await state.clear()
+            print(f"   ✅ State tozalandi!")
+            return
+
+        elif current_state == 'waiting_for_gpt3_context':
+            print(f"   🎯 GPT-3.5 context aniqlandi!")
+            await message.answer("⏳ Обрабатываю запрос с контекстом...")
+
+            try:
+                # GPT-3.5 chaqiruvi (context=True)
+                response = chatgpt.chat_gpt(
+                    user_id=user_id,
+                    message=message.text,
+                    gpt='gpt-3.5-turbo',
+                    context=True
+                )
+
+                if response:
+                    await message.answer(f"🤖 GPT-3.5 (контекст):\n{response}")
+                else:
+                    await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            except Exception as e:
+                print(f"   ❌ GPT-3 context xatolik: {e}")
+                await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            # await state.clear()
+            # print(f"   ✅ State tozalandi!")
+            return
+
+        elif current_state == 'waiting_for_gpt4':
+            print(f"   🎯 GPT-4 aniqlandi!")
+            await message.answer("⏳ Обрабатываю запрос...")
+
+            try:
+                # GPT-4 chaqiruvi (context=False)
+                response = chatgpt.chat_gpt(
+                    user_id=user_id,
+                    message=message.text,
+                    gpt='gpt-4o',
+                    context=False
+                )
+
+                if response:
+                    await message.answer(f"🤖 GPT-4:\n{response}", reply_markup=bt.first_buttons())
+                else:
+                    await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            except Exception as e:
+                print(f"   ❌ GPT-4 xatolik: {e}")
+                await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            await state.clear()
+            print(f"   ✅ State tozalandi!")
+            return
+
+        elif current_state == 'waiting_for_gpt4_context':
+            print(f"   🎯 GPT-4 context aniqlandi!")
+            await message.answer("⏳ Обрабатываю запрос с контекстом...")
+
+            try:
+                # GPT-4 chaqiruvi (context=True)
+                response = chatgpt.chat_gpt(
+                    user_id=user_id,
+                    message=message.text,
+                    gpt='gpt-4o',
+                    context=True
+                )
+
+                if response:
+                    await message.answer(f"🤖 GPT-4 (контекст):\n{response}")
+                else:
+                    await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            except Exception as e:
+                print(f"   ❌ GPT-4 context xatolik: {e}")
+                await message.answer("❌ Произошла ошибка при обработке запроса")
+
+            # await state.clear()
+            # print(f"   ✅ State tozalandi!")
+            return
+
+        print(f"   ⏭️ Keyingi handler...")
+
 from modul.clientbot.handlers.chat_gpt_bot.all_openai import ChatGPT
 chatgpt = ChatGPT()
-@client_bot_router.message(ChatGptFilter())
-async def debug_all_handler(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    user_id = message.from_user.id
-
-    print(f"🔍 MESSAGE DEBUG:")
-    print(f"   User: {user_id}")
-    print(f"   Text: {message.text}")
-    print(f"   State: {current_state}")
-
-    if current_state == 'waiting_for_gpt3':
-        print(f"   🎯 GPT-3.5 aniqlandi!")
-        await message.answer("⏳ Обрабатываю запрос...")
-
-        try:
-            # GPT-3.5 chaqiruvi (context=False)
-            response = chatgpt.chat_gpt(
-                user_id=user_id,
-                message=message.text,
-                gpt='gpt-3.5-turbo',
-                context=False
-            )
-
-            if response:
-                await message.answer(f"🤖 GPT-3.5:\n{response}",reply_markup=bt.first_buttons())
-            else:
-                await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        except Exception as e:
-            print(f"   ❌ GPT-3 xatolik: {e}")
-            await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        await state.clear()
-        print(f"   ✅ State tozalandi!")
-        return
-
-    elif current_state == 'waiting_for_gpt3_context':
-        print(f"   🎯 GPT-3.5 context aniqlandi!")
-        await message.answer("⏳ Обрабатываю запрос с контекстом...")
-
-        try:
-            # GPT-3.5 chaqiruvi (context=True)
-            response = chatgpt.chat_gpt(
-                user_id=user_id,
-                message=message.text,
-                gpt='gpt-3.5-turbo',
-                context=True
-            )
-
-            if response:
-                await message.answer(f"🤖 GPT-3.5 (контекст):\n{response}")
-            else:
-                await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        except Exception as e:
-            print(f"   ❌ GPT-3 context xatolik: {e}")
-            await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        # await state.clear()
-        # print(f"   ✅ State tozalandi!")
-        return
-
-    elif current_state == 'waiting_for_gpt4':
-        print(f"   🎯 GPT-4 aniqlandi!")
-        await message.answer("⏳ Обрабатываю запрос...")
-
-        try:
-            # GPT-4 chaqiruvi (context=False)
-            response = chatgpt.chat_gpt(
-                user_id=user_id,
-                message=message.text,
-                gpt='gpt-4o',
-                context=False
-            )
-
-            if response:
-                await message.answer(f"🤖 GPT-4:\n{response}"  , reply_markup=bt.first_buttons())
-            else:
-                await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        except Exception as e:
-            print(f"   ❌ GPT-4 xatolik: {e}")
-            await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        await state.clear()
-        print(f"   ✅ State tozalandi!")
-        return
-
-    elif current_state == 'waiting_for_gpt4_context':
-        print(f"   🎯 GPT-4 context aniqlandi!")
-        await message.answer("⏳ Обрабатываю запрос с контекстом...")
-
-        try:
-            # GPT-4 chaqiruvi (context=True)
-            response = chatgpt.chat_gpt(
-                user_id=user_id,
-                message=message.text,
-                gpt='gpt-4o',
-                context=True
-            )
-
-            if response:
-                await message.answer(f"🤖 GPT-4 (контекст):\n{response}")
-            else:
-                await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        except Exception as e:
-            print(f"   ❌ GPT-4 context xatolik: {e}")
-            await message.answer("❌ Произошла ошибка при обработке запроса")
-
-        # await state.clear()
-        # print(f"   ✅ State tozalandi!")
-        return
-
-    print(f"   ⏭️ Keyingi handler...")
+# @client_bot_router.message(ChatGptFilter())
+# async def debug_all_handler(message: types.Message, state: FSMContext):
+#     current_state = await state.get_state()
+#     user_id = message.from_user.id
+#
+#     print(f"🔍 MESSAGE DEBUG:")
+#     print(f"   User: {user_id}")
+#     print(f"   Text: {message.text}")
+#     print(f"   State: {current_state}")
+#
+#     if current_state == 'waiting_for_gpt3':
+#         print(f"   🎯 GPT-3.5 aniqlandi!")
+#         await message.answer("⏳ Обрабатываю запрос...")
+#
+#         try:
+#             # GPT-3.5 chaqiruvi (context=False)
+#             response = chatgpt.chat_gpt(
+#                 user_id=user_id,
+#                 message=message.text,
+#                 gpt='gpt-3.5-turbo',
+#                 context=False
+#             )
+#
+#             if response:
+#                 await message.answer(f"🤖 GPT-3.5:\n{response}",reply_markup=bt.first_buttons())
+#             else:
+#                 await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         except Exception as e:
+#             print(f"   ❌ GPT-3 xatolik: {e}")
+#             await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         await state.clear()
+#         print(f"   ✅ State tozalandi!")
+#         return
+#
+#     elif current_state == 'waiting_for_gpt3_context':
+#         print(f"   🎯 GPT-3.5 context aniqlandi!")
+#         await message.answer("⏳ Обрабатываю запрос с контекстом...")
+#
+#         try:
+#             # GPT-3.5 chaqiruvi (context=True)
+#             response = chatgpt.chat_gpt(
+#                 user_id=user_id,
+#                 message=message.text,
+#                 gpt='gpt-3.5-turbo',
+#                 context=True
+#             )
+#
+#             if response:
+#                 await message.answer(f"🤖 GPT-3.5 (контекст):\n{response}")
+#             else:
+#                 await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         except Exception as e:
+#             print(f"   ❌ GPT-3 context xatolik: {e}")
+#             await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         # await state.clear()
+#         # print(f"   ✅ State tozalandi!")
+#         return
+#
+#     elif current_state == 'waiting_for_gpt4':
+#         print(f"   🎯 GPT-4 aniqlandi!")
+#         await message.answer("⏳ Обрабатываю запрос...")
+#
+#         try:
+#             # GPT-4 chaqiruvi (context=False)
+#             response = chatgpt.chat_gpt(
+#                 user_id=user_id,
+#                 message=message.text,
+#                 gpt='gpt-4o',
+#                 context=False
+#             )
+#
+#             if response:
+#                 await message.answer(f"🤖 GPT-4:\n{response}"  , reply_markup=bt.first_buttons())
+#             else:
+#                 await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         except Exception as e:
+#             print(f"   ❌ GPT-4 xatolik: {e}")
+#             await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         await state.clear()
+#         print(f"   ✅ State tozalandi!")
+#         return
+#
+#     elif current_state == 'waiting_for_gpt4_context':
+#         print(f"   🎯 GPT-4 context aniqlandi!")
+#         await message.answer("⏳ Обрабатываю запрос с контекстом...")
+#
+#         try:
+#             # GPT-4 chaqiruvi (context=True)
+#             response = chatgpt.chat_gpt(
+#                 user_id=user_id,
+#                 message=message.text,
+#                 gpt='gpt-4o',
+#                 context=True
+#             )
+#
+#             if response:
+#                 await message.answer(f"🤖 GPT-4 (контекст):\n{response}")
+#             else:
+#                 await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         except Exception as e:
+#             print(f"   ❌ GPT-4 context xatolik: {e}")
+#             await message.answer("❌ Произошла ошибка при обработке запроса")
+#
+#         # await state.clear()
+#         # print(f"   ✅ State tozalandi!")
+#         return
+#
+#     print(f"   ⏭️ Keyingi handler...")
 
 @client_bot_router.message(AiAdminState.check_token_and_update)
 async def check_token_and_update(message: types.Message, state: FSMContext):
