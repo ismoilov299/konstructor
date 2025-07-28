@@ -89,8 +89,8 @@ async def debug_all_handler(message: types.Message, state: FSMContext):
             print(f"   ❌ GPT-3 context xatolik: {e}")
             await message.answer("❌ Произошла ошибка при обработке запроса")
 
-        await state.clear()
-        print(f"   ✅ State tozalandi!")
+        # await state.clear()
+        # print(f"   ✅ State tozalandi!")
         return
 
     elif current_state == 'waiting_for_gpt4':
@@ -141,8 +141,8 @@ async def debug_all_handler(message: types.Message, state: FSMContext):
             print(f"   ❌ GPT-4 context xatolik: {e}")
             await message.answer("❌ Произошла ошибка при обработке запроса")
 
-        await state.clear()
-        print(f"   ✅ State tozalandi!")
+        # await state.clear()
+        # print(f"   ✅ State tozalandi!")
         return
 
     print(f"   ⏭️ Keyingi handler...")
