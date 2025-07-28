@@ -55,7 +55,7 @@ async def debug_all_handler(message: types.Message, state: FSMContext):
             )
 
             if response:
-                await message.answer(f"🤖 GPT-3.5:\n{response}")
+                await message.answer(f"🤖 GPT-3.5:\n{response}",reply_markup=bt.first_buttons())
             else:
                 await message.answer("❌ Произошла ошибка при обработке запроса")
 
@@ -107,7 +107,7 @@ async def debug_all_handler(message: types.Message, state: FSMContext):
             )
 
             if response:
-                await message.answer(f"🤖 GPT-4:\n{response}")
+                await message.answer(f"🤖 GPT-4:\n{response}"  , reply_markup=bt.first_buttons())
             else:
                 await message.answer("❌ Произошла ошибка при обработке запроса")
 
