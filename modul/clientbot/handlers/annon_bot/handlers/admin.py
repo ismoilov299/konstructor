@@ -1,10 +1,9 @@
 import logging
 from aiogram import Router, F, types
-from aiogram.filters import Command
+from aiogram.filters import Command, BaseFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 from modul.clientbot import shortcuts
-from modul.clientbot.handlers.admin.universal_admin import AdminFilter
 from modul.clientbot.handlers.annon_bot.adminservice import *
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import admin_menu_in, admin_channels_in, cancel_bt, \
     main_menu_bt
@@ -27,6 +26,11 @@ async def get_admin_id(bot: Bot):
     bot_db = await shortcuts.get_bot(bot)
     return bot_db.owner.uid
 
+class AdminFilter(BaseFilter):
+    async def __call__(self, message: Message, bot: Bot) -> bool:
+        bot_db = await shortcuts.get_bot(bot)
+        admin_id = bot_db.owner.uid
+        return message.from_user.id == admin_id
 
 def anon_admin_panel():
     @client_bot_router.message(Command('admin'), AdminFilter())
