@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardButton, KeyboardButton
+from aiogram.types import InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import get_all_names
@@ -16,10 +16,7 @@ def first_buttons():
 
 
 def ref():
-    builder = ReplyKeyboardBuilder()
-    builder.button(text='💸Заработать')
-    builder.adjust(1)
-    return builder.as_markup()
+    return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='💸Заработать')]], resize_keyboard=True)
 
 def choice_1_3_5():
     builder = InlineKeyboardBuilder()

@@ -1,5 +1,5 @@
 import logging
-from aiogram import Router, F, types
+from aiogram import Router, F
 from aiogram.filters import Command, BaseFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
@@ -33,9 +33,13 @@ class AdminFilter(BaseFilter):
         return message.from_user.id == admin_id
 
 def anon_admin_panel():
-    @client_bot_router.message(Command('admin'), AdminFilter())
-    async def admin(message: types.Message):
-        await message.answer('Админ панель', reply_markup=admin_kb)
+    @client_bot_router.message(Command(commands=["admin"]), F.chat.type == "private")
+    async def admin_mm(message: Message):
+        try:
+            await message.answer('Админ панель', reply_markup=admin_kb)
+        except Exception as e:
+            logger.error(f"Ошибка при входе в панель админа: {e}")
+            await message.answer("❗ Произошла ошибка. Повторите попытку позже.")
 
 
 
