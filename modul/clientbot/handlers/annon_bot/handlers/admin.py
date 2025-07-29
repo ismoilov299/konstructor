@@ -1,13 +1,15 @@
 import logging
-from aiogram import Router, F
+from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 from modul.clientbot import shortcuts
+from modul.clientbot.handlers.admin.universal_admin import AdminFilter
 from modul.clientbot.handlers.annon_bot.adminservice import *
 from modul.clientbot.handlers.annon_bot.keyboards.buttons import admin_menu_in, admin_channels_in, cancel_bt, \
     main_menu_bt
 from modul.clientbot.handlers.annon_bot.states import AnonBotFilter, ChangeAdminInfo
+from modul.clientbot.handlers.kino_bot.keyboards.kb import admin_kb
 from modul.loader import client_bot_router
 from modul.models import Bot
 
@@ -27,17 +29,9 @@ async def get_admin_id(bot: Bot):
 
 
 def anon_admin_panel():
-    @client_bot_router.message(Command(commands=["admin"]), F.chat.type == "private")
-    async def admin_mm(message: Message):
-        try:
-            count = await get_users_count()
-            await message.answer(
-                f"🕵 Панель админа\nКоличество юзеров в боте: {count}",
-                reply_markup=await admin_menu_in()
-            )
-        except Exception as e:
-            logger.error(f"Ошибка при входе в панель админа: {e}")
-            await message.answer("❗ Произошла ошибка. Повторите попытку позже.")
+    @client_bot_router.message(Command('admin'), AdminFilter())
+    async def admin(message: types.Message):
+        await message.answer('Админ панель', reply_markup=admin_kb)
 
 
 
