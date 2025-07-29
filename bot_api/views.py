@@ -13,6 +13,7 @@ from aiogram.types import Update
 from modul import models
 from modul.bot.main_bot.main import init_bot_handlers
 from modul.clientbot.handlers.admin.universal_admin import admin_panel
+from modul.clientbot.handlers.annon_bot.handlers.admin import anon_admin_panel
 # from modul.clientbot.handlers.annon_bot.handlers.admin import admin_panel
 from modul.clientbot.handlers.annon_bot.handlers.bot import anon_bot_handlers
 from modul.clientbot.handlers.chat_gpt_bot.handlers.main import chat_gpt_bot_handlers
@@ -47,6 +48,7 @@ async def setup_routers():
                 dp.sub_routers.clear()
 
             # Handler'larni sozlash
+            anon_admin_panel()
             admin_panel()
             chat_gpt_bot_handlers()
             init_bot_handlers()

@@ -26,7 +26,7 @@ async def get_admin_id(bot: Bot):
     return bot_db.owner.uid
 
 
-def admin_panel():
+def anon_admin_panel():
     @client_bot_router.message(Command(commands=["admin"]), F.chat.type == "private")
     async def admin_mm(message: Message):
         try:
