@@ -5,6 +5,8 @@ import time
 import traceback
 from contextlib import suppress
 import shutil
+
+import requests
 from aiogram import Bot, F, html
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.filters import Command, CommandStart, CommandObject, Filter, BaseFilter, command
@@ -56,7 +58,7 @@ from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bo
     executor
 from modul.loader import client_bot_router
 from modul.models import UserTG, AdminInfo, User, ClientBotUser
-from typing import Union, List
+from typing import Union, List, Dict
 import yt_dlp
 import logging
 from aiogram.types import Message, FSInputFile
@@ -85,11 +87,9 @@ class SendMessagesForm(StatesGroup):
 
 # Callback data
 class FormatCallback(CallbackData, prefix="format"):
-    """Callback data for format selection"""
-    format_id: str
-    type: str
-    quality: str
     index: int
+    quality: str
+    type: str
 
 
 async def check_subs(user_id: int, bot: Bot) -> bool:
@@ -1759,6 +1759,305 @@ def create_task_model(client, url):
     info = models.TaskModel.objects.create(client=client, task_type=models.TaskTypeEnum.DOWNLOAD_MEDIA,
                                            data={'url': url})
     return True
+YOUTUBE_COOKIES = [
+    {
+        "name": "HSID",
+        "value": "A6FnrhXGTTPbSHwN6",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.389489,
+        "httpOnly": True,
+        "secure": False
+    },
+    {
+        "name": "SSID",
+        "value": "Ahi6pG0RUJJ_agZ6A",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.389858,
+        "httpOnly": True,
+        "secure": True
+    },
+    {
+        "name": "APISID",
+        "value": "vFdxeJjr7QwYB6Yw/AY8NLDq9Ejo6nm90F",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.390035,
+        "httpOnly": False,
+        "secure": False
+    },
+    {
+        "name": "SAPISID",
+        "value": "RH8WKxtkUQQFoMME/AY0osQx5Onuehe63k",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.390127,
+        "httpOnly": False,
+        "secure": True
+    },
+    {
+        "name": "__Secure-1PAPISID",
+        "value": "RH8WKxtkUQQFoMME/AY0osQx5Onuehe63k",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.390195,
+        "httpOnly": False,
+        "secure": True
+    },
+    {
+        "name": "__Secure-3PAPISID",
+        "value": "RH8WKxtkUQQFoMME/AY0osQx5Onuehe63k",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.390276,
+        "httpOnly": False,
+        "secure": True
+    },
+    {
+        "name": "LOGIN_INFO",
+        "value": "AFmmF2swRAIgO3642TF21_auIcOPLjz1tHgTbrCTRZ0x2bGc2Q0MQdwCIErfxoenco3hN6boqZCFvtxtL7YYAQ4kMedLNbGgYOLn:QUQ3MjNmeG5OOXNaN3F3M0ZwZHp0REFZamlmQnhORVNzcUI3RTdoWjdDMW9jMjlLalloVWdMcmpnM0xpaFRHYWRjdGlYUHRfcklRRzNyekpKUHRmSmlRR2t1d1JQM24xQzV6Q3BwcG9DV2xMN1dXclo0ODN0Rm1DUFJRX0ppUnBQNWJSUEZqMzJxb2IzVzdCVm1LazlIZFdWSGpUalBYVTdB",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1778774910.310545,
+        "httpOnly": True,
+        "secure": True
+    },
+    {
+        "name": "PREF",
+        "value": "f4=4000000&f6=40000000&tz=Asia.Tashkent&f7=100",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688696.188753,
+        "httpOnly": False,
+        "secure": True
+    },
+    {
+        "name": "SID",
+        "value": "g.a000zwjlWsrQTPJQqV90-j7_Pg7CaStF5wFHKsVjMWN7lHSma0Y34npNXaVukaOnM-VmNl1g9gACgYKAZUSARESFQHGX2MiA8TiK8qIeBCnH3xNVQyIWhoVAUF8yKqVVBLXWTasDhUMHC_I6jGd0076",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.390946,
+        "httpOnly": False,
+        "secure": False
+    },
+    {
+        "name": "__Secure-1PSID",
+        "value": "g.a000zwjlWsrQTPJQqV90-j7_Pg7CaStF5wFHKsVjMWN7lHSma0Y3DFCl8b1GdJv89FFsmdo6_gACgYKAaASARESFQHGX2Mip3TvhwEMo9vA3Ho4Nsd12hoVAUF8yKpccjmuEUcJkfqW9nGyf9k_0076",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.390998,
+        "httpOnly": True,
+        "secure": True
+    },
+    {
+        "name": "__Secure-3PSID",
+        "value": "g.a000zwjlWsrQTPJQqV90-j7_Pg7CaStF5wFHKsVjMWN7lHSma0Y3kOGQwytCvMkpKmzTBSB5UQACgYKAToSARESFQHGX2MiqfiGvWm_BZ8ZSvlOj4pYyBoVAUF8yKpg6dJ_K2RV0sBYAviOwT6P0076",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1788688694.391048,
+        "httpOnly": True,
+        "secure": True
+    },
+    {
+        "name": "__Secure-1PSIDTS",
+        "value": "sidts-CjEB5H03P_FJ4yKSSaKuJaP--2La7FyZZz00bIaLPfPtFP6hTeedSpu3ZATlliLEW1sbEAA",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1785664698.076208,
+        "httpOnly": True,
+        "secure": True
+    },
+    {
+        "name": "__Secure-3PSIDTS",
+        "value": "sidts-CjEB5H03P_FJ4yKSSaKuJaP--2La7FyZZz00bIaLPfPtFP6hTeedSpu3ZATlliLEW1sbEAA",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1785664698.076619,
+        "httpOnly": True,
+        "secure": True
+    },
+    {
+        "name": "ST-3opvp5",
+        "value": "session_logininfo=AFmmF2swRAIgO3642TF21_auIcOPLjz1tHgTbrCTRZ0x2bGc2Q0MQdwCIErfxoenco3hN6boqZCFvtxtL7YYAQ4kMedLNbGgYOLn%3AQUQ3MjNmeG5OOXNaN3F3M0ZwZHp0REFZamlmQnhORVNzcUI3RTdoWjdDMW9jMjlLalloVWdMcmpnM0xpaFRHYWRjdGlYUHRfcklRRzNyekpKUHRmSmlRR2t1d1JQM24xQzV6Q3BwcG9DV2xMN1dXclo0ODN0Rm1DUFJRX0ppUnBQNWJSUEZqMzJxb2IzVzdCVm1LazlIZFdWSGpUalBYVTdB",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1754128713,
+        "httpOnly": False,
+        "secure": False
+    },
+    {
+        "name": "SIDCC",
+        "value": "AKEyXzV1UjXBSrODF_RnVZL9JK16NaqzXBetn7C-bKLTwtCyyII4NjcavL47oHECeGT7nT2U",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1785664708.541494,
+        "httpOnly": False,
+        "secure": False
+    },
+    {
+        "name": "__Secure-1PSIDCC",
+        "value": "AKEyXzXmEwy_YpxH59ogCpM5zw1jH4K6ybj1-qMbUfHpeYkMWHrK5bPuNDDpW0-zJtTAPq3m",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1785664708.541663,
+        "httpOnly": True,
+        "secure": True
+    },
+    {
+        "name": "__Secure-3PSIDCC",
+        "value": "AKEyXzUDkiTlOPpsYD3c7I6WbF2RSirp3-gaI6TQI80rCuyAHKF94qARsbA0JJl6mbM0nHGdmA",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": 1785664708.541704,
+        "httpOnly": True,
+        "secure": True
+    }
+]
+
+
+class YouTubeCookieManager:
+    """YouTube Cookie boshqaruvchisi"""
+
+    def __init__(self):
+        self.cookies_file = "/tmp/youtube_real_cookies.txt"
+        self.session = requests.Session()
+        self._setup_cookies()
+
+    def _setup_cookies(self):
+        """Real cookielarni fayl va sessionga o'rnatish"""
+        try:
+            # Netscape format cookie file yaratish
+            cookie_content = "# Netscape HTTP Cookie File\n"
+            cookie_content += "# Generated from real browser session\n"
+
+            for cookie in YOUTUBE_COOKIES:
+                # Netscape format: domain \t flag \t path \t secure \t expiration \t name \t value
+                domain = cookie['domain']
+                flag = "TRUE" if domain.startswith('.') else "FALSE"
+                path = cookie['path']
+                secure = "TRUE" if cookie.get('secure', False) else "FALSE"
+                expires = int(cookie.get('expires', time.time() + 86400))
+                name = cookie['name']
+                value = cookie['value']
+
+                cookie_content += f"{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}\n"
+
+                # Session ga ham qo'shish
+                self.session.cookies.set(
+                    name=name,
+                    value=value,
+                    domain=domain.lstrip('.'),
+                    path=path,
+                    secure=cookie.get('secure', False)
+                )
+
+            # Faylga yozish
+            with open(self.cookies_file, 'w', encoding='utf-8') as f:
+                f.write(cookie_content)
+
+            logger.info(f"Real YouTube cookies configured: {len(YOUTUBE_COOKIES)} cookies")
+
+        except Exception as e:
+            logger.error(f"Cookie setup error: {e}")
+
+    def get_cookies_file(self):
+        """Cookie faylni qaytarish"""
+        return self.cookies_file if os.path.exists(self.cookies_file) else None
+
+    def get_session(self):
+        """Configured session qaytarish"""
+        return self.session
+
+
+# Global cookie manager
+cookie_manager = YouTubeCookieManager()
+
+
+class AdvancedYouTube:
+    """Cookie va advanced features bilan YouTube"""
+
+    def __init__(self, url: str):
+        self.url = url
+        self.yt = None
+        self._setup_user_agents()
+
+    def _setup_user_agents(self):
+        """User agent lar"""
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0'
+        ]
+
+    async def create_youtube_object(self, attempt: int = 0):
+        """Cookie bilan YouTube obyektini yaratish"""
+        try:
+            # User agent tanlash
+            user_agent = random.choice(self.user_agents)
+
+            def create_yt():
+                # PyTube obyektini yaratish
+                yt = YouTube(self.url)
+
+                # Custom headers o'rnatish
+                if hasattr(yt, '_client_config'):
+                    yt._client_config['user_agent'] = user_agent
+
+                return yt
+
+            self.yt = await asyncio.get_event_loop().run_in_executor(None, create_yt)
+            return self.yt
+
+        except Exception as e:
+            logger.error(f"YouTube object creation failed (attempt {attempt}): {e}")
+            raise
+
+    async def get_video_info(self, max_retries: int = 3):
+        """Video ma'lumotlarini olish"""
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    await asyncio.sleep(random.uniform(2.0, 5.0))
+
+                yt = await self.create_youtube_object(attempt)
+
+                # Ma'lumotlarni olish
+                info = {
+                    'title': yt.title,
+                    'duration': yt.length,
+                    'views': yt.views,
+                    'author': yt.author,
+                    'description': yt.description,
+                    'thumbnail': yt.thumbnail_url,
+                    'video_id': yt.video_id,
+                    'publish_date': yt.publish_date,
+                    'yt_object': yt
+                }
+
+                logger.info(f"Successfully got YouTube info: {info['title']}")
+                return info
+
+            except AgeRestrictedError:
+                logger.warning("Age restricted video")
+                if attempt == max_retries - 1:
+                    raise Exception("Video yosh cheklovi bor")
+            except VideoUnavailable:
+                logger.warning("Video unavailable")
+                if attempt == max_retries - 1:
+                    raise Exception("Video mavjud emas")
+            except RegexMatchError:
+                logger.warning("Invalid YouTube URL")
+                if attempt == max_retries - 1:
+                    raise Exception("Noto'g'ri YouTube URL")
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                if attempt == max_retries - 1:
+                    raise Exception(f"YouTube ma'lumotlarini olishda xatolik: {str(e)}")
+
+        return None
 
 
 @sync_to_async
@@ -1778,172 +2077,604 @@ def update_download_analytics(bot_username, domain):
     DownloadAnalyticsModel.objects.filter(id=analytics.id).update(count=F('count') + 1)
 
 
-def get_best_formats(formats):
-    """Get the best video and audio formats, prioritizing formats that don't need merging"""
-    video_formats = []
-    audio_format = None
-    seen_qualities = set()
-
-    # First, find formats that contain both video and audio (no merging needed)
-    complete_formats = []
-    for fmt in formats:
-        if not isinstance(fmt, dict):
-            continue
-
-        vcodec = fmt.get('vcodec', 'none')
-        acodec = fmt.get('acodec', 'none')
-
-        # This is a complete format with both video and audio
-        if vcodec != 'none' and acodec != 'none':
-            height = fmt.get('height', 0)
-            if height and height not in seen_qualities:
-                seen_qualities.add(height)
-                complete_formats.append(fmt)
-
-    # If we have complete formats, use them
-    if complete_formats:
-        complete_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
-        return complete_formats, audio_format
-
-    # Otherwise, fall back to separate video and audio formats
-    seen_qualities = set()
-    for fmt in formats:
-        if not isinstance(fmt, dict):
-            continue
-
-        vcodec = fmt.get('vcodec', 'none')
-        acodec = fmt.get('acodec', 'none')
-
-        if vcodec != 'none' and acodec == 'none':
-            height = fmt.get('height', 0)
-            if height and height not in seen_qualities:
-                seen_qualities.add(height)
-                video_formats.append(fmt)
-
-        elif acodec != 'none' and vcodec == 'none':
-            if not audio_format or (fmt.get('abr', 0) > audio_format.get('abr', 0)):
-                audio_format = fmt
-
-    video_formats.sort(key=lambda x: int(x.get('height', 0) or 0), reverse=True)
-
-    return video_formats, audio_format
 
 
-async def download_video(url: str, format_id: str, state: FSMContext, progress_msg=None):
-    try:
-        # Make sure download directory exists
-        download_dir = "/var/www/downloads"
-        os.makedirs(download_dir, exist_ok=True)
 
-        # Simple progress hook for basic updates
-        last_percent = [0]
+class YouTubeFormatManager:
+    """YouTube format boshqaruvchisi"""
 
-        def progress_hook(d):
-            try:
-                if d['status'] == 'downloading':
-                    percent = d.get('_percent_str', '0%').strip()
-                    percent_num = float(percent.replace('%', '')) if percent.replace('%', '').replace('.', '',
-                                                                                                      1).isdigit() else 0
-                    speed = d.get('_speed_str', 'N/A')
-                    eta = d.get('_eta_str', 'N/A')
-
-                    # Only update if significant progress
-                    if abs(percent_num - last_percent[0]) >= 5 or percent_num >= 100:
-                        last_percent[0] = percent_num
-                        logger.info(f"Download progress: {percent} | Speed: {speed} | ETA: {eta}")
-
-                        # Update message to user if provided
-                        if progress_msg:
-                            loop = asyncio.get_event_loop()
-                            if loop.is_running():
-                                asyncio.run_coroutine_threadsafe(
-                                    progress_msg.edit_text(
-                                        f"⏳ Загрузка: {percent}\n⚡ Скорость: {speed}\n⏱ Осталось: {eta}"),
-                                    loop
-                                )
-
-                elif d['status'] == 'finished':
-                    logger.info("Download finished, now post-processing...")
-                    if progress_msg:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.run_coroutine_threadsafe(
-                                progress_msg.edit_text("📥 Загрузка завершена! Обрабатываю видео..."),
-                                loop
-                            )
-            except Exception as e:
-                logger.error(f"Progress hook error: {e}")
-
-        # Check if ffmpeg is available, if not, use a format that doesn't require merging
+    @staticmethod
+    def get_best_formats(yt_object) -> List[Dict]:
+        """Eng yaxshi formatlarni olish"""
         try:
-            ffmpeg_path = "/usr/bin/ffmpeg"
-            subprocess.run([ffmpeg_path, '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            logger.info("ffmpeg is installed and available")
+            formats = []
 
-            # If ffmpeg is available, use the specified format
-            ydl_opts = {
-                'format': f"{format_id}+bestaudio/best",
-                'outtmpl': os.path.join(download_dir, '%(title)s-%(id)s.%(ext)s'),
-                'retries': 3,
-                'fragment_retries': 3,
-                'merge_output_format': 'mp4',
-                'progress_hooks': [progress_hook],
-            }
+            # Progressive streams (video + audio birga) - ENG YAXSHI
+            progressive_streams = yt_object.streams.filter(
+                progressive=True,
+                file_extension='mp4'
+            ).order_by('resolution').desc()
 
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            logger.warning("ffmpeg not found - downloading single format without merging")
+            for stream in progressive_streams:
+                if stream.resolution:
+                    quality = stream.resolution
+                    fps_text = f" {stream.fps}fps" if stream.fps and stream.fps > 30 else ""
 
-            # No ffmpeg, use a simpler format that doesn't require merging
-            ydl_opts = {
-                'format': format_id,  # Just download the specific format without merging
-                'outtmpl': os.path.join(download_dir, '%(title)s-%(id)s.%(ext)s'),
-                'retries': 3,
-                'fragment_retries': 3,
-                'progress_hooks': [progress_hook],
-            }
+                    formats.append({
+                        'stream': stream,
+                        'format_id': f"progressive_{stream.itag}",
+                        'quality': f"{quality}{fps_text}",
+                        'ext': stream.subtype,
+                        'filesize': stream.filesize or 0,
+                        'type': 'video',
+                        'has_audio': True,
+                        'priority': 1,  # Yuqori prioritet
+                        'label': f"📹 {quality}{fps_text} MP4 ✅ (Audio+Video)"
+                    })
 
-        # Initialize download message
-        if progress_msg:
-            await progress_msg.edit_text("⏳ Начинаю загрузку...")
+            # Adaptive video streams (faqat video)
+            adaptive_video = yt_object.streams.filter(
+                adaptive=True,
+                only_video=True,
+                file_extension='mp4'
+            ).order_by('resolution').desc()
 
-        with YoutubeDL(ydl_opts) as ydl:
-            # Download with progress
-            info = await asyncio.get_event_loop().run_in_executor(
-                executor,
-                lambda: ydl.extract_info(url, download=True)
-            )
+            for stream in list(adaptive_video)[:3]:  # Faqat 3ta eng yaxshi
+                if stream.resolution:
+                    quality = stream.resolution
+                    fps_text = f" {stream.fps}fps" if stream.fps and stream.fps > 30 else ""
+
+                    formats.append({
+                        'stream': stream,
+                        'format_id': f"adaptive_video_{stream.itag}",
+                        'quality': f"{quality}{fps_text}",
+                        'ext': stream.subtype,
+                        'filesize': stream.filesize or 0,
+                        'type': 'video',
+                        'has_audio': False,
+                        'priority': 2,
+                        'label': f"📹 {quality}{fps_text} MP4 (Video only)"
+                    })
+
+            # Audio streams
+            audio_streams = yt_object.streams.filter(
+                only_audio=True
+            ).order_by('abr').desc()
+
+            for stream in list(audio_streams)[:2]:  # Faqat 2ta eng yaxshi
+                if stream.abr:
+                    quality = stream.abr
+
+                    formats.append({
+                        'stream': stream,
+                        'format_id': f"audio_{stream.itag}",
+                        'quality': quality,
+                        'ext': stream.subtype,
+                        'filesize': stream.filesize or 0,
+                        'type': 'audio',
+                        'has_audio': True,
+                        'priority': 3,
+                        'label': f"🎵 Audio {quality} {stream.subtype.upper()}"
+                    })
+
+            # Prioritet bo'yicha saralash
+            formats.sort(key=lambda x: (x['priority'], -int(x['quality'].split('p')[0]) if 'p' in x['quality'] else 0))
+
+            return formats[:8]  # Maksimal 8ta format
+
+        except Exception as e:
+            logger.error(f"Format extraction error: {e}")
+            return []
+
+
+class YouTubeDownloader:
+    """YouTube yuklab oluvchi"""
+
+    def __init__(self):
+        self.cookie_manager = cookie_manager
+
+    async def download_stream(self, stream, progress_callback=None, title="Video"):
+        """Stream ni yuklab olish"""
+        try:
+            # Temp papka
+            temp_dir = tempfile.mkdtemp(prefix='yt_real_')
+
+            # Progress tracking
+            total_size = stream.filesize or 0
+            last_percent = [0]
+
+            def on_progress(chunk, file_handle, bytes_remaining):
+                if total_size > 0:
+                    bytes_downloaded = total_size - bytes_remaining
+                    percent = int((bytes_downloaded / total_size) * 100)
+
+                    # Har 5% da yangilash
+                    if percent - last_percent[0] >= 5:
+                        last_percent[0] = percent
+                        if progress_callback:
+                            asyncio.create_task(progress_callback(
+                                f"⏬ Yuklab olmoqda: {percent}%\n"
+                                f"📊 {bytes_downloaded // 1024 // 1024}MB / {total_size // 1024 // 1024}MB"
+                            ))
+
+            # Progress callback ni o'rnatish
+            stream.register_on_progress_callback(on_progress)
+
+            # Yuklab olish
+            if progress_callback:
+                await progress_callback("⏳ Yuklab olish boshlanmoqda...")
+
+            def download():
+                return stream.download(output_path=temp_dir)
+
+            file_path = await asyncio.get_event_loop().run_in_executor(None, download)
+
+            if progress_callback:
+                await progress_callback("✅ Yuklab olish tugallandi!")
+
+            logger.info(f"Download completed: {file_path}")
+            return file_path
+
+        except Exception as e:
+            logger.error(f"Download error: {e}")
+            raise Exception(f"Yuklab olishda xatolik: {str(e)}")
+
+
+async def handle_youtube_pytube_pro(message: Message, url: str, me, bot, state: FSMContext):
+    """Professional PyTube YouTube handler with real cookies"""
+    try:
+        progress_msg = await message.answer("🔍 YouTube videoni tahlil qilmoqda...")
+
+        # Advanced YouTube object yaratish
+        yt_advanced = AdvancedYouTube(url)
+
+        try:
+            # Video ma'lumotlarini olish
+            info = await yt_advanced.get_video_info()
 
             if not info:
-                raise Exception("Could not get video info")
+                await progress_msg.edit_text(
+                    "❌ <b>YouTube videoni yuklash mumkin emas</b>\n\n"
+                    "🚫 <b>Mumkin bo'lgan sabablar:</b>\n"
+                    "• Video mavjud emas yoki o'chirilgan\n"
+                    "• Video maxfiy (private)\n"
+                    "• Yosh cheklovi (18+)\n"
+                    "• Geografik cheklov\n"
+                    "• Mualliflik huquqi cheklovi\n\n"
+                    "💡 Boshqa video bilan sinab ko'ring",
+                    parse_mode="HTML"
+                )
+                return
 
-            output_file = ydl.prepare_filename(info)
+            yt_object = info['yt_object']
+            title = info['title']
+            duration = info['duration']
+            views = info['views']
+            author = info['author']
+            publish_date = info.get('publish_date')
 
-            # Check if file exists or find it with different extension
-            if not os.path.exists(output_file):
-                base_name = os.path.splitext(output_file)[0]
-                possible_files = [
-                    os.path.join(download_dir, f)
-                    for f in os.listdir(download_dir)
-                    if f.startswith(os.path.basename(base_name))
-                ]
+            await progress_msg.edit_text(
+                f"✅ <b>Video topildi!</b>\n\n"
+                f"🎥 <b>{title[:50]}...</b>\n"
+                f"👤 <b>Kanal:</b> {author}\n"
+                f"⏱ <b>Formatlarni tahlil qilmoqda...</b>",
+                parse_mode="HTML"
+            )
 
-                if possible_files:
-                    output_file = possible_files[0]
+            # Formatlarni olish
+            formats = YouTubeFormatManager.get_best_formats(yt_object)
+
+            if not formats:
+                await progress_msg.edit_text(
+                    f"❌ <b>Yuklab olish mumkin bo'lgan formatlar topilmadi</b>\n\n"
+                    f"🎥 <b>{title}</b>\n"
+                    f"👤 <b>Kanal:</b> {author}\n\n"
+                    f"Video himoyalangan yoki cheklangan bo'lishi mumkin.",
+                    parse_mode="HTML"
+                )
+                return
+
+            # Keyboard yaratish
+            keyboard = InlineKeyboardBuilder()
+
+            for i, fmt in enumerate(formats):
+                # Fayl hajmini tekshirish
+                file_size_mb = (fmt['filesize'] / 1024 / 1024) if fmt['filesize'] else 0
+
+                label = fmt['label']
+                if file_size_mb > 0:
+                    if file_size_mb > 1024:
+                        label += f" ({file_size_mb / 1024:.1f}GB)"
+                    else:
+                        label += f" ({file_size_mb:.0f}MB)"
+
+                # Telegram limit tekshirish
+                if fmt['filesize'] > 50 * 1024 * 1024:  # 50MB
+                    label = f"⚠️ {label} (juda katta)"
+                    callback_data = "too_large"
                 else:
-                    raise FileNotFoundError(f"Downloaded file not found: {output_file}")
+                    callback_data = f"ytpro_dl_{i}"
 
-            # Update progress message
-            if progress_msg:
-                await progress_msg.edit_text("✅ Загрузка завершена! Отправляю файл...")
+                keyboard.row(InlineKeyboardButton(
+                    text=label,
+                    callback_data=callback_data
+                ))
 
-            logger.info(f"Download complete: {output_file}")
-            return output_file, info
+            keyboard.row(InlineKeyboardButton(
+                text="❌ Bekor qilish",
+                callback_data="cancel_download"
+            ))
+
+            # Video ma'lumotlarini formatlash
+            duration_str = ""
+            if duration:
+                hours, remainder = divmod(duration, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                if hours:
+                    duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                else:
+                    duration_str = f"{minutes:02d}:{seconds:02d}"
+
+            views_str = ""
+            if views:
+                if views >= 1_000_000:
+                    views_str = f"{views / 1_000_000:.1f}M"
+                elif views >= 1_000:
+                    views_str = f"{views / 1_000:.1f}K"
+                else:
+                    views_str = f"{views:,}"
+
+            publish_str = ""
+            if publish_date:
+                publish_str = f"📅 {publish_date.strftime('%Y-%m-%d')}"
+
+            info_text = (
+                f"✅ <b>Real cookies bilan muvaffaqiyatli!</b>\n\n"
+                f"🎥 <b>{title}</b>\n"
+                f"👤 <b>Kanal:</b> {author}\n"
+                f"⏱ <b>Davomiyligi:</b> {duration_str}\n"
+                f"👀 <b>Ko'rishlar:</b> {views_str}\n"
+                f"{publish_str}\n\n"
+                f"📥 <b>Yuklab olish formatini tanlang:</b>\n"
+                f"✅ = Audio va Video birga\n"
+                f"📹 = Faqat Video\n"
+                f"🎵 = Faqat Audio"
+            )
+
+            # State ga saqlash
+            await state.update_data(
+                youtube_url=url,
+                youtube_info=info,
+                youtube_formats=formats,
+                method='pytube_pro'
+            )
+
+            await progress_msg.edit_text(
+                info_text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode="HTML"
+            )
+
+        except Exception as e:
+            error_msg = str(e)
+            await progress_msg.edit_text(
+                f"❌ <b>YouTube xatoligi</b>\n\n"
+                f"📋 <b>Xatolik:</b> {error_msg[:200]}...\n\n"
+                f"🔄 Boshqa video bilan sinab ko'ring yoki\n"
+                f"⏰ Bir necha daqiqadan keyin qayta urinib ko'ring.",
+                parse_mode="HTML"
+            )
 
     except Exception as e:
-        logger.error(f"Download error: {str(e)}")
-        if progress_msg:
-            await progress_msg.edit_text(f"❌ Ошибка загрузки: {str(e)}")
-        raise
+        logger.error(f"Main YouTube handler error: {e}")
+        await message.answer("❌ YouTube videoni qayta ishlashda kutilmagan xatolik")
+
+
+@client_bot_router.callback_query(F.data.startswith("ytpro_dl_"))
+async def process_youtube_pro_download(callback: CallbackQuery, state: FSMContext):
+    """Professional YouTube download callback"""
+    try:
+        await callback.answer()
+
+        # Format indeksini olish
+        format_index = int(callback.data.split('_')[2])
+
+        # State dan ma'lumotlarni olish
+        data = await state.get_data()
+        url = data.get('youtube_url')
+        formats = data.get('youtube_formats', [])
+        info = data.get('youtube_info', {})
+
+        if not url or not formats or format_index >= len(formats):
+            await callback.message.edit_text("❌ Yuklab olish ma'lumotlari topilmadi")
+            return
+
+        selected_format = formats[format_index]
+        title = info.get('title', 'Video')
+        author = info.get('author', 'Unknown')
+
+        # Yuklab olish boshlanishi
+        await callback.message.edit_text(
+            f"⏳ <b>Professional yuklab olish...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>\n"
+            f"👤 <b>Kanal:</b> {author}\n"
+            f"📋 <b>Format:</b> {selected_format['quality']} {selected_format['ext'].upper()}\n"
+            f"📦 <b>Turi:</b> {'Video+Audio' if selected_format['has_audio'] and selected_format['type'] == 'video' else selected_format['type'].title()}",
+            parse_mode="HTML"
+        )
+
+        # Professional yuklab olish
+        await download_youtube_pro(callback, selected_format, info)
+
+    except Exception as e:
+        logger.error(f"YouTube Pro download callback error: {e}")
+        await callback.message.edit_text("❌ Yuklab olish so'rovini qayta ishlashda xatolik")
+
+
+async def download_youtube_pro(callback, format_data, video_info):
+    """Professional YouTube yuklab olish va yuborish"""
+    try:
+        stream = format_data['stream']
+        title = video_info.get('title', 'Video')
+        author = video_info.get('author', 'Unknown')
+
+        # Progress callback yaratish
+        async def progress_callback(text):
+            try:
+                await callback.message.edit_text(
+                    f"{text}\n\n"
+                    f"🎥 <b>{title[:40]}...</b>\n"
+                    f"📋 <b>Format:</b> {format_data['quality']} {format_data['ext'].upper()}",
+                    parse_mode="HTML"
+                )
+            except:
+                pass
+
+        # YouTube Downloader yaratish va yuklab olish
+        downloader = YouTubeDownloader()
+        file_path = await downloader.download_stream(stream, progress_callback, title)
+
+        if not file_path or not os.path.exists(file_path):
+            await callback.message.edit_text("❌ Yuklab olingan fayl topilmadi")
+            return
+
+        # Fayl hajmini tekshirish
+        file_size = os.path.getsize(file_path)
+        file_size_mb = file_size / (1024 * 1024)
+
+        if file_size > 50 * 1024 * 1024:  # 50MB Telegram limit
+            await callback.message.edit_text(
+                f"❌ <b>Fayl Telegram uchun juda katta</b>\n\n"
+                f"📦 <b>Fayl hajmi:</b> {file_size_mb:.1f} MB\n"
+                f"📏 <b>Telegram limiti:</b> 50 MB\n\n"
+                f"💡 Kichikroq sifatli formatni tanlang.",
+                parse_mode="HTML"
+            )
+            os.remove(file_path)
+            return
+
+        # Caption yaratish
+        duration_str = ""
+        if video_info.get('duration'):
+            duration = video_info['duration']
+            hours, remainder = divmod(duration, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if hours:
+                duration_str = f"⏱ {hours:02d}:{minutes:02d}:{seconds:02d}\n"
+            else:
+                duration_str = f"⏱ {minutes:02d}:{seconds:02d}\n"
+
+        views_str = ""
+        if video_info.get('views'):
+            views = video_info['views']
+            if views >= 1_000_000:
+                views_str = f"👀 {views / 1_000_000:.1f}M ko'rishlar\n"
+            elif views >= 1_000:
+                views_str = f"👀 {views / 1_000:.1f}K ko'rishlar\n"
+            else:
+                views_str = f"👀 {views:,} ko'rishlar\n"
+
+        quality_badge = ""
+        if format_data['has_audio'] and format_data['type'] == 'video':
+            quality_badge = "✅ Audio+Video"
+        elif format_data['type'] == 'video':
+            quality_badge = "📹 Video"
+        else:
+            quality_badge = "🎵 Audio"
+
+        caption = (
+            f"🎥 {title}\n"
+            f"👤 {author}\n"
+            f"{duration_str}"
+            f"{views_str}"
+            f"📋 {format_data['quality']} {format_data['ext'].upper()} {quality_badge}\n"
+            f"📦 {file_size_mb:.1f} MB\n\n"
+            f"🚀 Real cookies bilan PyTube orqali yuklab olindi"
+        )
+
+        # Faylni yuborish
+        try:
+            await progress_callback("📤 Telegram ga yubormoqda...")
+
+            with open(file_path, 'rb') as file:
+                if format_data['type'] == 'video':
+                    await callback.bot.send_video(
+                        chat_id=callback.message.chat.id,
+                        video=FSInputFile(file_path),
+                        caption=caption,
+                        supports_streaming=True,
+                        duration=video_info.get('duration'),
+                        width=1920 if '1080p' in format_data['quality'] else 1280,
+                        height=1080 if '1080p' in format_data['quality'] else 720
+                    )
+                else:
+                    await callback.bot.send_audio(
+                        chat_id=callback.message.chat.id,
+                        audio=FSInputFile(file_path),
+                        caption=caption,
+                        title=title,
+                        performer=author,
+                        duration=video_info.get('duration')
+                    )
+
+            # Muvaffaqiyatli yuborildi
+            await callback.message.delete()
+
+            # Analitika
+            try:
+                from modul.clientbot import shortcuts
+                await shortcuts.add_to_analitic_data(
+                    (await callback.bot.get_me()).username,
+                    callback.message.chat.id
+                )
+            except:
+                pass
+
+        except Exception as send_error:
+            logger.error(f"Error sending file: {send_error}")
+            await callback.message.edit_text(
+                f"❌ <b>Faylni yuborishda xatolik</b>\n\n"
+                f"📋 <b>Xatolik:</b> {str(send_error)[:150]}...\n\n"
+                f"💡 Fayl yuklab olindi lekin yuborilmadi.",
+                parse_mode="HTML"
+            )
+
+        finally:
+            # Faylni tozalash
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    # Temp papkani ham tozalash
+                    temp_dir = os.path.dirname(file_path)
+                    if temp_dir.startswith('/tmp/yt_real_'):
+                        os.rmdir(temp_dir)
+            except:
+                pass
+
+    except Exception as e:
+        logger.error(f"YouTube Pro download error: {e}")
+        await callback.message.edit_text(
+            f"❌ <b>Yuklab olishda xatolik</b>\n\n"
+            f"📋 <b>Xatolik:</b> {str(e)[:150]}...\n\n"
+            f"🔄 Boshqa formatni sinab ko'ring.",
+            parse_mode="HTML"
+        )
+@client_bot_router.callback_query(F.data == "too_large")
+async def handle_too_large_file(callback: CallbackQuery):
+    """Katta fayl tanlanganda"""
+    await callback.answer(
+        "⚠️ Bu fayl Telegram uchun juda katta (50MB+). "
+        "Kichikroq sifatli formatni tanlang.",
+        show_alert=True
+    )
+
+async def handle_youtube_simple(message: Message, url: str, me, bot, state: FSMContext):
+    """Oddiy PyTube handler (backup)"""
+    try:
+        progress_msg = await message.answer("🔍 Oddiy usul bilan sinab ko'rmoqda...")
+
+        def get_yt():
+            return YouTube(url)
+
+        yt = await asyncio.get_event_loop().run_in_executor(None, get_yt)
+
+        # Eng yaxshi progressive stream ni olish
+        stream = yt.streams.filter(progressive=True, file_extension='mp4').get_highest_resolution()
+
+        if not stream:
+            stream = yt.streams.get_highest_resolution()
+
+        if not stream:
+            await progress_msg.edit_text("❌ Yuklab olish mumkin bo'lgan format topilmadi")
+            return
+
+        await progress_msg.edit_text(f"⏳ {yt.title} yuklab olmoqda...")
+
+        # Yuklab olish
+        temp_dir = tempfile.mkdtemp(prefix='yt_simple_')
+        file_path = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: stream.download(output_path=temp_dir)
+        )
+
+        # Yuborish
+        file_size = os.path.getsize(file_path) / (1024 * 1024)
+        caption = f"🎥 {yt.title}\n👤 {yt.author}\n📦 {file_size:.1f} MB"
+
+        with open(file_path, 'rb') as video:
+            await bot.send_video(
+                chat_id=message.chat.id,
+                video=FSInputFile(file_path),
+                caption=caption
+            )
+
+        await progress_msg.delete()
+
+        # Tozalash
+        os.remove(file_path)
+        os.rmdir(temp_dir)
+
+    except Exception as e:
+        logger.error(f"Simple YouTube error: {e}")
+        await progress_msg.edit_text(f"❌ Oddiy usul ham ishlamadi: {str(e)[:100]}...")
+
+async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
+    """Asosiy YouTube handler - real cookies bilan PyTube"""
+    try:
+        # Avval professional PyTube usulni sinash
+        await handle_youtube_pytube_pro(message, url, me, bot, state)
+    except Exception as e:
+        logger.error(f"Professional PyTube method failed: {e}")
+        try:
+            # Backup: oddiy PyTube usul
+            await handle_youtube_pytube(message, url, me, bot, state)
+        except Exception as e2:
+            logger.error(f"Simple PyTube method also failed: {e2}")
+            await message.answer(
+                "❌ YouTube videoni yuklab olishda xatolik.\n"
+                "Boshqa video bilan sinab ko'ring yoki keyinroq qayta urinib ko'ring."
+            )
+
+def clean_old_temp_files():
+    """Eski temp fayllarni tozalash"""
+    try:
+        import glob
+        temp_dirs = glob.glob('/tmp/yt_*')
+        for temp_dir in temp_dirs:
+            try:
+                if os.path.isdir(temp_dir):
+                    import shutil
+                    shutil.rmtree(temp_dir)
+            except:
+                pass
+    except:
+        pass
+
+
+async def test_youtube_cookies():
+    """Cookie larni test qilish"""
+    try:
+        test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        yt_advanced = AdvancedYouTube(test_url)
+        info = await yt_advanced.get_video_info()
+
+        if info:
+            print(f"✅ Cookies ishlayapti! Video: {info['title']}")
+            return True
+        else:
+            print("❌ Cookies ishlamayapti")
+            return False
+    except Exception as e:
+        print(f"❌ Cookie test xatoligi: {e}")
+        return False
+
+@client_bot_router.callback_query(F.data == "cancel_download")
+async def cancel_youtube_download(callback: CallbackQuery, state: FSMContext):
+    """Yuklab olishni bekor qilish"""
+    await callback.message.edit_text("❌ YouTube yuklab olish bekor qilindi.")
+    await callback.answer("Bekor qilindi")
+    await state.clear()
+
+
 
 async def handle_format_selection(callback_query: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -1973,7 +2704,6 @@ class DownloaderBotFilter(Filter):
 @client_bot_router.message(DownloaderBotFilter())
 @client_bot_router.message(Download.download)
 async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
-
     if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
@@ -1982,13 +2712,14 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
     me = await bot.get_me()
 
     if 'tiktok.com' in url:
-        await handle_tiktok(message, url, me, bot,state)
+        await handle_tiktok(message, url, me, bot, state)
     elif 'instagram.com' in url or 'instagr.am' in url or 'inst.ae' in url:
         await handle_instagram(message, url, me, bot)
     elif 'youtube.com' in url or 'youtu.be' in url:
-        await handle_youtube(message, url, me, bot, state)
+        await handle_youtube(message, url, me, bot, state)  # Yangilangan funksiya
     else:
-        await message.answe
+        await message.answer("❗ Поддерживаются только YouTube, Instagram и TikTok ссылки")
+
 
 
 COOKIES_FILE = "/tmp/youtube_cookies.txt"
@@ -1999,12 +2730,7 @@ COOKIES_FILE = "/tmp/youtube_cookies.txt"
 import random
 import string
 from pytube import YouTube
-from pytube.exceptions import RegexMatchError, VideoUnavailable, PytubeError
-
-
-
-
-
+from pytube.exceptions import RegexMatchError, VideoUnavailable, PytubeError, AgeRestrictedError
 
 
 async def extract_youtube_info_pytube(url):
@@ -2344,10 +3070,6 @@ async def handle_too_large_callback(callback: CallbackQuery):
         show_alert=True
     )
 
-# Use this function instead of the old handle_youtube
-async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
-    """Wrapper to use PyTube YouTube handler"""
-    await handle_youtube_pytube(message, url, me, bot, state)
 
 
 @client_bot_router.callback_query(F.data.startswith("pytube_dl_"))
@@ -2404,222 +3126,13 @@ async def update_download_progress(message, text, video_info, format_data):
 
 
 
-def create_youtube_cookies_file():
-    """Create an improved YouTube cookies file to avoid bot detection"""
-    try:
-        # Create cookies content with more realistic values
-        cookies_content = """# Netscape HTTP Cookie File
-.youtube.com	TRUE	/	FALSE	1999999999	CONSENT	YES+cb.20240101-00-p0.en+FX+000
-.youtube.com	TRUE	/	FALSE	1999999999	VISITOR_INFO1_LIVE	y_GfyCBHGcU
-.youtube.com	TRUE	/	FALSE	1999999999	PREF	f4=4000000&tz=UTC&f6=40000000
-.youtube.com	TRUE	/	TRUE	1999999999	__Secure-YEC	Cgs4OTQ3NDcyNjMwNBIBTQ%3D%3D
-.youtube.com	TRUE	/	FALSE	1999999999	GPS	1
-.youtube.com	TRUE	/	FALSE	1999999999	YSC	y_GfyCBHGcU
-.youtube.com	TRUE	/	FALSE	1999999999	SIDCC	AJi4QfF7VhEF0w
-"""
-
-        with open(COOKIES_FILE, 'w', encoding='utf-8') as f:
-            f.write(cookies_content)
-
-        logger.info(f"Created YouTube cookies file: {COOKIES_FILE}")
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to create cookies file: {e}")
-        return False
 
 
-def get_youtube_ydl_options(format_id=None, audio_only=False):
-    """Get optimized yt-dlp options for YouTube"""
-
-    # Create cookies file if it doesn't exist
-    if not os.path.exists(COOKIES_FILE):
-        create_youtube_cookies_file()
-
-    # User agents rotation
-    user_agents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
-
-    import random
-
-    opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': False,
-        'writeinfojson': False,
-        'writesubtitles': False,
-        'writeautomaticsub': False,
-        'writethumbnail': False,
-
-        # Anti-bot measures
-        'http_headers': {
-            'User-Agent': random.choice(user_agents),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-            'Keep-Alive': '300',
-            'Connection': 'keep-alive',
-        },
-
-        # Use cookies
-        'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
-
-        # Network and retry settings
-        'socket_timeout': 30,
-        'retries': 3,
-        'fragment_retries': 3,
-        'extractor_retries': 3,
-
-        # Rate limiting to avoid detection
-        'sleep_interval': 1,
-        'max_sleep_interval': 3,
-        'sleep_interval_requests': 1,
-        'sleep_interval_subtitles': 1,
-
-        # Geo bypass
-        'geo_bypass': True,
-        'geo_bypass_country': 'US',
-    }
-
-    # Format selection
-    if audio_only:
-        opts['format'] = 'bestaudio[ext=m4a]/bestaudio/best'
-    elif format_id:
-        opts['format'] = format_id
-    else:
-        # Default to reasonable quality
-        opts['format'] = 'best[height<=720]/best[height<=480]/best'
-
-    return opts
-
-
-
-
-async def process_youtube_callback(callback: CallbackQuery, state: FSMContext, bot):
-    """Process YouTube format selection callback"""
-    try:
-        # Parse callback data: yt_dl_<index>_<type>_<quality>
-        parts = callback.data.split('_')
-        if len(parts) < 4:
-            await callback.answer("❌ Неверные данные")
-            return
-
-        format_index = int(parts[2])
-        format_type = parts[3]
-        quality = '_'.join(parts[4:]) if len(parts) > 4 else 'unknown'
-
-        # Get data from state
-        data = await state.get_data()
-        url = data.get('youtube_url')
-        formats = data.get('youtube_formats', [])
-        video_info = data.get('youtube_info', {})
-
-        if not url or not formats or format_index >= len(formats):
-            await callback.answer("❌ Данные не найдены")
-            return
-
-        selected_format = formats[format_index]
-
-        # Update message
-        await callback.message.edit_text(
-            f"⏳ Подготовка к загрузке...\n\n"
-            f"🎥 <b>{video_info.get('title', 'Video')}</b>\n"
-            f"📋 <b>Формат:</b> {quality} {selected_format['ext'].upper()}\n"
-            f"📦 <b>Тип:</b> {'Видео' if format_type == 'video' else 'Аудио'}",
-            parse_mode="HTML"
-        )
-
-        await callback.answer()
-
-        # Progress callback
-        async def progress_callback(text):
-            try:
-                await callback.message.edit_text(
-                    f"{text}\n\n"
-                    f"🎥 <b>{video_info.get('title', 'Video')}</b>\n"
-                    f"📋 <b>Формат:</b> {quality} {selected_format['ext'].upper()}",
-                    parse_mode="HTML"
-                )
-            except:
-                pass
-
-        # Download the video
-        try:
-            file_path, info = await download_youtube_video(
-                url,
-                selected_format['format_id'],
-                progress_callback
-            )
-
-            # Check file size (50 MB Telegram limit)
-            file_size = os.path.getsize(file_path)
-            if file_size > 50 * 1024 * 1024:
-                await callback.message.edit_text(
-                    f"❌ Файл слишком большой для Telegram\n"
-                    f"📦 Размер: {file_size / (1024 * 1024):.1f} MB (макс: 50 MB)\n\n"
-                    f"Выберите формат с меньшим качеством."
-                )
-                os.remove(file_path)
-                return
-
-            # Send file
-            caption = (
-                f"🎥 {video_info.get('title', 'Video')}\n"
-                f"👤 {video_info.get('uploader', 'Unknown')}\n"
-                f"📋 {quality} {selected_format['ext'].upper()}\n"
-                f"📦 {file_size / (1024 * 1024):.1f} MB\n\n"
-                f"📥 Скачано через @{(await bot.get_me()).username}"
-            )
-
-            with open(file_path, 'rb') as video_file:
-                if format_type == 'video':
-                    await bot.send_video(
-                        chat_id=callback.message.chat.id,
-                        video=video_file,
-                        caption=caption,
-                        supports_streaming=True
-                    )
-                else:
-                    await bot.send_audio(
-                        chat_id=callback.message.chat.id,
-                        audio=video_file,
-                        caption=caption,
-                        title=video_info.get('title', 'Audio')
-                    )
-
-            # Cleanup
-            os.remove(file_path)
-            os.rmdir(os.path.dirname(file_path))
-
-            await callback.message.delete()
-            await state.clear()
-
-            # Analytics
-            from modul.clientbot import shortcuts
-            await shortcuts.add_to_analitic_data((await bot.get_me()).username, url)
-
-        except Exception as e:
-            logger.error(f"YouTube download error: {e}")
-            await callback.message.edit_text(
-                f"❌ Ошибка при загрузке:\n{str(e)[:200]}...\n\n"
-                f"Попробуйте выбрать другой формат."
-            )
-
-    except Exception as e:
-        logger.error(f"YouTube callback error: {e}")
-        await callback.answer("❌ Произошла ошибка")
 
 from modul.loader import client_bot_router
 from aiogram import F
 
-@client_bot_router.callback_query(F.data.startswith("yt_dl_"))
-async def youtube_download_callback(callback: CallbackQuery, state: FSMContext):
-    """Handle YouTube download callbacks"""
-    await process_youtube_callback(callback, state, callback.bot)
+
 
 @client_bot_router.callback_query(F.data == "cancel_download")
 async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
@@ -2721,71 +3234,8 @@ async def download_youtube_video_pytube(url, format_id, progress_callback=None):
         raise Exception(f"Yuklab olishda xatolik: {str(e)}")
 
 
-# Yanada sodda versiya - faqat URL va sifat bilan
-async def download_youtube_video_simple(url, quality='720p', audio_only=False, progress_callback=None):
-    """Oddiy PyTube yuklab olish - faqat URL va sifat"""
-    try:
-        temp_dir = tempfile.mkdtemp(prefix='pytube_simple_')
-
-        # YouTube obyekti
-        def get_youtube():
-            return YouTube(url)
-
-        yt = await asyncio.get_event_loop().run_in_executor(None, get_youtube)
-
-        # Stream tanlash
-        if audio_only:
-            # Faqat audio
-            stream = yt.streams.filter(only_audio=True).first()
-        else:
-            # Video + audio (progressive)
-            stream = yt.streams.filter(progressive=True, res=quality).first()
-
-            # Agar berilgan sifat yo'q bo'lsa, eng yaxshisini olish
-            if not stream:
-                stream = yt.streams.filter(progressive=True).get_highest_resolution()
-
-            # Agar progressive yo'q bo'lsa, adaptive video
-            if not stream:
-                stream = yt.streams.filter(adaptive=True, res=quality, only_video=True).first()
-
-        if not stream:
-            raise Exception("Mos stream topilmadi")
-
-        # Progress callback
-        if progress_callback:
-            def on_progress(chunk, file_handle, bytes_remaining):
-                total_size = stream.filesize
-                if total_size:
-                    bytes_downloaded = total_size - bytes_remaining
-                    percent = (bytes_downloaded / total_size) * 100
-                    asyncio.create_task(progress_callback(f"⏬ {percent:.0f}%"))
-
-            yt.register_on_progress_callback(on_progress)
-
-        # Yuklab olish
-        def download():
-            return stream.download(output_path=temp_dir)
-
-        downloaded_file = await asyncio.get_event_loop().run_in_executor(None, download)
-
-        info = {
-            'title': yt.title,
-            'author': yt.author,
-            'duration': yt.length,
-            'views': yt.views
-        }
-
-        return downloaded_file, info
-
-    except Exception as e:
-        logger.error(f"Simple download error: {e}")
-        raise
-
-
-# Eski kodingizda ishlatilgan download_video funksiyasini almashtirish
 async def download_video(url: str, format_id: str, state: FSMContext, progress_msg=None):
-    """Eski download_video funksiyasini PyTube bilan almashtirish"""
+    """PyTube bilan yuklab olish - eski yt-dlp ni almashtirish"""
     try:
         # Progress callback yaratish
         async def progress_callback(text):
@@ -2808,222 +3258,6 @@ async def download_video(url: str, format_id: str, state: FSMContext, progress_m
             except:
                 pass
         raise
-
-
-# Callback handlerda ishlatish uchun versiya
-async def download_pytube_with_progress(callback, stream, video_info):
-    """Callback bilan progress ko'rsatish"""
-    try:
-        temp_dir = tempfile.mkdtemp(prefix='pytube_callback_')
-        title = video_info.get('title', 'Video')
-
-        # Progress tracking
-        last_percent = [0]
-
-        def on_progress(chunk, file_handle, bytes_remaining):
-            total_size = stream.filesize
-            if total_size:
-                bytes_downloaded = total_size - bytes_remaining
-                percent = int((bytes_downloaded / total_size) * 100)
-
-                # Har 10% da yangilash
-                if percent - last_percent[0] >= 10:
-                    last_percent[0] = percent
-                    asyncio.create_task(update_progress_message(
-                        callback.message,
-                        f"⏬ Yuklab olmoqda: {percent}%",
-                        title
-                    ))
-
-        # Progress callbackni o'rnatish
-        if hasattr(stream, '_monostate'):
-            # PyTube progress callback
-            pass
-
-        # Yuklab olish
-        def download():
-            return stream.download(output_path=temp_dir)
-
-        downloaded_file = await asyncio.get_event_loop().run_in_executor(None, download)
-
-        return downloaded_file
-
-    except Exception as e:
-        logger.error(f"Callback download error: {e}")
-        raise
-
-
-async def update_progress_message(message, text, title):
-    """Progress xabarini yangilash"""
-    try:
-        await message.edit_text(
-            f"{text}\n\n🎥 <b>{title}</b>",
-            parse_mode="HTML"
-        )
-    except:
-        pass
-
-
-# Barcha formatlarni olish
-async def get_all_pytube_formats(url):
-    """URL dan barcha formatlarni olish"""
-    try:
-        def get_youtube():
-            return YouTube(url)
-
-        yt = await asyncio.get_event_loop().run_in_executor(None, get_youtube)
-
-        formats = []
-
-        # Progressive streams (video + audio)
-        for stream in yt.streams.filter(progressive=True):
-            formats.append({
-                'format_id': f"progressive_{stream.itag}",
-                'quality': stream.resolution or 'unknown',
-                'ext': stream.subtype,
-                'filesize': stream.filesize,
-                'type': 'video',
-                'has_audio': True,
-                'stream': stream
-            })
-
-        # Adaptive video
-        for stream in yt.streams.filter(adaptive=True, only_video=True):
-            formats.append({
-                'format_id': f"adaptive_{stream.itag}",
-                'quality': stream.resolution or 'unknown',
-                'ext': stream.subtype,
-                'filesize': stream.filesize,
-                'type': 'video',
-                'has_audio': False,
-                'stream': stream
-            })
-
-        # Audio
-        for stream in yt.streams.filter(only_audio=True):
-            formats.append({
-                'format_id': f"audio_{stream.itag}",
-                'quality': stream.abr or 'unknown',
-                'ext': stream.subtype,
-                'filesize': stream.filesize,
-                'type': 'audio',
-                'has_audio': True,
-                'stream': stream
-            })
-
-        return formats
-
-    except Exception as e:
-        logger.error(f"Get formats error: {e}")
-        return []
-
-
-# Test funksiyasi
-async def test_pytube_download():
-    """PyTube yuklab olishni test qilish"""
-    url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # Rick Roll :)
-
-    try:
-        print("Testing PyTube download...")
-
-        # Video ma'lumotlarini olish
-        def get_yt():
-            return YouTube(url)
-
-        yt = await asyncio.get_event_loop().run_in_executor(None, get_yt)
-
-        print(f"Title: {yt.title}")
-        print(f"Author: {yt.author}")
-        print(f"Duration: {yt.length} seconds")
-        print(f"Views: {yt.views}")
-
-        # Formatlarni ko'rsatish
-        print("\nAvailable formats:")
-        for stream in yt.streams:
-            print(f"- {stream}")
-
-        print("\nTest successful!")
-
-    except Exception as e:
-        print(f"Test failed: {e}")
-
-@client_bot_router.callback_query(FormatCallback.filter())
-async def process_format_selection(callback: CallbackQuery, callback_data: FormatCallback, state: FSMContext, bot):
-    try:
-        # Remove format buttons
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.answer("⏳ Начинаю загрузку...")
-
-        # Get data from state
-        data = await state.get_data()
-        url = data.get('youtube_url')
-        formats = data.get('formats', [])
-        title = data.get('title', 'Video')
-
-        if not url or not formats:
-            await callback.message.answer("❌ Ошибка: данные не найдены")
-            return
-
-        selected_format = formats[callback_data.index]
-
-        # Create progress message
-        progress_msg = await callback.message.answer(
-            f"⏳ Подготовка к загрузке {title}...\n"
-            f"Формат: {callback_data.quality}"
-        )
-
-        try:
-            # Download with progress updates
-            file_path, info = await download_video(url, selected_format['format_id'], state, progress_msg)
-
-            # Send file to user
-            try:
-                me = await bot.get_me()
-                caption = f"🎥 {title}"
-                if callback_data.type == 'video':
-                    caption += f" ({callback_data.quality})"
-                caption += f"\nСкачано через @{me.username}"
-
-                file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
-                size_text = f"{file_size:.1f} MB"
-                if file_size > 1024:
-                    size_text = f"{file_size / 1024:.1f} GB"
-                caption += f"\n📦 Размер: {size_text}"
-
-                # Send video or audio
-                if callback_data.type == 'video':
-                    await bot.send_video(
-                        chat_id=callback.message.chat.id,
-                        video=FSInputFile(file_path),
-                        caption=caption,
-                        supports_streaming=True
-                    )
-                else:
-                    await bot.send_audio(
-                        chat_id=callback.message.chat.id,
-                        audio=FSInputFile(file_path),
-                        caption=caption,
-                        title=title
-                    )
-
-                # Delete progress message after success
-                await progress_msg.delete()
-
-            finally:
-                # Clean up file
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    logger.info(f"Cleaned up file: {file_path}")
-
-            await state.clear()
-
-        except Exception as e:
-            logger.error(f"Download error: {str(e)}")
-            await progress_msg.edit_text(f"❌ Ошибка при загрузке: {str(e)}")
-
-    except Exception as e:
-        logger.error(f"Format selection error: {str(e)}")
-        await callback.message.answer("❌ Ошибка при обработке запроса")
 
 
 class InstagramDownloader:
