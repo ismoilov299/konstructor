@@ -2617,14 +2617,455 @@ async def handle_youtube_simple(message: Message, url: str, me, bot, state: FSMC
         logger.error(f"Simple YouTube error: {e}")
         await progress_msg.edit_text(f"❌ Oddiy usul ham ishlamadi: {str(e)[:100]}...")
 
-async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
-    """yt-dlp + real cookies bilan"""
-    try:
-        await handle_youtube_ytdlp_fallback(message, url, me, bot, state)
-    except Exception as e:
-        logger.error(f"yt-dlp failed: {e}")
-        await message.answer("❌ YouTube videoni yuklab olishda xatolik")
 
+async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
+    """all_cookies.txt bilan yt-dlp YouTube handler"""
+    try:
+        progress_msg = await message.answer("🔍 Real cookies bilan YouTube videoni tekshirmoqda...")
+
+        # Cookies faylini tekshirish
+        if not os.path.exists(COOKIES_FILE):
+            await progress_msg.edit_text(
+                f"❌ <b>Cookies fayli topilmadi</b>\n\n"
+                f"📂 Qidirish joyida: <code>{COOKIES_FILE}</code>\n\n"
+                f"Faylni tekshiring va qayta urinib ko'ring.",
+                parse_mode="HTML"
+            )
+            return
+
+        # yt-dlp options with real working cookies
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'writeinfojson': False,
+            'writesubtitles': False,
+            'writeautomaticsub': False,
+            'writethumbnail': False,
+
+            # Real cookies fayl
+            'cookiefile': COOKIES_FILE,
+
+            # Modern extractor args (PO Token muammosi uchun)
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'mweb'],  # Multiple clients
+                }
+            },
+
+            # Headers
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            },
+
+            # Network settings
+            'socket_timeout': 60,
+            'retries': 3,
+            'fragment_retries': 3,
+            'sleep_interval': 2,  # Rate limiting
+            'sleep_requests': 1,
+            'geo_bypass': True,
+            'geo_bypass_country': 'US',
+        }
+
+        try:
+            def extract_info():
+                import yt_dlp
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
+
+            info = await asyncio.get_event_loop().run_in_executor(None, extract_info)
+
+            if not info:
+                await progress_msg.edit_text(
+                    "❌ <b>Video ma'lumotlari olinmadi</b>\n\n"
+                    "💡 Boshqa URL bilan sinab ko'ring",
+                    parse_mode="HTML"
+                )
+                return
+
+            title = info.get('title', 'Video')
+            duration = info.get('duration', 0)
+            uploader = info.get('uploader', 'Unknown')
+            view_count = info.get('view_count', 0)
+            formats = info.get('formats', [])
+
+            await progress_msg.edit_text(
+                f"✅ <b>Video topildi!</b>\n\n"
+                f"🎥 <b>{title[:50]}...</b>\n"
+                f"👤 <b>Kanal:</b> {uploader}\n"
+                f"⏱ <b>Formatlarni tahlil qilmoqda...</b>",
+                parse_mode="HTML"
+            )
+
+            # Formatlarni filtrlash va saralash
+            video_formats = []
+            audio_formats = []
+
+            for fmt in formats:
+                if not fmt.get('url'):
+                    continue
+
+                # Video formatlar
+                if fmt.get('height') and fmt.get('vcodec') != 'none':
+                    video_formats.append({
+                        'format_id': fmt['format_id'],
+                        'quality': f"{fmt['height']}p",
+                        'ext': fmt.get('ext', 'mp4'),
+                        'filesize': fmt.get('filesize', 0),
+                        'type': 'video',
+                        'fps': fmt.get('fps', 30)
+                    })
+
+                # Audio formatlar
+                elif fmt.get('abr') and fmt.get('acodec') != 'none':
+                    audio_formats.append({
+                        'format_id': fmt['format_id'],
+                        'quality': f"{int(fmt['abr'])}kbps",
+                        'ext': fmt.get('ext', 'm4a'),
+                        'filesize': fmt.get('filesize', 0),
+                        'type': 'audio'
+                    })
+
+            # Saralash
+            video_formats.sort(key=lambda x: int(x['quality'].replace('p', '')), reverse=True)
+            audio_formats.sort(key=lambda x: int(x['quality'].replace('kbps', '')), reverse=True)
+
+            # Eng yaxshi formatlarni tanlash
+            best_formats = video_formats[:6] + audio_formats[:2]  # 6 video + 2 audio
+
+            if not best_formats:
+                await progress_msg.edit_text(
+                    f"❌ <b>Mos formatlar topilmadi</b>\n\n"
+                    f"🎥 <b>{title}</b>\n"
+                    f"👤 <b>Kanal:</b> {uploader}",
+                    parse_mode="HTML"
+                )
+                return
+
+            # Keyboard yaratish
+            keyboard = InlineKeyboardBuilder()
+
+            for i, fmt in enumerate(best_formats):
+                # Size text
+                size_text = ""
+                if fmt['filesize']:
+                    size_mb = fmt['filesize'] / (1024 * 1024)
+                    if size_mb > 1024:
+                        size_text = f" ({size_mb / 1024:.1f}GB)"
+                    else:
+                        size_text = f" ({size_mb:.0f}MB)"
+
+                # Icon va label
+                if fmt['type'] == 'video':
+                    icon = "📹"
+                    quality = fmt['quality']
+                    if fmt.get('fps', 30) > 30:
+                        quality += f" {fmt['fps']}fps"
+                else:
+                    icon = "🎵"
+                    quality = fmt['quality']
+
+                label = f"{icon} {quality} {fmt['ext'].upper()}{size_text}"
+
+                # Telegram limit check
+                if fmt['filesize'] > 50 * 1024 * 1024:
+                    label = f"⚠️ {label} (katta)"
+                    callback_data = "too_large"
+                else:
+                    callback_data = f"ytreal_dl_{i}"
+
+                keyboard.row(InlineKeyboardButton(text=label, callback_data=callback_data))
+
+            keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
+
+            # Video ma'lumotlarini formatlash
+            duration_str = ""
+            if duration:
+                hours, remainder = divmod(duration, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                if hours:
+                    duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                else:
+                    duration_str = f"{minutes:02d}:{seconds:02d}"
+
+            views_str = ""
+            if view_count:
+                if view_count >= 1_000_000:
+                    views_str = f"{view_count / 1_000_000:.1f}M"
+                elif view_count >= 1_000:
+                    views_str = f"{view_count / 1_000:.1f}K"
+                else:
+                    views_str = f"{view_count:,}"
+
+            info_text = (
+                f"✅ <b>Real cookies bilan muvaffaqiyatli!</b>\n\n"
+                f"🎥 <b>{title}</b>\n"
+                f"👤 <b>Kanal:</b> {uploader}\n"
+                f"⏱ <b>Davomiyligi:</b> {duration_str}\n"
+                f"👀 <b>Ko'rishlar:</b> {views_str}\n\n"
+                f"📥 <b>Formatni tanlang:</b>"
+            )
+
+            # State ga saqlash
+            await state.update_data(
+                youtube_url=url,
+                youtube_info=info,
+                youtube_formats=best_formats,
+                method='yt-dlp-real-cookies'
+            )
+
+            await progress_msg.edit_text(
+                info_text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode="HTML"
+            )
+
+        except Exception as e:
+            logger.error(f"yt-dlp extraction error: {e}")
+            await progress_msg.edit_text(
+                f"❌ <b>yt-dlp xatoligi</b>\n\n"
+                f"<code>{str(e)[:150]}...</code>\n\n"
+                f"💡 Cookies fayli hali ham amal qilishi kerak bo'lishi mumkin.",
+                parse_mode="HTML"
+            )
+
+    except Exception as e:
+        logger.error(f"YouTube handler error: {e}")
+        await message.answer("❌ YouTube videoni qayta ishlashda xatolik")
+
+
+@client_bot_router.callback_query(F.data.startswith("ytreal_dl_"))
+async def process_youtube_real_download(callback: CallbackQuery, state: FSMContext):
+    """Real cookies bilan yuklab olish callback"""
+    try:
+        await callback.answer()
+
+        format_index = int(callback.data.split('_')[2])
+
+        data = await state.get_data()
+        url = data.get('youtube_url')
+        formats = data.get('youtube_formats', [])
+        info = data.get('youtube_info', {})
+
+        if not url or not formats or format_index >= len(formats):
+            await callback.message.edit_text("❌ Yuklab olish ma'lumotlari topilmadi")
+            return
+
+        selected_format = formats[format_index]
+        title = info.get('title', 'Video')
+        uploader = info.get('uploader', 'Unknown')
+
+        await callback.message.edit_text(
+            f"⏳ <b>Real cookies bilan yuklab olmoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>\n"
+            f"👤 <b>Kanal:</b> {uploader}\n"
+            f"📋 <b>Format:</b> {selected_format['quality']} {selected_format['ext'].upper()}\n"
+            f"📦 <b>Turi:</b> {'Video' if selected_format['type'] == 'video' else 'Audio'}",
+            parse_mode="HTML"
+        )
+
+        # Yuklab olish
+        await download_youtube_real_cookies(callback, selected_format, info, url)
+
+    except Exception as e:
+        logger.error(f"YouTube real cookies download callback error: {e}")
+        await callback.message.edit_text("❌ Yuklab olish xatoligi")
+
+
+async def download_youtube_real_cookies(callback, format_data, video_info, url):
+    """Real cookies bilan yt-dlp yuklab olish"""
+    try:
+        temp_dir = tempfile.mkdtemp(prefix='ytreal_')
+        title = video_info.get('title', 'Video')
+        uploader = video_info.get('uploader', 'Unknown')
+
+        # yt-dlp download options
+        ydl_opts = {
+            'format': format_data['format_id'],
+            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+            'cookiefile': COOKIES_FILE,  # Real cookies
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'mweb'],
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            },
+            'retries': 3,
+            'fragment_retries': 3,
+            'socket_timeout': 60,
+        }
+
+        # Progress hook
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                percent = d.get('_percent_str', '0%')
+                speed = d.get('_speed_str', 'N/A')
+                asyncio.create_task(update_download_progress_real(
+                    callback.message,
+                    f"⏬ Yuklab olmoqda: {percent} ({speed})",
+                    title,
+                    format_data
+                ))
+            elif d['status'] == 'finished':
+                asyncio.create_task(update_download_progress_real(
+                    callback.message,
+                    "✅ Yuklab olish tugallandi!",
+                    title,
+                    format_data
+                ))
+
+        ydl_opts['progress_hooks'] = [progress_hook]
+
+        # Download
+        def download():
+            import yt_dlp
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=True)
+
+        download_info = await asyncio.get_event_loop().run_in_executor(None, download)
+
+        # Find downloaded file
+        downloaded_file = None
+        for file in os.listdir(temp_dir):
+            if os.path.isfile(os.path.join(temp_dir, file)) and not file.endswith('.json'):
+                downloaded_file = os.path.join(temp_dir, file)
+                break
+
+        if not downloaded_file:
+            await callback.message.edit_text("❌ Yuklab olingan fayl topilmadi")
+            return
+
+        # Check file size
+        file_size = os.path.getsize(downloaded_file)
+        file_size_mb = file_size / (1024 * 1024)
+
+        if file_size > 50 * 1024 * 1024:
+            await callback.message.edit_text(
+                f"❌ <b>Fayl juda katta</b>\n\n"
+                f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB\n"
+                f"📏 <b>Telegram limiti:</b> 50 MB\n\n"
+                f"💡 Kichikroq sifat tanlang.",
+                parse_mode="HTML"
+            )
+            os.remove(downloaded_file)
+            return
+
+        # Caption
+        duration_str = ""
+        if video_info.get('duration'):
+            duration = video_info['duration']
+            hours, remainder = divmod(duration, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if hours:
+                duration_str = f"⏱ {hours:02d}:{minutes:02d}:{seconds:02d}\n"
+            else:
+                duration_str = f"⏱ {minutes:02d}:{seconds:02d}\n"
+
+        views_str = ""
+        if video_info.get('view_count'):
+            views = video_info['view_count']
+            if views >= 1_000_000:
+                views_str = f"👀 {views / 1_000_000:.1f}M ko'rishlar\n"
+            elif views >= 1_000:
+                views_str = f"👀 {views / 1_000:.1f}K ko'rishlar\n"
+
+        caption = (
+            f"🎥 {title}\n"
+            f"👤 {uploader}\n"
+            f"{duration_str}"
+            f"{views_str}"
+            f"📋 {format_data['quality']} {format_data['ext'].upper()}\n"
+            f"📦 {file_size_mb:.1f} MB\n\n"
+            f"🍪 Real cookies (all_cookies.txt) bilan yt-dlp orqali"
+        )
+
+        # Send file
+        try:
+            await update_download_progress_real(
+                callback.message,
+                "📤 Telegram ga yubormoqda...",
+                title,
+                format_data
+            )
+
+            with open(downloaded_file, 'rb') as file:
+                if format_data['type'] == 'video':
+                    await callback.bot.send_video(
+                        chat_id=callback.message.chat.id,
+                        video=FSInputFile(downloaded_file),
+                        caption=caption,
+                        supports_streaming=True,
+                        duration=video_info.get('duration')
+                    )
+                else:
+                    await callback.bot.send_audio(
+                        chat_id=callback.message.chat.id,
+                        audio=FSInputFile(downloaded_file),
+                        caption=caption,
+                        title=title,
+                        performer=uploader,
+                        duration=video_info.get('duration')
+                    )
+
+            # Muvaffaqiyatli
+            await callback.message.delete()
+
+            # Analytics
+            try:
+                from modul.clientbot import shortcuts
+                await shortcuts.add_to_analitic_data(
+                    (await callback.bot.get_me()).username,
+                    callback.message.chat.id
+                )
+            except:
+                pass
+
+        except Exception as send_error:
+            logger.error(f"Error sending file: {send_error}")
+            await callback.message.edit_text(
+                f"❌ <b>Faylni yuborishda xatolik</b>\n\n"
+                f"<code>{str(send_error)[:100]}...</code>",
+                parse_mode="HTML"
+            )
+
+        finally:
+            # Cleanup
+            try:
+                if os.path.exists(downloaded_file):
+                    os.remove(downloaded_file)
+                os.rmdir(temp_dir)
+            except:
+                pass
+
+    except Exception as e:
+        logger.error(f"Real cookies download error: {e}")
+        await callback.message.edit_text(
+            f"❌ <b>Yuklab olishda xatolik</b>\n\n"
+            f"<code>{str(e)[:100]}...</code>",
+            parse_mode="HTML"
+        )
+
+
+async def update_download_progress_real(message, text, title, format_data):
+    """Progress xabarini yangilash"""
+    try:
+        await message.edit_text(
+            f"{text}\n\n"
+            f"🎥 <b>{title[:40]}...</b>\n"
+            f"📋 <b>Format:</b> {format_data['quality']} {format_data['ext'].upper()}",
+            parse_mode="HTML"
+        )
+    except:
+        pass
 
 async def handle_youtube_ytdlp_fallback(message: Message, url: str, me, bot, state: FSMContext):
     """yt-dlp bilan fallback YouTube handler"""
@@ -3080,8 +3521,6 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
 
 
 
-COOKIES_FILE = "/tmp/youtube_cookies.txt"
-
 
 
 
@@ -3489,7 +3928,7 @@ async def update_download_progress(message, text, title, format_data):
 from modul.loader import client_bot_router
 from aiogram import F
 
-
+COOKIES_FILE = "/var/www/konstructor/all_cookies.txt"
 
 @client_bot_router.callback_query(F.data == "cancel_download")
 async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
