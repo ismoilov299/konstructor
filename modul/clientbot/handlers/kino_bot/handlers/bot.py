@@ -2045,7 +2045,7 @@ async def process_youtube_final_download(callback: CallbackQuery, state: FSMCont
             f"⏳ <b>Terminal test method bilan yuklab olmoqda...</b>\n\n"
             f"🎥 <b>{title[:50]}...</b>\n"
             f"📋 <b>Format:</b> {selected_format['quality']} {selected_format['ext'].upper()}\n"
-            f"🍪 <b>Cookies:</b> {'✅ Ishlatilmoqda' if cookies_available else '❌ Yo\\'q'}\n"
+            f"🍪 <b>Cookies:</b> {'✅ Ishlatilmoqda' if cookies_available else '❌ Yoq'}\n"
             f"📱 <b>Client:</b> mweb",
             parse_mode="HTML"
         )
