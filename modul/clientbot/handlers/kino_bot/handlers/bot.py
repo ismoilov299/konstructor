@@ -1,6 +1,7 @@
 import glob 
 import asyncio
 import subprocess
+import tempfile
 import time
 import traceback
 from contextlib import suppress
@@ -1862,30 +1863,104 @@ async def process_youtube_download(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text("❌ Yuklab olish URL topilmadi")
             return
 
-        # Faylni yuborish
-        try:
-            caption = (
-                f"🎥 {title}\n"
-                f"👤 {video_data.get('channelTitle', 'Unknown')}\n"
-                f"📋 {selected_format['quality']} {selected_format['ext'].upper()}\n"
-                f"📦 {selected_format['size']:.1f} MB\n"
-                f"🎯 YouTube API orqali yuklab olindi"
-            )
+        # Faylni yuklab olish va yuborish
+        await download_and_send_youtube(callback, download_url, selected_format, video_data, title)
 
-            if selected_format['type'] == 'audio':
+    except Exception as e:
+        logger.error(f"YouTube download callback error: {e}")
+        await callback.message.edit_text("❌ Yuklab olish xatoligi")
+
+
+async def download_and_send_youtube(callback, download_url, format_data, video_data, title):
+    """YouTube faylni yuklab olib Telegram ga yuborish"""
+    temp_dir = None
+    try:
+        # Temp directory yaratish
+        temp_dir = tempfile.mkdtemp(prefix='yt_api_')
+        file_ext = format_data['ext']
+        filename = f"{title[:50]}.{file_ext}".replace('/', '_').replace('\\', '_')
+        filepath = os.path.join(temp_dir, filename)
+
+        # Progress yangilash
+        await callback.message.edit_text(
+            f"⏬ <b>Yuklab olmoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>\n"
+            f"📋 <b>Format:</b> {format_data['quality']} {format_data['ext'].upper()}\n"
+            f"📦 <b>Hajmi:</b> {format_data['size']:.1f} MB",
+            parse_mode="HTML"
+        )
+
+        # Faylni yuklab olish
+        async with aiohttp.ClientSession() as session:
+            async with session.get(download_url) as response:
+                if response.status == 200:
+                    total_size = int(response.headers.get('content-length', 0))
+                    downloaded = 0
+
+                    with open(filepath, 'wb') as file:
+                        async for chunk in response.content.iter_chunked(8192):
+                            file.write(chunk)
+                            downloaded += len(chunk)
+
+                            # Har 1MB da progress yangilash
+                            if downloaded % (1024 * 1024) == 0:
+                                progress = (downloaded / total_size) * 100 if total_size else 0
+                                await callback.message.edit_text(
+                                    f"⏬ <b>Yuklab olmoqda: {progress:.0f}%</b>\n\n"
+                                    f"🎥 <b>{title[:50]}...</b>\n"
+                                    f"📋 <b>Format:</b> {format_data['quality']} {format_data['ext'].upper()}\n"
+                                    f"📦 <b>Hajmi:</b> {format_data['size']:.1f} MB",
+                                    parse_mode="HTML"
+                                )
+                else:
+                    raise Exception(f"Download failed: HTTP {response.status}")
+
+        # Fayl hajmini tekshirish
+        file_size = os.path.getsize(filepath)
+        file_size_mb = file_size / (1024 * 1024)
+
+        if file_size_mb > 50:
+            await callback.message.edit_text(
+                f"❌ <b>Fayl juda katta</b>\n\n"
+                f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB\n"
+                f"📏 <b>Telegram limiti:</b> 50 MB\n\n"
+                f"💡 Kichikroq sifat tanlang",
+                parse_mode="HTML"
+            )
+            return
+
+        # Telegram ga yuborish
+        await callback.message.edit_text(
+            f"📤 <b>Telegram ga yubormoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>",
+            parse_mode="HTML"
+        )
+
+        caption = (
+            f"🎥 {title}\n"
+            f"👤 {video_data.get('channelTitle', 'Unknown')}\n"
+            f"📋 {format_data['quality']} {format_data['ext'].upper()}\n"
+            f"📦 {file_size_mb:.1f} MB\n"
+            f"🎯 YouTube API orqali yuklab olindi"
+        )
+
+        try:
+            if format_data['type'] == 'audio':
                 await callback.bot.send_audio(
                     chat_id=callback.message.chat.id,
-                    audio=download_url,
+                    audio=FSInputFile(filepath),
                     caption=caption,
                     title=title,
-                    performer=video_data.get('channelTitle', 'Unknown')
+                    performer=video_data.get('channelTitle', 'Unknown'),
+                    duration=int(video_data.get('lengthSeconds', 0))
                 )
             else:
                 await callback.bot.send_video(
                     chat_id=callback.message.chat.id,
-                    video=download_url,
+                    video=FSInputFile(filepath),
                     caption=caption,
-                    supports_streaming=True
+                    supports_streaming=True,
+                    duration=int(video_data.get('lengthSeconds', 0))
                 )
 
             await callback.message.delete()
@@ -1908,8 +1983,21 @@ async def process_youtube_download(callback: CallbackQuery, state: FSMContext):
             )
 
     except Exception as e:
-        logger.error(f"YouTube download callback error: {e}")
-        await callback.message.edit_text("❌ Yuklab olish xatoligi")
+        logger.error(f"Download and send error: {e}")
+        await callback.message.edit_text(
+            f"❌ <b>Yuklab olishda xatolik</b>\n\n"
+            f"📋 <b>Xatolik:</b> {str(e)[:150]}...",
+            parse_mode="HTML"
+        )
+    finally:
+        # Temp fayllarni tozalash
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+
+
 
 
 async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
