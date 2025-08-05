@@ -1788,16 +1788,11 @@ async def handle_too_large_file(callback: CallbackQuery):
 
 
 async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
-    """PO Token bilan YouTube handler"""
+    """Final working YouTube handler - terminal test asosida"""
     try:
         progress_msg = await message.answer("🔍 YouTube videoni tekshirmoqda...")
 
-        # PO Token ni yangilash (agar kerak bo'lsa)
-        if po_manager.should_refresh():
-            await progress_msg.edit_text("🔑 PO Token yangilanmoqda...")
-            await po_manager.extract_po_token()
-
-        # yt-dlp options
+        # Working yt-dlp options (aynan terminal'da ishlagan)
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -1806,9 +1801,14 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             'writesubtitles': False,
             'writeautomaticsub': False,
             'writethumbnail': False,
+            'no_check_certificate': True,  # Terminal commanddagi kabi
 
-            # PO Token bilan extractor args
-            'extractor_args': po_manager.get_extractor_args(),
+            # Working configuration
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['mweb'],  # Terminal'da ishlagani
+                }
+            },
 
             # Headers
             'http_headers': {
@@ -1816,25 +1816,23 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
                 'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
-                'Origin': 'https://www.youtube.com',
-                'Referer': 'https://www.youtube.com/',
-                'X-YouTube-Client-Name': '2',
-                'X-YouTube-Client-Version': '2.20240304.08.00',
+                'Connection': 'keep-alive',
             },
 
             # Network settings
-            'socket_timeout': 30,
-            'retries': 2,
-            'fragment_retries': 2,
+            'socket_timeout': 60,
+            'retries': 3,
+            'fragment_retries': 3,
             'sleep_interval': 1,
             'geo_bypass': True,
         }
 
-        # Cookies qo'shish
+        # Cookies qo'shish (agar mavjud bo'lsa)
         if os.path.exists(COOKIES_FILE):
             ydl_opts['cookiefile'] = COOKIES_FILE
-
-        await progress_msg.edit_text("📡 Video ma'lumotlarini olmoqda...")
+            cookies_status = "✅ Ishlatilmoqda"
+        else:
+            cookies_status = "❌ Topilmadi"
 
         try:
             def extract_info():
@@ -1844,22 +1842,9 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             info = await asyncio.get_event_loop().run_in_executor(None, extract_info)
 
             if not info:
-                # PO Token ni qayta yangilash
-                await progress_msg.edit_text("🔄 PO Token qayta yangilanmoqda...")
-                await po_manager.extract_po_token()
-                ydl_opts['extractor_args'] = po_manager.get_extractor_args()
-
-                info = await asyncio.get_event_loop().run_in_executor(None, extract_info)
-
-            if not info:
                 await progress_msg.edit_text(
                     "❌ <b>Video ma'lumotlari olinmadi</b>\n\n"
-                    "🔍 <b>Mumkin bo'lgan sabablar:</b>\n"
-                    "• Video mavjud emas\n"
-                    "• Video maxfiy\n"
-                    "• Yosh cheklovi\n"
-                    "• PO Token muammosi\n\n"
-                    "💡 Boshqa video bilan sinab ko'ring",
+                    "💡 URL ni tekshiring yoki keyinroq qayta urinib ko'ring",
                     parse_mode="HTML"
                 )
                 return
@@ -1878,50 +1863,32 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
                 parse_mode="HTML"
             )
 
-            # Formatlarni filtrlash
-            video_formats = []
-            audio_formats = []
+            # Real formatlarni filtrlash (storyboard'larni chiqarib tashlash)
+            valid_formats = []
 
             for fmt in formats:
-                if not fmt.get('url') or fmt.get('format_note') == 'storyboard':
+                if (not fmt.get('url') or
+                        fmt.get('format_note') == 'storyboard' or
+                        'storyboard' in fmt.get('format_id', '') or
+                        fmt.get('vcodec') == 'none' and fmt.get('acodec') == 'none'):
                     continue
 
-                # Progressive formatlar (video + audio)
-                if (fmt.get('height') and
-                        fmt.get('vcodec') != 'none' and
-                        fmt.get('acodec') != 'none'):
-
-                    video_formats.append({
+                # Video formatlar
+                if fmt.get('height') and fmt.get('vcodec') != 'none':
+                    valid_formats.append({
                         'format_id': fmt['format_id'],
                         'quality': f"{fmt['height']}p",
                         'ext': fmt.get('ext', 'mp4'),
                         'filesize': fmt.get('filesize', 0),
                         'type': 'video',
-                        'has_audio': True,
-                        'priority': 1
-                    })
-
-                # Faqat video formatlar
-                elif (fmt.get('height') and
-                      fmt.get('vcodec') != 'none' and
-                      fmt.get('acodec') == 'none'):
-
-                    video_formats.append({
-                        'format_id': fmt['format_id'],
-                        'quality': f"{fmt['height']}p",
-                        'ext': fmt.get('ext', 'mp4'),
-                        'filesize': fmt.get('filesize', 0),
-                        'type': 'video',
-                        'has_audio': False,
-                        'priority': 2
+                        'has_audio': fmt.get('acodec') != 'none',
+                        'fps': fmt.get('fps', 30),
+                        'priority': 1 if fmt.get('acodec') != 'none' else 2
                     })
 
                 # Audio formatlar
-                elif (fmt.get('abr') and
-                      fmt.get('acodec') != 'none' and
-                      fmt.get('vcodec') == 'none'):
-
-                    audio_formats.append({
+                elif fmt.get('abr') and fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
+                    valid_formats.append({
                         'format_id': fmt['format_id'],
                         'quality': f"{int(fmt['abr'])}kbps",
                         'ext': fmt.get('ext', 'm4a'),
@@ -1931,18 +1898,21 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
                         'priority': 3
                     })
 
-            # Saralash
-            video_formats.sort(key=lambda x: (x['priority'], -int(x['quality'].replace('p', ''))))
-            audio_formats.sort(key=lambda x: -int(x['quality'].replace('kbps', '')))
+            # Saralash - avval progressive (video+audio), keyin boshqalar
+            valid_formats.sort(key=lambda x: (
+                x['priority'],
+                -int(x['quality'].replace('p', '').replace('kbps', ''))
+            ))
 
-            best_formats = video_formats[:5] + audio_formats[:2]
+            # Eng yaxshi formatlarni tanlash
+            best_formats = valid_formats[:8]  # 8ta eng yaxshi
 
             if not best_formats:
                 await progress_msg.edit_text(
-                    f"❌ <b>Mos formatlar topilmadi</b>\n\n"
+                    f"❌ <b>Yuklab olish mumkin bo'lgan formatlar yo'q</b>\n\n"
                     f"🎥 <b>{title}</b>\n"
                     f"👤 <b>Kanal:</b> {uploader}\n\n"
-                    f"💡 Faqat storyboard formatlar mavjud",
+                    f"⚠️ PO Token warning mavjud - bu normal",
                     parse_mode="HTML"
                 )
                 return
@@ -1951,6 +1921,7 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             keyboard = InlineKeyboardBuilder()
 
             for i, fmt in enumerate(best_formats):
+                # Size text
                 size_text = ""
                 if fmt['filesize']:
                     size_mb = fmt['filesize'] / (1024 * 1024)
@@ -1959,9 +1930,15 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
                     else:
                         size_text = f" ({size_mb:.0f}MB)"
 
+                # Icon va label
                 if fmt['type'] == 'video':
                     icon = "📹" if fmt.get('has_audio') else "🎬"
                     quality_label = f"{fmt['quality']}"
+
+                    # FPS qo'shish (agar 30'dan yuqori bo'lsa)
+                    if fmt.get('fps', 30) > 30:
+                        quality_label += f" {fmt['fps']}fps"
+
                     if fmt.get('has_audio'):
                         quality_label += " ✅"
                     else:
@@ -1972,17 +1949,18 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
                 label = f"{icon} {quality_label} {fmt['ext'].upper()}{size_text}"
 
+                # Telegram limit tekshirish
                 if fmt['filesize'] > 50 * 1024 * 1024:
                     label = f"⚠️ {label} (katta)"
                     callback_data = "too_large"
                 else:
-                    callback_data = f"ytpo_dl_{i}"
+                    callback_data = f"ytfinal_dl_{i}"
 
                 keyboard.row(InlineKeyboardButton(text=label, callback_data=callback_data))
 
             keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
 
-            # Video ma'lumotlari
+            # Video ma'lumotlarini formatlash
             duration_str = ""
             if duration:
                 hours, remainder = divmod(duration, 3600)
@@ -2001,17 +1979,14 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
                 else:
                     views_str = f"{view_count:,}"
 
-            po_status = "✅ Aktiv" if po_manager.po_token else "❌ Yo'q"
-            cookies_status = "✅ Mavjud" if os.path.exists(COOKIES_FILE) else "❌ Yo'q"
-
             info_text = (
-                f"🎯 <b>PO Token bilan muvaffaqiyatli!</b>\n\n"
+                f"🎯 <b>Final working method muvaffaqiyatli!</b>\n\n"
                 f"🎥 <b>{title}</b>\n"
                 f"👤 <b>Kanal:</b> {uploader}\n"
                 f"⏱ <b>Davomiyligi:</b> {duration_str}\n"
                 f"👀 <b>Ko'rishlar:</b> {views_str}\n"
-                f"🔑 <b>PO Token:</b> {po_status}\n"
-                f"🍪 <b>Cookies:</b> {cookies_status}\n\n"
+                f"🍪 <b>Cookies:</b> {cookies_status}\n"
+                f"📱 <b>Client:</b> mweb (terminal tested)\n\n"
                 f"📥 <b>Formatni tanlang:</b>\n"
                 f"✅ = Video + Audio birga"
             )
@@ -2021,7 +1996,8 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
                 youtube_url=url,
                 youtube_info=info,
                 youtube_formats=best_formats,
-                method='po-token'
+                cookies_available=os.path.exists(COOKIES_FILE),
+                method='final-working-terminal-tested'
             )
 
             await progress_msg.edit_text(
@@ -2033,17 +2009,225 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
         except Exception as e:
             logger.error(f"yt-dlp extraction error: {e}")
             await progress_msg.edit_text(
-                f"❌ <b>YouTube xatoligi</b>\n\n"
+                f"❌ <b>yt-dlp xatoligi</b>\n\n"
                 f"<code>{str(e)[:150]}...</code>\n\n"
-                f"🔑 PO Token yangilanmoqda...",
+                f"💡 Terminal'da ishlagani Python'da ishlamayapti",
                 parse_mode="HTML"
             )
-            # Xatolik bo'lsa PO Token ni yangilash
-            await po_manager.extract_po_token()
 
     except Exception as e:
         logger.error(f"YouTube handler error: {e}")
         await message.answer("❌ YouTube videoni qayta ishlashda xatolik")
+
+
+@client_bot_router.callback_query(F.data.startswith("ytfinal_dl_"))
+async def process_youtube_final_download(callback: CallbackQuery, state: FSMContext):
+    """Final working method bilan yuklab olish"""
+    try:
+        await callback.answer()
+
+        format_index = int(callback.data.split('_')[2])
+
+        data = await state.get_data()
+        url = data.get('youtube_url')
+        formats = data.get('youtube_formats', [])
+        info = data.get('youtube_info', {})
+        cookies_available = data.get('cookies_available', False)
+
+        if not url or not formats or format_index >= len(formats):
+            await callback.message.edit_text("❌ Yuklab olish ma'lumotlari topilmadi")
+            return
+
+        selected_format = formats[format_index]
+        title = info.get('title', 'Video')
+
+        await callback.message.edit_text(
+            f"⏳ <b>Terminal test method bilan yuklab olmoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>\n"
+            f"📋 <b>Format:</b> {selected_format['quality']} {selected_format['ext'].upper()}\n"
+            f"🍪 <b>Cookies:</b> {'✅ Ishlatilmoqda' if cookies_available else '❌ Yo\\'q'}\n"
+            f"📱 <b>Client:</b> mweb",
+            parse_mode="HTML"
+        )
+
+        await download_youtube_final(callback, selected_format, info, url, cookies_available)
+
+    except Exception as e:
+        logger.error(f"Final download callback error: {e}")
+        await callback.message.edit_text("❌ Yuklab olish xatoligi")
+
+
+async def download_youtube_final(callback, format_data, video_info, url, cookies_available):
+    """Final working method bilan yuklab olish"""
+    try:
+        temp_dir = tempfile.mkdtemp(prefix='yt_final_')
+        title = video_info.get('title', 'Video')
+        uploader = video_info.get('uploader', 'Unknown')
+
+        # Aynan terminal'da ishlagani kabi options
+        ydl_opts = {
+            'format': format_data['format_id'],
+            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+            'no_check_certificate': True,  # Terminal commanddagi kabi
+
+            # Working extractor args
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['mweb'],  # Terminal'da ishlagani
+                }
+            },
+
+            # Headers
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+            },
+
+            # Network settings
+            'retries': 3,
+            'fragment_retries': 3,
+            'socket_timeout': 60,
+            'sleep_interval': 1,
+        }
+
+        # Cookies qo'shish (agar mavjud bo'lsa)
+        if cookies_available and os.path.exists(COOKIES_FILE):
+            ydl_opts['cookiefile'] = COOKIES_FILE
+
+        # Progress hook
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                percent = d.get('_percent_str', '0%')
+                speed = d.get('_speed_str', 'N/A')
+                asyncio.create_task(update_download_progress(
+                    callback.message,
+                    f"⏬ Yuklab olmoqda: {percent} ({speed})",
+                    title,
+                    format_data
+                ))
+            elif d['status'] == 'finished':
+                asyncio.create_task(update_download_progress(
+                    callback.message,
+                    "✅ Yuklab olish tugallandi!",
+                    title,
+                    format_data
+                ))
+
+        ydl_opts['progress_hooks'] = [progress_hook]
+
+        # Download - aynan terminal'da ishlagani kabi
+        def download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=True)
+
+        download_info = await asyncio.get_event_loop().run_in_executor(None, download)
+
+        # Downloaded file ni topish
+        downloaded_file = None
+        for file in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, file)
+            if os.path.isfile(file_path) and not file.endswith('.json'):
+                downloaded_file = file_path
+                break
+
+        if not downloaded_file:
+            await callback.message.edit_text("❌ Yuklab olingan fayl topilmadi")
+            return
+
+        # File size tekshirish
+        file_size = os.path.getsize(downloaded_file)
+        file_size_mb = file_size / (1024 * 1024)
+
+        if file_size > 50 * 1024 * 1024:
+            await callback.message.edit_text(
+                f"❌ <b>Fayl juda katta</b>\n\n"
+                f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB\n"
+                f"📏 <b>Telegram limiti:</b> 50 MB\n\n"
+                f"💡 Kichikroq sifat tanlang",
+                parse_mode="HTML"
+            )
+            os.remove(downloaded_file)
+            return
+
+        # Caption yaratish
+        has_audio_text = " + Audio" if format_data.get('has_audio', True) else ""
+        caption = (
+            f"🎥 {title}\n"
+            f"👤 {uploader}\n"
+            f"📋 {format_data['quality']} {format_data['ext'].upper()}{has_audio_text}\n"
+            f"📦 {file_size_mb:.1f} MB\n"
+            f"🎯 Terminal tested method bilan yuklab olindi"
+        )
+
+        # Faylni yuborish
+        try:
+            await update_download_progress(
+                callback.message,
+                "📤 Telegram ga yubormoqda...",
+                title,
+                format_data
+            )
+
+            with open(downloaded_file, 'rb') as file:
+                if format_data['type'] == 'video':
+                    await callback.bot.send_video(
+                        chat_id=callback.message.chat.id,
+                        video=FSInputFile(downloaded_file),
+                        caption=caption,
+                        supports_streaming=True,
+                        duration=video_info.get('duration')
+                    )
+                else:
+                    await callback.bot.send_audio(
+                        chat_id=callback.message.chat.id,
+                        audio=FSInputFile(downloaded_file),
+                        caption=caption,
+                        title=title,
+                        performer=uploader,
+                        duration=video_info.get('duration')
+                    )
+
+            # Muvaffaqiyatli yuborildi
+            await callback.message.delete()
+
+            # Analytics qo'shish
+            try:
+                await shortcuts.add_to_analitic_data(
+                    (await callback.bot.get_me()).username,
+                    callback.message.chat.id
+                )
+            except:
+                pass
+
+        except Exception as send_error:
+            logger.error(f"Error sending file: {send_error}")
+            await callback.message.edit_text(
+                f"❌ <b>Faylni yuborishda xatolik</b>\n\n"
+                f"📋 <b>Xatolik:</b> {str(send_error)[:150]}...",
+                parse_mode="HTML"
+            )
+
+        finally:
+            # Tozalash
+            try:
+                if os.path.exists(downloaded_file):
+                    os.remove(downloaded_file)
+                if os.path.exists(temp_dir):
+                    os.rmdir(temp_dir)
+            except:
+                pass
+
+    except Exception as e:
+        logger.error(f"Final download error: {e}")
+        await callback.message.edit_text(
+            f"❌ <b>Yuklab olishda xatolik</b>\n\n"
+            f"📋 <b>Xatolik:</b> {str(e)[:150]}...\n\n"
+            f"💡 Terminal'da ishlagani Python'da ishlamadi",
+            parse_mode="HTML"
+        )
 
 
 @client_bot_router.callback_query(F.data.startswith("ytpo_dl_"))
