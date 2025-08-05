@@ -1999,19 +1999,27 @@ async def download_and_send_youtube(callback, download_url, format_data, video_d
 
 
 async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
-    """YANGILANGAN YouTube handler - Fast API bilan"""
+    """YouTube handler - DEBUGGING BILAN"""
+    logger.info(f"🎬 YouTube handler started")
+    logger.info(f"🔗 URL: {url}")
+
     try:
         progress_msg = await message.answer("🔍 YouTube videoni tahlil qilmoqda...")
+        logger.info("✅ Progress message sent")
 
         # Video ID ni olish
         video_id = extract_youtube_id(url)
         if not video_id:
+            logger.error("❌ Could not extract video ID")
             await progress_msg.edit_text("❌ Noto'g'ri YouTube URL")
             return
 
-        # API dan ma'lumot olish (default quality bilan)
+        # API dan ma'lumot olish
+        logger.info(f"🔍 Getting video info for ID: {video_id}")
         video_data = await get_youtube_info_via_fast_api(video_id, "247")
+
         if not video_data:
+            logger.error("❌ No video data received from API")
             await progress_msg.edit_text(
                 "❌ <b>Video ma'lumotlari olinmadi</b>\n\n"
                 "💡 URL ni tekshiring yoki keyinroq urinib ko'ring",
@@ -2019,8 +2027,9 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             )
             return
 
-        # Basic video info
+        # Video ma'lumotlarini formatlash
         size_mb = int(video_data.get('size', 0)) / (1024 * 1024) if video_data.get('size') else 0
+        logger.info(f"📦 Video size: {size_mb:.1f} MB")
 
         info_text = (
             f"✅ <b>YouTube Video topildi!</b>\n\n"
@@ -2032,7 +2041,6 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             f"📥 <b>Formatni tanlang:</b>"
         )
 
-        # Keyboard yaratish
         keyboard = create_youtube_format_keyboard()
 
         # State ga saqlash
@@ -2041,40 +2049,62 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             youtube_video_id=video_id,
             youtube_api_type="fast_api"
         )
+        logger.info("💾 Data saved to state")
 
         await progress_msg.edit_text(
             info_text,
             reply_markup=keyboard.as_markup(),
             parse_mode="HTML"
         )
+        logger.info("✅ YouTube handler completed successfully")
 
     except Exception as e:
-        print(f"YouTube handler error: {e}")
+        logger.error(f"❌ YouTube handler error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Traceback: {traceback.format_exc()}")
         await message.answer("❌ YouTube videoni qayta ishlashda xatolik")
 
 
 @client_bot_router.callback_query(F.data.startswith("yt_fast_dl_"))
 async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
-    """YouTube Fast API download callback"""
+    """YouTube Fast API download callback - DEBUGGING BILAN"""
+    logger.info(f"📱 Fast download callback triggered")
+    logger.info(f"📋 Callback data: {callback.data}")
+
     try:
         await callback.answer()
 
         # Quality ID ni olish
-        quality_id = callback.data.split('_')[3]  # yt_fast_dl_247 -> 247
+        parts = callback.data.split('_')
+        logger.info(f"📋 Callback parts: {parts}")
 
+        if len(parts) < 4:
+            logger.error(f"❌ Invalid callback data format: {callback.data}")
+            await callback.message.edit_text("❌ Noto'g'ri callback format")
+            return
+
+        quality_id = parts[3]  # yt_fast_dl_360 -> 360
+        logger.info(f"🎯 Selected quality ID: {quality_id}")
+
+        # State dan ma'lumot olish
         data = await state.get_data()
         video_id = data.get('youtube_video_id')
+        logger.info(f"💾 Video ID from state: {video_id}")
 
         if not video_id:
+            logger.error("❌ No video ID in state")
             await callback.message.edit_text("❌ Video ma'lumotlari topilmadi")
             return
 
+        # Quality tekshirish
         qualities = get_available_youtube_qualities()
         if quality_id not in qualities:
+            logger.error(f"❌ Invalid quality ID: {quality_id}")
             await callback.message.edit_text("❌ Noto'g'ri format tanlandi")
             return
 
         selected_format = qualities[quality_id]
+        logger.info(f"✅ Selected format: {selected_format}")
 
         await callback.message.edit_text(
             f"⏳ <b>Yuklab olish so'rovi yuborilmoqda...</b>\n\n"
@@ -2085,17 +2115,27 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
         )
 
         # API dan download URL olish
+        logger.info(f"🔍 Getting download URL for quality: {quality_id}")
         download_data = await get_youtube_info_via_fast_api(video_id, quality_id)
 
-        if not download_data or 'file' not in download_data:
-            await callback.message.edit_text("❌ Download URL olinmadi")
+        if not download_data:
+            logger.error("❌ No download data received")
+            await callback.message.edit_text("❌ Download ma'lumotlari olinmadi")
+            return
+
+        if 'file' not in download_data:
+            logger.error(f"❌ No 'file' key in download data: {list(download_data.keys())}")
+            await callback.message.edit_text("❌ Download URL topilmadi")
             return
 
         download_url = download_data['file']
         size_mb = int(download_data.get('size', 0)) / (1024 * 1024)
+        logger.info(f"✅ Download URL obtained: {download_url[:50]}...")
+        logger.info(f"📦 File size: {size_mb:.1f} MB")
 
         # Telegram limit tekshirish
         if size_mb > 50:
+            logger.warning(f"⚠️ File too large: {size_mb:.1f} MB")
             await callback.message.edit_text(
                 f"❌ <b>Fayl juda katta!</b>\n\n"
                 f"📦 <b>Hajm:</b> {size_mb:.1f} MB\n"
@@ -2115,9 +2155,11 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
         )
 
         # Fayl tayyor bo'lishini kutish
+        logger.info("⏳ Starting file ready check...")
         is_ready = await wait_for_youtube_file_ready(download_url, max_wait_minutes=3)
 
         if not is_ready:
+            logger.error("⏰ File not ready after waiting")
             await callback.message.edit_text(
                 f"⏰ <b>Fayl 3 daqiqada tayyor bo'lmadi</b>\n\n"
                 f"💡 Keyinroq urinib ko'ring yoki boshqa formatni tanlang",
@@ -2126,10 +2168,13 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             return
 
         # Faylni yuklab olib yuborish
+        logger.info("📥 Starting file download and send...")
         await download_and_send_youtube_fast(callback, download_url, selected_format, video_id, size_mb)
 
     except Exception as e:
-        print(f"YouTube fast download callback error: {e}")
+        logger.error(f"❌ Fast download callback error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Traceback: {traceback.format_exc()}")
         await callback.message.edit_text("❌ Yuklab olishda xatolik")
 
 
@@ -2165,15 +2210,19 @@ async def show_main_formats(callback: CallbackQuery):
 
 
 async def download_and_send_youtube_fast(callback, download_url, format_data, video_id, size_mb):
-    """YouTube faylni Fast API dan yuklab olib Telegram ga yuborish"""
+    """YouTube faylni yuklab olib yuborish - DEBUGGING BILAN"""
+    logger.info(f"📥 Starting download and send process")
+    logger.info(f"🔗 Download URL: {download_url[:50]}...")
+    logger.info(f"📋 Format: {format_data}")
+
     temp_dir = None
     try:
         # Temp directory yaratish
         temp_dir = tempfile.mkdtemp(prefix='yt_fast_')
         filename = f"youtube_{video_id}_{format_data['quality']}.mp4"
         filepath = os.path.join(temp_dir, filename)
+        logger.info(f"📁 Temp file path: {filepath}")
 
-        # Progress yangilash
         await callback.message.edit_text(
             f"⏬ <b>Yuklab olmoqda...</b>\n\n"
             f"🆔 <b>Video ID:</b> {video_id}\n"
@@ -2182,23 +2231,26 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
             parse_mode="HTML"
         )
 
-        # Advanced headers
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Connection': 'keep-alive',
             'Accept-Encoding': 'identity'
         }
 
-        # Faylni yuklab olish
         downloaded = 0
         start_time = time.time()
 
+        logger.info("🌐 Starting file download...")
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(download_url, timeout=300) as response:
-                if response.status == 200:
+                status = response.status
+                logger.info(f"📡 Download response status: {status}")
+
+                if status == 200:
                     total_size = int(response.headers.get('content-length', 0))
+                    logger.info(f"📦 Total download size: {total_size} bytes")
 
                     with open(filepath, 'wb') as file:
                         last_update = time.time()
@@ -2207,12 +2259,12 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
                             file.write(chunk)
                             downloaded += len(chunk)
 
-                            # Progress har 3 soniyada
                             current_time = time.time()
                             if current_time - last_update >= 3:
                                 if total_size > 0:
                                     progress = (downloaded / total_size) * 100
                                     speed = downloaded / (current_time - start_time) / (1024 * 1024)
+                                    logger.info(f"📊 Progress: {progress:.0f}%, Speed: {speed:.1f} MB/s")
 
                                     await callback.message.edit_text(
                                         f"⏬ <b>Yuklab olmoqda: {progress:.0f}%</b>\n\n"
@@ -2225,13 +2277,15 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
 
                                 last_update = current_time
                 else:
-                    raise Exception(f"Download failed: HTTP {response.status}")
+                    raise Exception(f"Download failed: HTTP {status}")
 
         # Fayl hajmini tekshirish
         file_size = os.path.getsize(filepath)
         file_size_mb = file_size / (1024 * 1024)
+        logger.info(f"✅ File downloaded: {file_size_mb:.1f} MB")
 
         if file_size_mb > 50:
+            logger.error(f"❌ File too large for Telegram: {file_size_mb:.1f} MB")
             await callback.message.edit_text(
                 f"❌ <b>Fayl Telegram uchun juda katta</b>\n\n"
                 f"📦 <b>Hajm:</b> {file_size_mb:.1f} MB\n"
@@ -2255,9 +2309,9 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
             f"🚀 Fast API orqali yuklab olindi"
         )
 
+        logger.info("📤 Sending to Telegram...")
         try:
             if format_data['type'] == 'progressive':
-                # Video + Audio
                 await callback.bot.send_video(
                     chat_id=callback.message.chat.id,
                     video=FSInputFile(filepath),
@@ -2265,7 +2319,6 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
                     supports_streaming=True
                 )
             else:
-                # Video only yoki boshqa format
                 await callback.bot.send_document(
                     chat_id=callback.message.chat.id,
                     document=FSInputFile(filepath),
@@ -2273,19 +2326,19 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
                 )
 
             await callback.message.delete()
+            logger.info("✅ File sent successfully!")
 
             # Analytics
             try:
-                # Sizning analytics funksiyangiz
                 await shortcuts.add_to_analitic_data(
                     (await callback.bot.get_me()).username,
                     callback.message.chat.id
                 )
-            except:
-                pass
+            except Exception as analytics_error:
+                logger.warning(f"⚠️ Analytics error: {analytics_error}")
 
         except Exception as send_error:
-            print(f"Error sending file: {send_error}")
+            logger.error(f"❌ Error sending file: {send_error}")
             await callback.message.edit_text(
                 f"❌ <b>Faylni yuborishda xatolik</b>\n\n"
                 f"📋 <b>Xatolik:</b> {str(send_error)[:100]}...",
@@ -2293,19 +2346,22 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
             )
 
     except Exception as e:
-        print(f"Download and send error: {e}")
+        logger.error(f"❌ Download and send error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Traceback: {traceback.format_exc()}")
         await callback.message.edit_text(
             f"❌ <b>Yuklab olishda xatolik</b>\n\n"
             f"📋 <b>Xatolik:</b> {str(e)[:100]}...",
             parse_mode="HTML"
         )
     finally:
-        # Temp fayllarni tozalash
+        # Cleanup
         if temp_dir and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
-            except:
-                pass
+                logger.info("🗑️ Temp files cleaned up")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Cleanup error: {cleanup_error}")
 
 @client_bot_router.callback_query(F.data == "too_large")
 async def handle_too_large_callback(callback: CallbackQuery):
@@ -2330,7 +2386,9 @@ RAPIDAPI_HOST = "youtube-video-fast-downloader-24-7.p.rapidapi.com"
 
 
 def extract_youtube_id(url):
-    """YouTube URL dan video ID ni olish - yaxshilangan"""
+    """YouTube URL dan video ID ni olish"""
+    logger.info(f"Extracting video ID from URL: {url}")
+
     patterns = [
         r'(?:youtube\.be/)([a-zA-Z0-9_-]+)',
         r'(?:youtube\.com/watch\?v=)([a-zA-Z0-9_-]+)',
@@ -2343,11 +2401,15 @@ def extract_youtube_id(url):
     for pattern in patterns:
         match = re.search(pattern, url)
         if match:
-            return match.group(1)
+            video_id = match.group(1)
+            logger.info(f"✅ Video ID extracted: {video_id}")
+            return video_id
+
+    logger.error(f"❌ Could not extract video ID from: {url}")
     return None
 
 def get_available_youtube_qualities():
-    """Mavjud YouTube sifatlari - Fast API uchun"""
+    """Mavjud YouTube sifatlari"""
     return {
         "18": {"quality": "360p", "type": "progressive", "format": "MP4", "desc": "360p MP4 (Video+Audio)"},
         "22": {"quality": "720p", "type": "progressive", "format": "MP4", "desc": "720p MP4 (Video+Audio)"},
@@ -2360,7 +2422,12 @@ def get_available_youtube_qualities():
 
 
 async def get_youtube_info_via_fast_api(video_id, quality="247"):
-    """YANGI Fast API orqali YouTube video ma'lumotlarini olish"""
+    """Fast API orqali YouTube video ma'lumotlarini olish - DEBUGGING BILAN"""
+    logger.info(f"🔍 API request starting...")
+    logger.info(f"   Video ID: {video_id}")
+    logger.info(f"   Quality: {quality}")
+    logger.info(f"   API Host: {RAPIDAPI_HOST}")
+
     try:
         url = f"https://{RAPIDAPI_HOST}/download_short/{video_id}"
         params = {"quality": quality}
@@ -2369,19 +2436,39 @@ async def get_youtube_info_via_fast_api(video_id, quality="247"):
             "x-rapidapi-host": RAPIDAPI_HOST
         }
 
+        logger.info(f"📡 Request URL: {url}")
+        logger.info(f"📋 Request params: {params}")
+        logger.info(f"🔑 Request headers: {headers}")
+
         async with aiohttp.ClientSession() as session:
+            logger.info("🌐 Making HTTP request...")
             async with session.get(url, headers=headers, params=params, timeout=30) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data
+                status = response.status
+                logger.info(f"📡 Response status: {status}")
+
+                if status == 200:
+                    try:
+                        data = await response.json()
+                        logger.info(f"✅ API Success! Response keys: {list(data.keys())}")
+                        logger.info(f"📄 Full response: {json.dumps(data, indent=2)}")
+                        return data
+                    except Exception as json_error:
+                        logger.error(f"❌ JSON parsing error: {json_error}")
+                        text_response = await response.text()
+                        logger.error(f"📄 Raw response: {text_response}")
+                        return None
                 else:
-                    print(f"API error: {response.status}")
                     error_text = await response.text()
-                    print(f"Error details: {error_text}")
+                    logger.error(f"❌ API error {status}: {error_text}")
                     return None
 
+    except asyncio.TimeoutError:
+        logger.error("⏰ API request timeout (30s)")
+        return None
     except Exception as e:
-        print(f"API request error: {e}")
+        logger.error(f"❌ API request error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Traceback: {traceback.format_exc()}")
         return None
 
 
@@ -2437,44 +2524,38 @@ async def wait_for_youtube_file_ready(file_url, max_wait_minutes=3):
 
 
 def create_youtube_format_keyboard():
-    """YouTube formatlar uchun keyboard yaratish - Fast API"""
+    """YouTube formatlar uchun keyboard"""
     keyboard = InlineKeyboardBuilder()
-
     qualities = get_available_youtube_qualities()
 
-    # Eng mashhur formatlar
-    popular_formats = ["22", "18", "720", "360"]  # 720p MP4, 360p MP4, etc.
+    # Asosiy formatlar
+    popular_formats = ["22", "18", "720", "360"]
 
     for quality_id in popular_formats:
         if quality_id in qualities:
             fmt = qualities[quality_id]
             icon = "📹" if fmt["type"] == "progressive" else "🎬"
-
             button_text = f"{icon} {fmt['desc']}"
             keyboard.row(InlineKeyboardButton(
                 text=button_text,
                 callback_data=f"yt_fast_dl_{quality_id}"
             ))
 
-    # Qo'shimcha formatlar
     keyboard.row(InlineKeyboardButton(text="🔧 Boshqa formatlar", callback_data="yt_more_formats"))
     keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
-
     return keyboard
 
 
 def create_more_formats_keyboard():
-    """Qo'shimcha formatlar uchun keyboard"""
+    """Qo'shimcha formatlar keyboard"""
     keyboard = InlineKeyboardBuilder()
-
     qualities = get_available_youtube_qualities()
-    additional_formats = ["1080", "247", "248"]  # 1080p, WebM formatlar
+    additional_formats = ["1080", "247", "248"]
 
     for quality_id in additional_formats:
         if quality_id in qualities:
             fmt = qualities[quality_id]
             icon = "📹" if fmt["type"] == "progressive" else "🎬"
-
             button_text = f"{icon} {fmt['desc']}"
             keyboard.row(InlineKeyboardButton(
                 text=button_text,
@@ -2483,93 +2564,8 @@ def create_more_formats_keyboard():
 
     keyboard.row(InlineKeyboardButton(text="⬅️ Asosiy formatlar", callback_data="yt_main_formats"))
     keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
-
     return keyboard
 
-def create_format_keyboard(video_data):
-    """Video formatlar uchun keyboard yaratish"""
-    keyboard = InlineKeyboardBuilder()
-
-    formats = []
-
-    # Progressive formatlar (video + audio)
-    if 'formats' in video_data:
-        for fmt in video_data['formats']:
-            if fmt.get('qualityLabel') and 'contentLength' in fmt:
-                size_mb = int(fmt['contentLength']) / (1024 * 1024)
-                formats.append({
-                    'type': 'progressive',
-                    'itag': fmt['itag'],
-                    'quality': fmt['qualityLabel'],
-                    'ext': fmt.get('mimeType', '').split('/')[1].split(';')[0],
-                    'size': size_mb,
-                    'has_audio': True
-                })
-
-    # Adaptive video formatlar
-    if 'adaptiveFormats' in video_data:
-        for fmt in video_data['adaptiveFormats']:
-            if fmt.get('qualityLabel') and 'contentLength' in fmt:
-                size_mb = int(fmt['contentLength']) / (1024 * 1024)
-                mime_type = fmt.get('mimeType', '')
-
-                if 'video' in mime_type:
-                    formats.append({
-                        'type': 'video',
-                        'itag': fmt['itag'],
-                        'quality': fmt['qualityLabel'],
-                        'ext': mime_type.split('/')[1].split(';')[0],
-                        'size': size_mb,
-                        'has_audio': False
-                    })
-                elif 'audio' in mime_type:
-                    audio_quality = fmt.get('audioQuality', 'UNKNOWN').replace('AUDIO_QUALITY_', '')
-                    formats.append({
-                        'type': 'audio',
-                        'itag': fmt['itag'],
-                        'quality': f"{audio_quality.lower()}",
-                        'ext': mime_type.split('/')[1].split(';')[0],
-                        'size': size_mb,
-                        'has_audio': True
-                    })
-
-    # Formatlarni saralash - progressive birinchi, keyin video, keyin audio
-    formats.sort(key=lambda x: (
-        0 if x['type'] == 'progressive' else 1 if x['type'] == 'video' else 2,
-        -int(x['quality'].replace('p', '').replace('medium', '480').replace('low', '240').replace('high', '720')) if x[
-            'quality'].replace('p', '').replace('medium', '480').replace('low', '240').replace('high',
-                                                                                               '720').isdigit() else 999
-    ))
-
-    # Faqat eng yaxshi 8ta formatni ko'rsatish
-    for i, fmt in enumerate(formats[:8]):
-        # Size text
-        size_text = f" ({fmt['size']:.0f}MB)" if fmt['size'] < 1024 else f" ({fmt['size'] / 1024:.1f}GB)"
-
-        # Icon va label
-        if fmt['type'] == 'progressive':
-            icon = "📹"
-            label = f"{fmt['quality']} {fmt['ext'].upper()} ✅"
-        elif fmt['type'] == 'video':
-            icon = "🎬"
-            label = f"{fmt['quality']} {fmt['ext'].upper()} (video only)"
-        else:  # audio
-            icon = "🎵"
-            label = f"{fmt['quality']} {fmt['ext'].upper()}"
-
-        button_text = f"{icon} {label}{size_text}"
-
-        # Telegram limit tekshirish (50MB)
-        if fmt['size'] > 50:
-            button_text = f"⚠️ {button_text} (katta)"
-            callback_data = "too_large"
-        else:
-            callback_data = f"yt_dl_{i}"
-
-        keyboard.row(InlineKeyboardButton(text=button_text, callback_data=callback_data))
-
-    keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
-    return keyboard
 
 
 def format_video_info(video_data):
