@@ -186,18 +186,18 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     photo = data['photo']
     media_type = data['media_type']
-    data = await state.get_data()
     sex = data['sex']
     age = data['age']
     full_name = data['full_name']
     about_me = data['about_me']
     city = data['city']
     which_search = data['which_search']
+
     leo = await get_leo(message.from_user.id)
     if not leo:
-        bot = await get_current_bot(bot)
+        current_bot = await get_current_bot(bot)
         await add_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search,
-                      bot.username)
+                      current_bot.username, bot)
     else:
         await update_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search)
     await state.clear()

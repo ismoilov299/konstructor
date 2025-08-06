@@ -74,13 +74,13 @@ async def exists_leo(uid: int):
 
 
 async def add_leo(uid: int, photo: str, media_type: str, sex: str, age: int, full_name: str, about_me: str, city: str,
-                  which_search: str, bot_username: str):
+                  which_search: str, bot_username: str, bot: Bot):
     client = await get_client(uid)
-    bot = await shortcuts.get_bot_by_username(bot_username)
-    async with Bot(token=bot.token).context(auto_close=False) as bot_:
-        format = "jpg" if media_type == "PHOTO" else "mp4"
-        os.makedirs("clientbot/data/leo", exist_ok=True)
-        await bot_.download(photo, f"clientbot/data/leo/{uid}.{format}")
+
+    format = "jpg" if media_type == "PHOTO" else "mp4"
+    os.makedirs("clientbot/data/leo", exist_ok=True)
+    await bot.download(photo, f"clientbot/data/leo/{uid}.{format}")
+
     await LeoMatchModel.create(
         user=client,
         photo=photo,
