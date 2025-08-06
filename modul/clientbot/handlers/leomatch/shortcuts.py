@@ -188,6 +188,78 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         return False
 
 
+@sync_to_async
+def update_profile_sync(leo, kwargs: dict):
+
+    try:
+        print(f"DEBUG: update_profile_sync - kwargs: {kwargs}")
+
+        if 'photo' in kwargs and kwargs['photo']:
+            old_photo = leo.photo
+            new_photo = kwargs['photo']
+
+            print(f"DEBUG: Photo yangilanmoqda - eski: '{old_photo}' -> yangi: '{new_photo}'")
+
+            if new_photo and new_photo.strip():
+                leo.photo = new_photo
+
+                if 'media_type' in kwargs:
+                    leo.media_type = kwargs['media_type']
+                    print(f"DEBUG: Media type yangilandi: {kwargs['media_type']}")
+            else:
+                print("DEBUG: Yangi photo bo'sh, eski photo saqlanadi")
+
+        for key, value in kwargs.items():
+            if key not in ['photo', 'media_type'] and hasattr(leo, key):
+                setattr(leo, key, value)
+                print(f"DEBUG: {key} = {value}")
+
+        leo.save()
+        print("DEBUG: Profil muvaffaqiyatli saqlandi")
+        return True
+
+    except Exception as e:
+        print(f"ERROR: update_profile_sync - {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return False
+
+
+async def update_profile(uid: int, kwargs: dict):
+
+    try:
+        print(f"DEBUG: update_profile called - uid: {uid}, kwargs: {kwargs}")
+
+        leo = await get_leo(uid)
+        if not leo:
+            print(f"ERROR: User {uid} uchun profil topilmadi")
+            return False
+
+        print(f"DEBUG: Hozirgi profil - photo: '{leo.photo}', media_type: '{leo.media_type}'")
+
+        if 'photo' in kwargs:
+            new_photo = kwargs['photo']
+
+            if new_photo and isinstance(new_photo, str) and new_photo.startswith('/') or new_photo.startswith(
+                    'clientbot/'):
+                abs_new_photo = os.path.abspath(new_photo)
+                if not os.path.exists(abs_new_photo):
+                    print(f"WARNING: Yangi photo fayli mavjud emas: {abs_new_photo}")
+
+        success = await update_profile_sync(leo, kwargs)
+
+        if success:
+            updated_leo = await get_leo(uid)
+            print(f"DEBUG: Yangilashdan keyin - photo: '{updated_leo.photo}', media_type: '{updated_leo.media_type}'")
+
+        return success
+
+    except Exception as e:
+        print(f"ERROR: update_profile - {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return False
+
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
                      reply_markup: types.ReplyKeyboardMarkup = None):
     account: LeoMatchModel = await get_leo(from_account)
