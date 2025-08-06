@@ -174,7 +174,7 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         type = "VIDEO"
     await state.update_data(photo=url, media_type=type)
     bot = await get_current_bot(bot)
-    async with Bot(token=bot.token, session=bot_session).context(auto_close=False) as bot_:
+    async with Bot(token=bot.token, session=bot_session) as bot_:
         format = "jpg" if type == "PHOTO" else "mp4"
         os.makedirs("clientbot/data/leo", exist_ok=True)
         await bot_.download(url, f"clientbot/data/leo/{message.from_user.id}.{format}")
