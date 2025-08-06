@@ -77,11 +77,13 @@ async def add_leo(uid: int, photo: str, media_type: str, sex: str, age: int, ful
                   which_search: str, bot_username: str, bot: Bot):
     client = await get_client(uid)
 
+    # Faylni saqlash
     format = "jpg" if media_type == "PHOTO" else "mp4"
     os.makedirs("clientbot/data/leo", exist_ok=True)
     await bot.download(photo, f"clientbot/data/leo/{uid}.{format}")
 
-    leo_match = LeoMatchModel(
+    # Django ORM ni async da ishlatish
+    await sync_to_async(LeoMatchModel.objects.create)(
         user=client,
         photo=photo,
         media_type=media_type,
@@ -93,7 +95,6 @@ async def add_leo(uid: int, photo: str, media_type: str, sex: str, age: int, ful
         which_search=which_search,
         bot_username=bot_username,
     )
-    await leo_match.save()
 
 
 @sync_to_async
