@@ -579,7 +579,7 @@ async def get_analitics(bot_username: str = None):
 #
 #
 # async def show_profile(message: types.Message, uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
-#                        type: str, keyboard: types.ReplyKeyboardMarkup = None, comment: str = None):
+#                        type: # str, keyboard: types.ReplyKeyboardMarkup = None, comment: str = None):
 #     text = f"\n\nВам сообщение: {comment}" if comment else ""
 #     caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
 #     kwargs = {}
@@ -606,7 +606,7 @@ async def get_analitics(bot_username: str = None):
 #
 #
 # async def bot_show_profile(to_uid: int, from_uid: str, full_name: str, age: int, city: str, about_me: str, url: str,
-#                            type: str, username: str, keyboard: types.ReplyKeyboardMarkup = None):
+#                            type: # str, username: str, keyboard: types.ReplyKeyboardMarkup = None):
 #     leo = await get_leo(to_uid)
 #     bot = await get_bot_by_username(leo.bot_username)
 #     caption = f"{full_name}, {age}, {city}\n{about_me}"
