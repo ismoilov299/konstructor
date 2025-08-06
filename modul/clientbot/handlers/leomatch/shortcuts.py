@@ -78,12 +78,48 @@ async def search_leo(me: int):
     return await search_leo_sync(leo_me)
 
 
+@sync_to_async
+def get_leos_id_optimized(me: int):
+
+    try:
+        user_me = User.objects.filter(uid=me).first()
+        if not user_me:
+            return []
+
+        leo_me = LeoMatchModel.objects.filter(user=user_me).first()
+        if not leo_me:
+            return []
+
+        base_filters = {
+            'blocked': False,
+            'search': True,
+            'active': True,
+        }
+
+        if leo_me.which_search == SexEnum.MALE.value:
+            base_filters['sex'] = SexEnum.MALE.value
+        elif leo_me.which_search == SexEnum.FEMALE.value:
+            base_filters['sex'] = SexEnum.FEMALE.value
+
+        user_ids = list(
+            LeoMatchModel.objects
+            .filter(**base_filters)
+            .exclude(id=leo_me.id)
+            .values_list('user__uid', flat=True)
+            .order_by('?')[:50]
+        )
+
+        return user_ids
+
+    except Exception as e:
+        print(f"ERROR get_leos_id: {e}")
+        return []
+
+
+# Async wrapper
 async def get_leos_id(me: int):
-    users_id = []
-    leos = await search_leo(me)
-    for leo in leos:
-        users_id.append(leo.user.uid)
-    return users_id
+
+    return await get_leos_id_optimized(me)
 
 
 async def exists_leo(uid: int):
