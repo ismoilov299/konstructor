@@ -110,16 +110,30 @@ async def exists_leo(uid: int):
 
 
 @sync_to_async
-def create_leomatch(user, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username):
-    print(f"Creating LeoMatch for user: {user}")
-    if user is None:
-        raise ValueError("User object is None.")
+def create_leomatch(user_tg, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username):
+    print(f"Creating LeoMatch for user: {user_tg}")
+    if user_tg is None:
+        raise ValueError("UserTG object is None.")
 
-    if not hasattr(user, 'uid') or user.uid is None:
-        raise ValueError(f"User object does not have a valid 'uid' attribute. User: {user}")
+    if not hasattr(user_tg, 'uid') or user_tg.uid is None:
+        raise ValueError(f"UserTG object does not have a valid 'uid' attribute. User: {user_tg}")
+
+    # UserTG dan User obyektini olish yoki yaratish
+    if user_tg.user is None:
+        # Agar UserTG da User bog'lanmagan bo'lsa, yangi User yaratamiz
+        from django.contrib.auth.models import User
+        django_user = User.objects.create(
+            username=f"tg_user_{user_tg.uid}",
+            first_name=user_tg.first_name or full_name,
+            last_name=user_tg.last_name or "",
+        )
+        user_tg.user = django_user
+        user_tg.save()
+    else:
+        django_user = user_tg.user
 
     return LeoMatchModel.objects.create(
-        user=user,
+        user=django_user,  # Bu yerda User obyektini beramiz
         photo=photo,
         media_type=media_type,
         sex=sex,
