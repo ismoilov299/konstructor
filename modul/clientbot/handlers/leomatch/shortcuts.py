@@ -110,7 +110,6 @@ async def exists_leo(uid: int):
 
 
 @sync_to_async
-@sync_to_async
 def create_leomatch(user_tg, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username):
     print(f"Creating LeoMatch for user: {user_tg}")
     if user_tg is None:
