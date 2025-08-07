@@ -403,23 +403,69 @@ async def bot_show_profile_db(to_uid: int, uid: int, keyboard=types.ReplyKeyboar
                                leo.media_type, user.username, keyboard=keyboard)
 
 
-# Django ORM ga mos keluvchi funksiyalar
 @sync_to_async
 def leo_set_like_sync(from_user, to_user, message=None):
-    return LeoMatchLikesBasketModel.objects.create(
-        from_user=from_user,
-        to_user=to_user,
-        message=message,
-    )
+    try:
+        like_obj, created = LeoMatchLikesBasketModel.objects.get_or_create(
+            from_user=from_user,
+            to_user=to_user,
+            defaults={
+                'message': message,
+                'done': False
+            }
+        )
+
+        if created:
+            print(f"DEBUG: Yangi like yaratildi - {from_user.user.uid} -> {to_user.user.uid}")
+        else:
+            print(f"DEBUG: Like allaqachon mavjud - {from_user.user.uid} -> {to_user.user.uid}")
+
+            if like_obj.done:
+                like_obj.done = False
+                like_obj.message = message
+                like_obj.save()
+                print("DEBUG: Eski like qayta faollashtirildi")
+            elif message and like_obj.message != message:
+                like_obj.message = message
+                like_obj.save()
+                print("DEBUG: Like message yangilandi")
+
+        return like_obj
+
+    except Exception as e:
+        print(f"ERROR leo_set_like_sync: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return None
 
 
 async def leo_set_like(from_uid: int, to_uid: int, message: str = None):
-    from_user = await get_leo(from_uid)
-    to_user = await get_leo(to_uid)
-    if not from_user or not to_user:
+    try:
+        from_user = await get_leo(from_uid)
+        to_user = await get_leo(to_uid)
+
+        if not from_user or not to_user:
+            print(f"ERROR: User topilmadi - from: {from_uid}, to: {to_uid}")
+            return False
+
+        if from_uid == to_uid:
+            print("DEBUG: O'zini like qila olmaydi")
+            return False
+
+        result = await leo_set_like_sync(from_user, to_user, message)
+
+        if result:
+            print(f"SUCCESS: Like muvaffaqiyatli - {from_uid} -> {to_uid}")
+            return True
+        else:
+            print(f"FAILED: Like qo'yishda xato - {from_uid} -> {to_uid}")
+            return False
+
+    except Exception as e:
+        print(f"ERROR leo_set_like: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         return False
-    await leo_set_like_sync(from_user, to_user, message)
-    return True
 
 
 @sync_to_async
