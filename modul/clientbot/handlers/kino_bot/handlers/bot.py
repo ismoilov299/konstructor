@@ -38,8 +38,8 @@ from modul.clientbot.handlers.kino_bot.keyboards.kb import *
 from modul.clientbot.handlers.kino_bot.api import *
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.profile import bot_start
-from modul.clientbot.handlers.leomatch_backup.handlers.registration import bot_start_lets_leo
-from modul.clientbot.handlers.leomatch_backup.handlers.start import bot_start_cancel
+from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
+from modul.clientbot.handlers.leomatch.handlers.start import bot_start_cancel
 # from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 # from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 # from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel
