@@ -11,6 +11,22 @@ async def manage(message: types.Message, state: FSMContext):
     me = data.get("me") if data.get("me") else message.from_user.id
     leo = await get_leo(me)
 
+    if not leo:
+        await message.answer(
+            "❌ Профиль не найден. Необходимо пройти регистрацию.",
+            reply_markup=reply_kb.begin_registration()
+        )
+        await state.set_state(LeomatchRegistration.BEGIN)
+        return
+
+    if not leo:
+        await message.answer(
+            "❌ Профиль не найден. Необходимо пройти регистрацию.",
+            reply_markup=reply_kb.begin_registration()
+        )
+        await state.set_state(LeomatchRegistration.BEGIN)
+        return
+
     buttons = []
 
     buttons.append([InlineKeyboardButton(text="👀 Просмотр профилей", callback_data="view_profiles")])
@@ -61,6 +77,14 @@ async def begin_registration(message: types.Message, state: FSMContext):
 
 
 async def show_main_menu_with_status(message: types.Message, state: FSMContext, leo):
+    if not leo:
+        await message.answer(
+            "❌ Профиль не найден. Необходимо пройти регистрацию.",
+            reply_markup=reply_kb.begin_registration()
+        )
+        await state.set_state(LeomatchRegistration.BEGIN)
+        return
+
     buttons = []
 
     buttons.append([InlineKeyboardButton(text="👀 Просмотр профилей", callback_data="view_profiles")])

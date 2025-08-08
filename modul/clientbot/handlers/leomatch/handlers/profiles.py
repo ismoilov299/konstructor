@@ -71,8 +71,11 @@ async def next_like(message: types.Message, state: FSMContext):
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
         ])
         await message.answer("💔 Больше нет лайков", reply_markup=keyboard)
-        leo_me.count_likes = 0
-        await leo_me.save()
+
+        # Leo mavjudligini tekshirish
+        if leo_me:
+            leo_me.count_likes = 0
+            await leo_me.save()
 
 
 async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid: int, msg: str = None):
@@ -286,6 +289,7 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 
 @client_bot_router.message(F.text == ("Отменить"), LeomatchProfiles.INPUT_MESSAGE)
 async def handle_cancel_message_text(message: types.Message, state: FSMContext):
+    """Xabar yozishni bekor qilish (matn orqali)"""
     data = await state.get_data()
     leos: list = data.get("leos")
     leos.insert(0, data.get("selected_id"))
@@ -307,6 +311,7 @@ async def process_message(message: types.Message, state: FSMContext):
     elif message.video_note:
         msg = message.video_note.file_id
     else:
+        # Inline keyboard bilan tugma
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_message_input")]
         ])
@@ -318,12 +323,14 @@ async def process_message(message: types.Message, state: FSMContext):
 
 @client_bot_router.message(F.text == ("Да"), LeomatchProfiles.MANAGE_LIKES)
 async def handle_manage_likes_yes_text(message: types.Message, state: FSMContext):
+    """Layklar bilan ishlashni boshlash (matn orqali)"""
     await message.answer("💕 Вот аккаунты, кому Вы понравились:", reply_markup=types.ReplyKeyboardRemove())
     await next_like(message, state)
 
 
 @client_bot_router.message(F.text == ("Нет"), LeomatchProfiles.MANAGE_LIKES)
 async def handle_manage_likes_no_text(message: types.Message):
+    """Barcha layklarni o'chirish (matn orqali)"""
     await message.answer("🗑️ Все лайки удалены", reply_markup=types.ReplyKeyboardRemove())
     await clear_all_likes(message.from_user.id)
 
@@ -412,6 +419,7 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
 # =============== UTILITY FUNCTIONS ===============
 
 async def create_likes_management_keyboard():
+    """Layklar boshqaruvi uchun keyboard"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Да, показать", callback_data="manage_likes_yes")],
         [InlineKeyboardButton(text="❌ Нет, удалить все", callback_data="manage_likes_no")]
@@ -420,6 +428,7 @@ async def create_likes_management_keyboard():
 
 
 async def show_likes_prompt(message: types.Message, state: FSMContext):
+    """Layklar haqida so'rash"""
     keyboard = await create_likes_management_keyboard()
     await message.answer(
         "💕 У вас есть новые лайки!\n\n"
