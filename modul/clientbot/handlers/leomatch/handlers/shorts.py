@@ -33,7 +33,7 @@ async def manage(message: types.Message, state: FSMContext):
 
     buttons.append([InlineKeyboardButton(text="👤 Мой профиль", callback_data="my_profile")])
 
-    if not leo.active or not leo.search:
+    if  not leo.search:
         text = (
             "\nСейчас аккаунт выключен от поиска, если Вы начнете просматривать аккаунты, то Ваш аккаунт вновь включится для поиска другим пользователем")
     else:
