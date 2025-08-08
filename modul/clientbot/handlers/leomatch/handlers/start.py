@@ -65,3 +65,9 @@ async def handle_begin_state_fallback(message: types.Message, state: FSMContext)
 async def handle_dating_variations(message: types.Message, state: FSMContext):
 
     await bot_start(message, state)
+
+async def bot_start_lets_leo(message: types.Message, state: FSMContext):
+    if message.from_user.username == None:
+        await message.answer(
+            ("Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните"))
+    pass

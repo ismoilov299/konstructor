@@ -37,7 +37,8 @@ from modul.clientbot.handlers.kino_bot.shortcuts import *
 from modul.clientbot.handlers.kino_bot.keyboards.kb import *
 from modul.clientbot.handlers.kino_bot.api import *
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
-from modul.clientbot.handlers.leomatch.handlers.profile import bot_start
+from modul.clientbot.handlers.leomatch.handlers.start import bot_start, bot_start_cancel, bot_start_lets_leo
+
 from modul.clientbot.handlers.leomatch.handlers.registration import bot_start_lets_leo
 from modul.clientbot.handlers.leomatch.handlers.start import bot_start_cancel
 # from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
@@ -1750,9 +1751,13 @@ async def inline_film_requests(query: InlineQuery):
     await query.answer(inline_answer, cache_time=240, is_personal=True)
 
 
-client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства",DavinchiBotFilter())
+client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства", DavinchiBotFilter())
 client_bot_router.message.register(bot_start_cancel, F.text == ("Я не хочу никого искать"), LeomatchRegistration.BEGIN)
 client_bot_router.message.register(bot_start_lets_leo, F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
+
+from modul.clientbot.handlers.leomatch.handlers.start import handle_start_registration_callback, handle_dont_want_search_callback
+client_bot_router.callback_query.register(handle_start_registration_callback, F.data == "start_registration", LeomatchRegistration.BEGIN)
+client_bot_router.callback_query.register(handle_dont_want_search_callback, F.data == "dont_want_search", LeomatchRegistration.BEGIN)
 
 
 @sync_to_async
