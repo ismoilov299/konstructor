@@ -1757,7 +1757,10 @@ client_bot_router.callback_query(F.data == "start_registration")
 client_bot_router.message.register(bot_start_lets_leo, F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 
 from modul.clientbot.handlers.leomatch.handlers.start import handle_start_registration_callback, handle_dont_want_search_callback
+# Debug: Registering callback for start_registration
+print("Registering callback: handle_start_registration_callback for start_registration")
 client_bot_router.callback_query.register(handle_start_registration_callback, F.data == "start_registration", LeomatchRegistration.BEGIN)
+#write me debug info
 client_bot_router.callback_query.register(handle_dont_want_search_callback, F.data == "dont_want_search", LeomatchRegistration.BEGIN)
 
 

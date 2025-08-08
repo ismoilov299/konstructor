@@ -94,6 +94,7 @@ async def download_file(url: str, file_path: str):
 
 @client_bot_router.callback_query(F.data == "start_registration", LeomatchRegistration.BEGIN)
 async def handle_start_registration(callback: types.CallbackQuery, state: FSMContext):
+    print('Starting registration process... registration.py 96')
     message = callback.message
     if callback.from_user.username == None:
         await message.answer(
