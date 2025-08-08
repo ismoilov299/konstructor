@@ -94,7 +94,6 @@ async def download_file(url: str, file_path: str):
 
 @client_bot_router.callback_query(F.data == "start_registration", LeomatchRegistration.BEGIN)
 async def handle_start_registration(callback: types.CallbackQuery, state: FSMContext):
-    print('Starting registration process... registration.py 96')
     message = callback.message
     if callback.from_user.username == None:
         await message.answer(
@@ -182,32 +181,53 @@ async def handle_save_current_photo(callback: types.CallbackQuery, state: FSMCon
 
 @client_bot_router.callback_query(F.data == "final_yes", LeomatchRegistration.FINAL)
 async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
-    data = await state.get_data()
-    print(data)
-    photo = data['photo']
-    media_type = data['media_type']
-    sex = data['sex']
-    age = data['age']
-    full_name = data['full_name']
-    about_me = data['about_me']
-    city = data['city']
-    which_search = data['which_search']
+    try:
+        data = await state.get_data()
+        print(f"Final data: {data}")
 
-    # Get bot username
-    bot_info = await bot.get_me()
-    bot_username = bot_info.username
+        photo = data['photo']
+        media_type = data['media_type']
+        sex = data['sex']
+        age = data['age']
+        full_name = data['full_name']
+        about_me = data['about_me']
+        city = data['city']
+        which_search = data['which_search']
 
-    leo = await get_leo(callback.from_user.id)
-    if not leo:
-        await add_leo(callback.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search,
-                      bot_username)
-    else:
-        await update_leo(uid=callback.from_user.id, photo=photo, media_type=media_type, sex=sex, age=age,
-                         full_name=full_name, about_me=about_me, city=city, which_search=which_search)
+        # Get bot username
+        bot_info = await bot.get_me()
+        bot_username = bot_info.username
 
-    await state.clear()
-    await manage(callback.message, state)
-    await callback.answer()
+        leo = await get_leo(callback.from_user.id)
+
+        try:
+            if not leo:
+                print(f"Creating new LeoMatch for user {callback.from_user.id}")
+                await add_leo(callback.from_user.id, photo, media_type, sex, age, full_name, about_me, city,
+                              which_search, bot_username)
+            else:
+                print(f"Updating existing LeoMatch for user {callback.from_user.id}")
+                await update_leo(uid=callback.from_user.id, photo=photo, media_type=media_type, sex=sex, age=age,
+                                 full_name=full_name, about_me=about_me, city=city, which_search=which_search)
+
+            await state.clear()
+            await callback.message.edit_text("✅ Регистрация завершена успешно!")
+            await manage(callback.message, state)
+            await callback.answer("Добро пожаловать!")
+
+        except Exception as db_error:
+            print(f"Database error: {db_error}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+
+            await callback.message.edit_text("❌ Произошла ошибка при сохранении данных. Попробуйте еще раз.")
+            await callback.answer("Ошибка сохранения")
+
+    except Exception as e:
+        print(f"Error in final_yes handler: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        await callback.answer("Произошла ошибка")
 
 
 @client_bot_router.callback_query(F.data == "final_edit", LeomatchRegistration.FINAL)
@@ -217,7 +237,7 @@ async def handle_final_edit(callback: types.CallbackQuery, state: FSMContext):
 
 
 # =============== MESSAGE HANDLERS (BACKWARD COMPATIBILITY) ===============
-@client_bot_router.callback_query(F.data == "start_registration")
+
 @client_bot_router.message(F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 async def bot_start_lets_leo(message: types.Message, state: FSMContext):
     if message.from_user.username == None:
