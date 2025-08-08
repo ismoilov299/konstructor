@@ -1,6 +1,6 @@
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import StateFilter
-from aiogram.types import InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 
@@ -23,7 +23,7 @@ from aiogram import types, F
 
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("🔍", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("🔍 Начинаем поиск...", reply_markup=types.ReplyKeyboardRemove())
     leos = await get_leos_id(message.from_user.id)
     await state.set_data({"leos": leos})
     await next_l(message, state)
@@ -38,8 +38,13 @@ async def next_l(message: types.Message, state: FSMContext):
         await show_profile_db(message, current, keyboard=profile_view_action(current))
         await state.set_state(LeomatchProfiles.LOOCK)
     else:
-        await message.answer(("Нет больше пользователей"))
-        await manage(message, state)
+        # Inline keyboard bilan tugmacha
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Попробовать еще раз", callback_data="restart_search")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
+        ])
+        await message.answer("😔 Больше нет пользователей для просмотра", reply_markup=keyboard)
+        # await manage(message, state)
 
 
 async def next_like(message: types.Message, state: FSMContext):
@@ -60,7 +65,12 @@ async def next_like(message: types.Message, state: FSMContext):
     else:
         leo_me = await get_leo(me)
         await state.clear()
-        await message.answer(("Нет больше лайков"))
+
+        # Inline keyboard bilan tugma
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
+        ])
+        await message.answer("💔 Больше нет лайков", reply_markup=keyboard)
         leo_me.count_likes = 0
         await leo_me.save()
 
@@ -96,8 +106,6 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                         if msg.startswith('bnVid_'):  # Video note format
                             try:
                                 # Video note yuborishdan oldin kimdan kelganligini bildirish
-                                additional_info = f", {from_age}, {from_city}" if from_age and from_city else (
-                                    f", {from_age}" if from_age else "")
                                 await message.bot.send_message(
                                     chat_id=to_user.user.uid,
                                     text=f"💌 Видео-сообщение от {user_link}:",
@@ -112,17 +120,12 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                                 if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(
                                         e).lower():
                                     await message.answer(
-                                        "✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
-                                    # Shu joyda ushbu foydalanuvchini bazada ma'lum bir statusga o'zgartirish mumkin
+                                        "⚠️ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
                                 else:
                                     await message.answer("❌ Не удалось отправить видео-сообщение")
                                 return
                         else:
-                            # Debug uchun
-                            print(f"Sending message to user {to_user.user.uid}: {msg}")
                             try:
-                                additional_info = f", {from_age}, {from_city}" if from_age and from_city else (
-                                    f", {from_age}" if from_age else "")
                                 result = await message.bot.send_message(
                                     chat_id=to_user.user.uid,
                                     text=f"💌 Новое сообщение от {user_link}:\n\n{msg}",
@@ -134,8 +137,7 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                                 if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(
                                         e).lower():
                                     await message.answer(
-                                        "✅ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
-                                    # Shu joyda ushbu foydalanuvchini bazada ma'lum bir statusga o'zgartirish mumkin
+                                        "⚠️ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
                                 else:
                                     await message.answer("❌ Не удалось отправить сообщение")
                                 return
@@ -153,8 +155,6 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
             if to_user and to_user.user:
                 try:
                     try:
-                        additional_info = f", {from_age}, {from_city}" if from_age and from_city else (
-                            f", {from_age}" if from_age else "")
                         await message.bot.send_message(
                             chat_id=to_user.user.uid,
                             text=f"❤️ Вам поставил лайк {user_link}!",
@@ -165,7 +165,7 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
                 except Exception as e:
                     print(f"Error getting user or sending like notification to user {to_uid}: {e}")
 
-            await message.answer("Лайк отправлен")
+            await message.answer("💖 Лайк отправлен")
 
         await next_l(message, state)
 
@@ -173,10 +173,56 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
         print(f"Error in like handler: {e}")
         import traceback
         print(traceback.format_exc())
-        await message.answer("Произошла ошибка. Попробуйте позже.")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
-@client_bot_router.callback_query(LeomatchProfileAction.filter(),  StateFilter(LeomatchProfiles.LOOCK))
+# =============== CALLBACK QUERY HANDLERS ===============
+
+@client_bot_router.callback_query(F.data == "restart_search")
+async def handle_restart_search(callback: types.CallbackQuery, state: FSMContext):
+    """Qidiruvni qaytadan boshlash"""
+    await callback.message.edit_reply_markup()
+    await start(callback.message, state)
+    await callback.answer("🔄 Поиск перезапущен")
+
+
+@client_bot_router.callback_query(F.data == "back_to_main")
+async def handle_back_to_main(callback: types.CallbackQuery, state: FSMContext):
+    """Asosiy menyuga qaytish"""
+    await callback.message.edit_reply_markup()
+    await manage(callback.message, state)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "cancel_message_input", LeomatchProfiles.INPUT_MESSAGE)
+async def handle_cancel_message_input(callback: types.CallbackQuery, state: FSMContext):
+    """Xabar yozishni bekor qilish"""
+    data = await state.get_data()
+    leos: list = data.get("leos")
+    leos.insert(0, data.get("selected_id"))
+    await state.update_data(selected_id=None, leos=leos)
+    await callback.message.edit_text("❌ Отменено")
+    await next_l(callback.message, state)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "manage_likes_yes", LeomatchProfiles.MANAGE_LIKES)
+async def handle_manage_likes_yes(callback: types.CallbackQuery, state: FSMContext):
+    """Layklar bilan ishlashni boshlash"""
+    await callback.message.edit_text("💕 Вот аккаунты, кому Вы понравились:")
+    await next_like(callback.message, state)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "manage_likes_no", LeomatchProfiles.MANAGE_LIKES)
+async def handle_manage_likes_no(callback: types.CallbackQuery, state: FSMContext):
+    """Barcha layklarni o'chirish"""
+    await callback.message.edit_text("🗑️ Все лайки удалены")
+    await clear_all_likes(callback.from_user.id)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(LeomatchProfileAction.filter(), StateFilter(LeomatchProfiles.LOOCK))
 async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchProfileAction):
     try:
         await query.message.edit_reply_markup()
@@ -186,9 +232,15 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
             await like(query.message, state, query.from_user.id, callback_data.user_id)
         elif callback_data.action == ProfileActionEnum.MESSAGE:
             current_state = await state.get_state()
+
+            # Inline keyboard yaratamiz
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_message_input")]
+            ])
+
             await query.message.answer(
-                "Введите сообщение или отправьте видео (макс 15 сек)",
-                reply_markup=cancel()
+                "✍️ Введите сообщение или отправьте видео (макс 15 сек)",
+                reply_markup=keyboard
             )
             await state.update_data({
                 'selected_id': callback_data.user_id,
@@ -199,7 +251,7 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
             kb = InlineKeyboardBuilder()
             kb.row(
                 InlineKeyboardButton(
-                    text="Да",
+                    text="✅ Да",
                     callback_data=LeomatchProfileAlert(
                         action="yes",
                         sender_id=query.from_user.id,
@@ -207,14 +259,14 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
                     ).pack()
                 ),
                 InlineKeyboardButton(
-                    text="Нет",
+                    text="❌ Нет",
                     callback_data=LeomatchProfileAlert(action="no").pack()
                 ),
                 width=2
             )
 
             await query.message.answer(
-                "Вы точно хотите подать жалобу? Учтите, если жалоба будет необоснованной то вы сами можете быть забанены",
+                "⚠️ Вы точно хотите подать жалобу?\n\n⚡ Учтите, если жалоба будет необоснованной, то вы сами можете быть забанены",
                 reply_markup=kb.as_markup()
             )
 
@@ -227,17 +279,18 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 
     except Exception as e:
         print(f"Error in choose_percent handler: {e}")
-        await query.message.answer("Произошла ошибка, попробуйте еще раз")
+        await query.message.answer("❌ Произошла ошибка, попробуйте еще раз")
 
 
+# =============== MESSAGE HANDLERS (BACKWARD COMPATIBILITY) ===============
 
 @client_bot_router.message(F.text == ("Отменить"), LeomatchProfiles.INPUT_MESSAGE)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_cancel_message_text(message: types.Message, state: FSMContext):
     data = await state.get_data()
     leos: list = data.get("leos")
     leos.insert(0, data.get("selected_id"))
     await state.update_data(selected_id=None, leos=leos)
-    await message.answer(("Отменено"), reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("❌ Отменено", reply_markup=types.ReplyKeyboardRemove())
     await next_l(message, state)
 
 
@@ -254,30 +307,34 @@ async def process_message(message: types.Message, state: FSMContext):
     elif message.video_note:
         msg = message.video_note.file_id
     else:
-        await message.answer("Пожалуйста, напишите текст или отправьте видео")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_message_input")]
+        ])
+        await message.answer("📝 Пожалуйста, напишите текст или отправьте видео", reply_markup=keyboard)
         return
 
     await like(message, state, message.from_user.id, selected_id, msg)
 
 
 @client_bot_router.message(F.text == ("Да"), LeomatchProfiles.MANAGE_LIKES)
-async def bot_start(message: types.Message, state: FSMContext):
-    await message.answer(("Вот акканты, кому Вы понравились:"), reply_markup=types.ReplyKeyboardRemove())
+async def handle_manage_likes_yes_text(message: types.Message, state: FSMContext):
+    await message.answer("💕 Вот аккаунты, кому Вы понравились:", reply_markup=types.ReplyKeyboardRemove())
     await next_like(message, state)
 
 
 @client_bot_router.message(F.text == ("Нет"), LeomatchProfiles.MANAGE_LIKES)
-async def bot_start(message: types.Message):
-    await message.answer(("Все лайки удалены"), reply_markup=types.ReplyKeyboardRemove())
+async def handle_manage_likes_no_text(message: types.Message):
+    await message.answer("🗑️ Все лайки удалены", reply_markup=types.ReplyKeyboardRemove())
     await clear_all_likes(message.from_user.id)
 
 
 @client_bot_router.callback_query(LeomatchProfileAction.filter(), LeomatchProfiles.MANAGE_LIKE)
-async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchLikeAction):
+async def handle_like_action(query: types.CallbackQuery, state: FSMContext, callback_data: LeomatchLikeAction):
     try:
         await query.message.edit_reply_markup()
     except:
         pass
+
     if callback_data.action == LikeActionEnum.LIKE:
         leo = await get_leo(callback_data.user_id)
         link = ""
@@ -289,17 +346,20 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
             is_username = True
         else:
             link = client.uid
+
         try:
             await bot_show_profile_db(callback_data.user_id, query.from_user.id)
         except:
             await next_like(query.message, state)
+
         try:
-            await query.message.answer(("Начнинай общаться!"), reply_markup=write_profile(link, is_username))
+            await query.message.answer("🎉 Начинайте общаться!", reply_markup=write_profile(link, is_username))
         except:
             await query.message.answer(
-                ("Извините, Вы не сможете начать общение так как у пользователя приватный аккаунт"))
+                "😔 Извините, Вы не сможете начать общение, так как у пользователя приватный аккаунт")
     elif callback_data.action == LikeActionEnum.REPORT:
         pass
+
     await state.set_data({"me": query.from_user.id})
     await delete_like(callback_data.user_id, query.from_user.id)
     await next_like(query.message, state)
@@ -309,8 +369,6 @@ async def choose_percent(query: types.CallbackQuery, state: FSMContext, callback
 async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfileAlert, state: FSMContext):
     try:
         print(f"Processing alert with action: {callback_data.action}")
-        print(f"Callback data full contents: {callback_data}")
-        print(f"Action type: {type(callback_data.action)}")
 
         if callback_data.action == "yes":
             sender = await get_leo(callback_data.sender_id)
@@ -324,8 +382,9 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
                     await show_media(main_bot, settings_conf.ADMIN, callback_data.account_id)
 
                     report_text = (
-                        f"Пользователь: @{sender_user.username} ({sender_user.uid}) пожаловался на\n"
-                        f"Пользователя: @{account_user.username} ({account_user.uid})\n"
+                        f"🚨 ЖАЛОБА\n\n"
+                        f"От: @{sender_user.username} ({sender_user.uid})\n"
+                        f"На: @{account_user.username} ({account_user.uid})\n"
                     )
 
                     await main_bot.send_message(
@@ -333,18 +392,38 @@ async def process_alert(query: types.CallbackQuery, callback_data: LeomatchProfi
                         text=report_text,
                         reply_markup=profile_alert_action(callback_data.sender_id, callback_data.account_id)
                     )
-                    await query.message.edit_text("Жалоба отправлена")
+                    await query.message.edit_text("✅ Жалоба отправлена администратору")
                 else:
-                    await query.message.edit_text("Ошибка: пользователь не найден")
+                    await query.message.edit_text("❌ Ошибка: пользователь не найден")
             else:
-                await query.message.edit_text("Ошибка: пользователь не найден")
+                await query.message.edit_text("❌ Ошибка: пользователь не найден")
 
         elif callback_data.action == "no":
-            await query.message.edit_text("Жалоба отменена")
+            await query.message.edit_text("❌ Жалоба отменена")
 
         await next_l(query.message, state)
 
     except Exception as e:
         print(f"Error processing report: {e}")
-        await query.message.edit_text("Жалоба отправлена")
+        await query.message.edit_text("✅ Жалоба отправлена")
         await next_l(query.message, state)
+
+
+# =============== UTILITY FUNCTIONS ===============
+
+async def create_likes_management_keyboard():
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, показать", callback_data="manage_likes_yes")],
+        [InlineKeyboardButton(text="❌ Нет, удалить все", callback_data="manage_likes_no")]
+    ])
+    return keyboard
+
+
+async def show_likes_prompt(message: types.Message, state: FSMContext):
+    keyboard = await create_likes_management_keyboard()
+    await message.answer(
+        "💕 У вас есть новые лайки!\n\n"
+        "Хотите посмотреть, кому вы понравились?",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchProfiles.MANAGE_LIKES)

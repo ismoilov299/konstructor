@@ -2,6 +2,7 @@ import os
 import traceback
 
 from aiogram import types, F
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
 from modul.clientbot.handlers.leomatch.data.state import LeomatchMain
 from modul.clientbot.handlers.leomatch.shortcuts import get_leo, show_profile_db, update_profile
@@ -12,16 +13,167 @@ from modul.loader import client_bot_router
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot
 
+
 async def start(message: types.Message, state: FSMContext):
-    await show_profile_db(message, message.from_user.id, reply_kb.get_numbers(4, True))
+    """Profil boshqaruv menyusini ko'rsatish"""
+    await show_profile_db(message, message.from_user.id)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Отредактировать профиль", callback_data="edit_full_profile")],
+        [InlineKeyboardButton(text="📸 Изменить фото/видео", callback_data="change_media")],
+        [InlineKeyboardButton(text="📝 Изменить описание", callback_data="change_description")],
+        [InlineKeyboardButton(text="👀 Просмотреть профили", callback_data="view_profiles")],
+        [InlineKeyboardButton(text="🚪 Выйти", callback_data="exit_profile_menu")]
+    ])
+
     await message.answer(
-        "1. Отредактировать мой профиль.\n2. Изменить фото/видео.\n3. Изменить текст профиля.\n4. Просмотреть профили",
-        reply_markup=reply_kb.get_numbers(4, True))
+        "⚙️ Управление профилем\n\nВыберите действие:",
+        reply_markup=keyboard
+    )
     await state.set_state(LeomatchMain.PROFILE_MANAGE)
 
 
+# =============== CALLBACK QUERY HANDLERS ===============
+
+@client_bot_router.callback_query(F.data == "view_profiles", LeomatchMain.WAIT)
+async def handle_view_profiles_from_wait(callback: types.CallbackQuery, state: FSMContext):
+    """Профил ko'rishni boshlash (WAIT state'dan)"""
+    leo = await get_leo(callback.from_user.id)
+    if not leo.active or not leo.search:
+        await update_profile(callback.from_user.id, {"active": True, "search": True})
+
+    await callback.message.edit_reply_markup()
+    await profiles.start(callback.message, state)
+    await callback.answer("🔍 Начинаем поиск профилей")
+
+
+@client_bot_router.callback_query(F.data == "my_profile", LeomatchMain.WAIT)
+async def handle_my_profile_from_wait(callback: types.CallbackQuery, state: FSMContext):
+    """Mening profilim (WAIT state'dan)"""
+    await callback.message.edit_reply_markup()
+    await start(callback.message, state)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "stop_search", LeomatchMain.WAIT)
+async def handle_stop_search(callback: types.CallbackQuery, state: FSMContext):
+    """Qidiruvni to'xtatish"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, деактивировать", callback_data="confirm_deactivate")],
+        [InlineKeyboardButton(text="❌ Нет, показать матчи", callback_data="show_matches")]
+    ])
+
+    await callback.message.edit_text(
+        "🤔 Тогда ты не будешь знать, кому ты нравишься...\n\n"
+        "Уверены насчет деактивации?",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchMain.SLEEP)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "confirm_deactivate", LeomatchMain.SLEEP)
+async def handle_confirm_deactivate(callback: types.CallbackQuery, state: FSMContext):
+    """Deaktivatsiyani tasdiqlash"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👀 Просмотр профилей", callback_data="view_profiles")]
+    ])
+
+    await callback.message.edit_text(
+        "😊 Надеюсь, вы встретили кого-нибудь с моей помощью!\n\n"
+        "Всегда рад пообщаться. Если скучно, напиши мне - я найду для тебя кого-то особенного.",
+        reply_markup=keyboard
+    )
+
+    await update_profile(callback.from_user.id, {"active": False, "search": False})
+    await state.set_state(LeomatchMain.WAIT)
+    await callback.answer("😴 Профиль деактивирован")
+
+
+@client_bot_router.callback_query(F.data == "show_matches", LeomatchMain.SLEEP)
+async def handle_show_matches(callback: types.CallbackQuery, state: FSMContext):
+    """Matchlarni ko'rsatish"""
+    await callback.message.edit_reply_markup()
+    await start(callback.message, state)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "edit_full_profile", LeomatchMain.PROFILE_MANAGE)
+async def handle_edit_full_profile(callback: types.CallbackQuery, state: FSMContext):
+    """To'liq profilni tahrirlash"""
+    await callback.message.edit_reply_markup()
+    await begin_registration(callback.message, state)
+    await callback.answer("✏️ Начинаем редактирование профиля")
+
+
+@client_bot_router.callback_query(F.data == "change_media", LeomatchMain.PROFILE_MANAGE)
+async def handle_change_media(callback: types.CallbackQuery, state: FSMContext):
+    """Media o'zgartirish"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_media_change")]
+    ])
+
+    await callback.message.edit_text(
+        "📸 Отправьте новое фото или видео (до 15 сек)",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchMain.SET_PHOTO)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "change_description", LeomatchMain.PROFILE_MANAGE)
+async def handle_change_description(callback: types.CallbackQuery, state: FSMContext):
+    """Tavsifni o'zgartirish"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_description_change")]
+    ])
+
+    await callback.message.edit_text(
+        "📝 Введите новое описание профиля",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchMain.SET_DESCRIPTION)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "view_profiles", LeomatchMain.PROFILE_MANAGE)
+async def handle_view_profiles_from_profile(callback: types.CallbackQuery, state: FSMContext):
+    """Profillarni ko'rish (PROFILE_MANAGE state'dan)"""
+    await callback.message.edit_reply_markup()
+    await profiles.start(callback.message, state)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "exit_profile_menu")
+async def handle_exit_profile_menu(callback: types.CallbackQuery, state: FSMContext):
+    """Profil menyusidan chiqish"""
+    bot = callback.message.bot
+    await callback.message.edit_reply_markup()
+    await return_main(callback.message, state, bot)
+    await callback.answer("🏠 Возвращаемся в главное меню")
+
+
+@client_bot_router.callback_query(F.data == "cancel_media_change", LeomatchMain.SET_PHOTO)
+async def handle_cancel_media_change(callback: types.CallbackQuery, state: FSMContext):
+    """Media o'zgartirishni bekor qilish"""
+    await callback.message.edit_reply_markup()
+    await start(callback.message, state)
+    await callback.answer("❌ Отменено")
+
+
+@client_bot_router.callback_query(F.data == "cancel_description_change", LeomatchMain.SET_DESCRIPTION)
+async def handle_cancel_description_change(callback: types.CallbackQuery, state: FSMContext):
+    """Tavsif o'zgartirishni bekor qilish"""
+    await callback.message.edit_reply_markup()
+    await start(callback.message, state)
+    await callback.answer("❌ Отменено")
+
+
+# =============== MESSAGE HANDLERS (BACKWARD COMPATIBILITY) ===============
+
 @client_bot_router.message(F.text == "1", LeomatchMain.WAIT)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_view_profiles_text(message: types.Message, state: FSMContext):
+    """Profillarni ko'rish (matn orqali)"""
     leo = await get_leo(message.from_user.id)
     if not leo.active or not leo.search:
         await update_profile(message.from_user.id, {"active": True, "search": True})
@@ -29,83 +181,120 @@ async def bot_start(message: types.Message, state: FSMContext):
 
 
 @client_bot_router.message(F.text == "2", LeomatchMain.WAIT)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_my_profile_text(message: types.Message, state: FSMContext):
+    """Mening profilim (matn orqali)"""
     await start(message, state)
 
 
 @client_bot_router.message(F.text == ("Выйти"), LeomatchMain.WAIT)
 @client_bot_router.message(F.text == ("Выйти"), LeomatchMain.PROFILE_MANAGE)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_exit_text(message: types.Message, state: FSMContext):
+    """Chiqish (matn orqali)"""
     bot = message.bot
-    await return_main(message, state,bot)
+    await return_main(message, state, bot)
 
 
 @client_bot_router.message(F.text == "3", LeomatchMain.WAIT)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_stop_search_text(message: types.Message, state: FSMContext):
+    """Qidiruvni to'xtatish (matn orqali)"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, деактивировать", callback_data="confirm_deactivate")],
+        [InlineKeyboardButton(text="❌ Нет, показать матчи", callback_data="show_matches")]
+    ])
+
     await message.answer(
-        (
-            "Тогда ты не будешь знать, кому ты нравишься... Уверены насчет деактивации?\n\n1. Да, деактивируйте мой профиль, пожалуйста.\n2. Нет, я хочу посмотреть свои матчи."),
-        reply_markup=reply_kb.get_numbers(2)
+        "🤔 Тогда ты не будешь знать, кому ты нравишься...\n\n"
+        "Уверены насчет деактивации?",
+        reply_markup=keyboard
     )
     await state.set_state(LeomatchMain.SLEEP)
 
 
 @client_bot_router.message(F.text == "1", LeomatchMain.SLEEP)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_confirm_deactivate_text(message: types.Message, state: FSMContext):
+    """Deaktivatsiyani tasdiqlash (matn orqali)"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👀 Просмотр профилей", callback_data="view_profiles")]
+    ])
+
     await message.answer(
-        (
-            "Надеюсь, вы встретили кого-нибудь с моей помощью! \nВсегда рад пообщаться. Если скучно, напиши мне - я найду для тебя кого-то особенного.\n\n1. Просмотр профилей"),
-        reply_markup=reply_kb.get_numbers(1)
+        "😊 Надеюсь, вы встретили кого-нибудь с моей помощью!\n\n"
+        "Всегда рад пообщаться. Если скучно, напиши мне - я найду для тебя кого-то особенного.",
+        reply_markup=keyboard
     )
+
     await update_profile(message.from_user.id, {"active": False, "search": False})
     await state.set_state(LeomatchMain.WAIT)
 
 
 @client_bot_router.message(F.text == "2", LeomatchMain.SLEEP)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_show_matches_text(message: types.Message, state: FSMContext):
+    """Matchlarni ko'rsatish (matn orqali)"""
     await start(message, state)
 
 
 @client_bot_router.message(F.text == "1", LeomatchMain.PROFILE_MANAGE)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_edit_full_profile_text(message: types.Message, state: FSMContext):
+    """To'liq profilni tahrirlash (matn orqali)"""
     await begin_registration(message, state)
 
 
 @client_bot_router.message(F.text == "2", LeomatchMain.PROFILE_MANAGE)
-async def bot_start(message: types.Message, state: FSMContext):
-    await message.answer(("Отправьте фото или видео (до 15 сек)"), reply_markup=reply_kb.cancel())
+async def handle_change_media_text(message: types.Message, state: FSMContext):
+    """Media o'zgartirish (matn orqali)"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_media_change")]
+    ])
+    await message.answer("📸 Отправьте новое фото или видео (до 15 сек)", reply_markup=keyboard)
     await state.set_state(LeomatchMain.SET_PHOTO)
 
 
 @client_bot_router.message(F.text == "3", LeomatchMain.PROFILE_MANAGE)
-async def bot_start(message: types.Message, state: FSMContext):
-    await message.answer(("Введите новый текст профиля"), reply_markup=reply_kb.cancel())
+async def handle_change_description_text(message: types.Message, state: FSMContext):
+    """Tavsifni o'zgartirish (matn orqali)"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_description_change")]
+    ])
+    await message.answer("📝 Введите новое описание профиля", reply_markup=keyboard)
     await state.set_state(LeomatchMain.SET_DESCRIPTION)
 
 
 @client_bot_router.message(F.text == "4", LeomatchMain.PROFILE_MANAGE)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_view_profiles_from_profile_text(message: types.Message, state: FSMContext):
+    """Profillarni ko'rish (PROFILE_MANAGE state'dan, matn orqali)"""
     await profiles.start(message, state)
 
 
 @client_bot_router.message(F.text == ("Отменить"), LeomatchMain.SET_DESCRIPTION)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_cancel_description_text(message: types.Message, state: FSMContext):
+    """Tavsif o'zgartirishni bekor qilish (matn orqali)"""
     await start(message, state)
 
 
 @client_bot_router.message(LeomatchMain.SET_DESCRIPTION)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_description_input(message: types.Message, state: FSMContext):
+    """Yangi tavsifni qabul qilish"""
+    if len(message.text) > 300:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_description_change")]
+        ])
+        await message.answer("📝 Описание слишком длинное. Максимум 300 символов.", reply_markup=keyboard)
+        return
+
     await update_profile(message.from_user.id, {"about_me": message.text})
+    await message.answer("✅ Описание успешно обновлено!")
     await start(message, state)
 
 
 @client_bot_router.message(F.text == ("Отменить"), LeomatchMain.SET_PHOTO)
-async def bot_start(message: types.Message, state: FSMContext):
+async def handle_cancel_media_text(message: types.Message, state: FSMContext):
+    """Media o'zgartirishni bekor qilish (matn orqali)"""
     await start(message, state)
 
 
 @client_bot_router.message(LeomatchMain.SET_PHOTO)
-async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
+async def handle_media_upload(message: types.Message, state: FSMContext, bot: Bot):
+    """Yangi media faylni qabul qilish"""
     try:
         photo = None
         media_type = None
@@ -117,20 +306,29 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
             file_extension = ".jpg"
         elif message.video:
             if message.video.duration > 15:
-                await message.answer("Пожалуйста, пришли видео не более 15 секунд")
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_media_change")]
+                ])
+                await message.answer("⚠️ Пожалуйста, пришлите видео не более 15 секунд", reply_markup=keyboard)
                 return
             photo = message.video
             media_type = "VIDEO"
             file_extension = ".mp4"
         elif message.video_note:
             if message.video_note.duration > 15:
-                await message.answer("Пожалуйста, пришли видео не более 15 секунд")
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_media_change")]
+                ])
+                await message.answer("⚠️ Пожалуйста, пришлите видео не более 15 секунд", reply_markup=keyboard)
                 return
             photo = message.video_note
             media_type = "VIDEO_NOTE"
             file_extension = ".mp4"
         else:
-            await message.answer("Пожалуйста, отправьте фото или видео")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_media_change")]
+            ])
+            await message.answer("📸 Пожалуйста, отправьте фото или видео", reply_markup=keyboard)
             return
 
         if photo:
@@ -149,6 +347,9 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
             # Загружаем файл
             print(f"Downloading file to: {abs_file_path}")
             try:
+                # Показываем процесс загрузки
+                loading_msg = await message.answer("⏳ Загружаю файл...")
+
                 # Загружаем файл с Telegram
                 await bot.download_file(file.file_path, abs_file_path)
 
@@ -166,21 +367,24 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
                         "media_type": media_type
                     })
 
+                    await loading_msg.delete()
+
                     if success:
-                        await message.answer("✅ Фото/видео успешно обновлено")
-
-                        # Проверяем, действительно ли файл существует
-                        print(f"After update, checking if file exists: {os.path.exists(abs_file_path)}")
-
+                        await message.answer("✅ Фото/видео успешно обновлено!")
                         await start(message, state)
                     else:
                         await message.answer("❌ Произошла ошибка при обновлении базы данных")
                 else:
                     print(f"WARNING: File was not saved: {abs_file_path}")
+                    await loading_msg.delete()
                     await message.answer("❌ Произошла ошибка при сохранении файла")
             except Exception as download_error:
                 print(f"Error downloading file: {download_error}")
                 print(f"Error traceback: {traceback.format_exc()}")
+                try:
+                    await loading_msg.delete()
+                except:
+                    pass
                 await message.answer("❌ Ошибка при загрузке файла")
         else:
             await message.answer("❌ Не удалось получить файл")
@@ -189,3 +393,31 @@ async def bot_start(message: types.Message, state: FSMContext, bot: Bot):
         print(f"Error in SET_PHOTO handler: {e}")
         print(f"Error traceback: {traceback.format_exc()}")
         await message.answer("❌ Произошла ошибка при обновлении фото/видео")
+
+
+# =============== UTILITY FUNCTIONS ===============
+
+async def create_profile_menu_keyboard():
+    """Profil boshqaruv menyusi klaviaturasini yaratish"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Отредактировать профиль", callback_data="edit_full_profile")],
+        [InlineKeyboardButton(text="📸 Изменить фото/видео", callback_data="change_media")],
+        [InlineKeyboardButton(text="📝 Изменить описание", callback_data="change_description")],
+        [InlineKeyboardButton(text="👀 Просмотреть профили", callback_data="view_profiles")],
+        [InlineKeyboardButton(text="🚪 Выйти", callback_data="exit_profile_menu")]
+    ])
+
+
+async def create_deactivation_keyboard():
+    """Deaktivatsiya tasdiqlash klaviaturasi"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, деактивировать", callback_data="confirm_deactivate")],
+        [InlineKeyboardButton(text="❌ Нет, показать матчи", callback_data="show_matches")]
+    ])
+
+
+async def create_cancel_keyboard(cancel_action: str):
+    """Bekor qilish klaviaturasi"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_action)]
+    ])
