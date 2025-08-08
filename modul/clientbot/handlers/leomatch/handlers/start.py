@@ -17,12 +17,9 @@ from modul.models import UserTG
 async def handle_start_registration_callback(callback: types.CallbackQuery, state: FSMContext):
     print("Start registration start 18 callback triggered for user:", callback.from_user.id)
     await callback.message.answer(
-        ("Отлично! Давай начнем с того, что расскажешь о себе. Как тебя зовут?"),
-        reply_markup=reply_kb.cancel()
+        ("Отлично! Давай начнем с твоего возраста. Пожалуйста, введи свой возраст в годах."),
     )
-    await state.set_state(LeomatchRegistration.NAME)
-
-
+    await state.set_state(LeomatchRegistration.AGE)
     await callback.answer()
 
 @client_bot_router.callback_query(F.data == "dont_want_search", LeomatchRegistration.BEGIN)
