@@ -1753,6 +1753,7 @@ async def inline_film_requests(query: InlineQuery):
 
 client_bot_router.message.register(bot_start, F.text == "🫰 Знакомства", DavinchiBotFilter())
 client_bot_router.message.register(bot_start_cancel, F.text == ("Я не хочу никого искать"), LeomatchRegistration.BEGIN)
+client_bot_router.callback_query(F.data == "start_registration")
 client_bot_router.message.register(bot_start_lets_leo, F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 
 from modul.clientbot.handlers.leomatch.handlers.start import handle_start_registration_callback, handle_dont_want_search_callback

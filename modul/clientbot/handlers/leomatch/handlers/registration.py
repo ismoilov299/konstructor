@@ -216,7 +216,7 @@ async def handle_final_edit(callback: types.CallbackQuery, state: FSMContext):
 
 
 # =============== MESSAGE HANDLERS (BACKWARD COMPATIBILITY) ===============
-
+@client_bot_router.callback_query(F.data == "start_registration")
 @client_bot_router.message(F.text == "Давай, начнем!", LeomatchRegistration.BEGIN)
 async def bot_start_lets_leo(message: types.Message, state: FSMContext):
     if message.from_user.username == None:
