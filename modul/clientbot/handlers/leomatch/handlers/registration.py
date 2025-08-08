@@ -20,7 +20,11 @@ async def now_send_photo(message: types.Message, state: FSMContext):
     kwargs = {}
     print(kwargs)
     if leo:
-        kwargs['reply_markup'] = reply_kb.save_current_photo()
+        # Inline keyboard yaratamiz
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Оставить текущее", callback_data="save_current_photo")]
+        ])
+        kwargs['reply_markup'] = keyboard
     await message.answer(("Теперь пришли фото или запиши видео 👍 (до 15 сек), его будут видеть другие пользователи"),
                          **kwargs)
     await state.set_state(LeomatchRegistration.SEND_PHOTO)
@@ -156,7 +160,7 @@ async def handle_name_selection(callback: types.CallbackQuery, state: FSMContext
 async def handle_save_current_about(callback: types.CallbackQuery, state: FSMContext):
     leo = await get_leo(callback.from_user.id)
     if not leo:
-        await callback.message.answer(("К сожалению, прошлый текст не сохранен"))
+        await callback.message.answer("❌ Предыдущий текст не сохранен. Пожалуйста, введите новый текст.")
         await callback.answer()
         return
     await state.update_data(about_me=leo.about_me)
@@ -168,7 +172,7 @@ async def handle_save_current_about(callback: types.CallbackQuery, state: FSMCon
 async def handle_save_current_photo(callback: types.CallbackQuery, state: FSMContext):
     leo = await get_leo(callback.from_user.id)
     if not leo:
-        await callback.message.answer(("К сожалению, прошлое медия не сохранено"))
+        await callback.message.answer("❌ Предыдущее медиа не сохранено. Пожалуйста, загрузите новое фото или видео.")
         await callback.answer()
         return
     await save_media(callback.message, state, leo.photo, leo.media_type)
@@ -309,7 +313,7 @@ async def handle_name_input(message: types.Message, state: FSMContext):
 async def handle_save_current_about_text(message: types.Message, state: FSMContext):
     leo = await get_leo(message.from_user.id)
     if not leo:
-        await message.answer(("К сожалению, прошлый текст не сохранен"))
+        await message.answer("❌ Предыдущий текст не сохранен. Пожалуйста, введите новый текст.")
         return
     await state.update_data(about_me=leo.about_me)
     await now_send_photo(message, state)
@@ -328,9 +332,13 @@ async def handle_about_me_input(message: types.Message, state: FSMContext):
 async def handle_save_current_photo_text(message: types.Message, state: FSMContext):
     leo = await get_leo(message.from_user.id)
     if not leo:
-        await message.answer(("К сожалению, прошлое медия не сохранено"))
+        await message.answer("❌ Предыдущее медиа не сохранено. Пожалуйста, загрузите новое фото или видео.")
         return
     await save_media(message, state, leo.photo, leo.media_type)
+
+
+# Import kerak bo'lgan funksiya
+from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 
 
 @client_bot_router.message(LeomatchRegistration.SEND_PHOTO)

@@ -4,7 +4,7 @@ import traceback
 from aiogram import types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
-from modul.clientbot.handlers.leomatch.data.state import LeomatchMain
+from modul.clientbot.handlers.leomatch.data.state import LeomatchMain, LeomatchRegistration
 from modul.clientbot.handlers.leomatch.shortcuts import get_leo, show_profile_db, update_profile
 from modul.clientbot.handlers.leomatch.handlers.shorts import begin_registration
 from modul.clientbot.handlers.leomatch.handlers import profiles
@@ -13,9 +13,22 @@ from modul.loader import client_bot_router
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot
 
+# Export funksiyalar ro'yxati
+__all__ = ['start', 'bot_start', 'profile_start']
+
 
 async def start(message: types.Message, state: FSMContext):
     """Profil boshqaruv menyusini ko'rsatish"""
+    # Avval leo profili mavjudligini tekshiramiz
+    leo = await get_leo(message.from_user.id)
+    if not leo:
+        await message.answer(
+            "❌ Профиль не найден. Необходимо пройти регистрацию.",
+            reply_markup=reply_kb.begin_registration()
+        )
+        await state.set_state(LeomatchRegistration.BEGIN)
+        return
+
     await show_profile_db(message, message.from_user.id)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -50,6 +63,17 @@ async def handle_view_profiles_from_wait(callback: types.CallbackQuery, state: F
 @client_bot_router.callback_query(F.data == "my_profile", LeomatchMain.WAIT)
 async def handle_my_profile_from_wait(callback: types.CallbackQuery, state: FSMContext):
     """Mening profilim (WAIT state'dan)"""
+    # Leo profili mavjudligini tekshirish
+    leo = await get_leo(callback.from_user.id)
+    if not leo:
+        await callback.message.edit_text(
+            "❌ Профиль не найден. Необходимо пройти регистрацию.",
+            reply_markup=reply_kb.begin_registration()
+        )
+        await state.set_state(LeomatchRegistration.BEGIN)
+        await callback.answer()
+        return
+
     await callback.message.edit_reply_markup()
     await start(callback.message, state)
     await callback.answer()
@@ -175,6 +199,10 @@ async def handle_cancel_description_change(callback: types.CallbackQuery, state:
 async def handle_view_profiles_text(message: types.Message, state: FSMContext):
     """Profillarni ko'rish (matn orqali)"""
     leo = await get_leo(message.from_user.id)
+    if not leo:
+        await message.answer("❌ Профиль не найден. Необходимо пройти регистрацию.")
+        return
+
     if not leo.active or not leo.search:
         await update_profile(message.from_user.id, {"active": True, "search": True})
     await profiles.start(message, state)
@@ -183,6 +211,14 @@ async def handle_view_profiles_text(message: types.Message, state: FSMContext):
 @client_bot_router.message(F.text == "2", LeomatchMain.WAIT)
 async def handle_my_profile_text(message: types.Message, state: FSMContext):
     """Mening profilim (matn orqali)"""
+    leo = await get_leo(message.from_user.id)
+    if not leo:
+        await message.answer(
+            "❌ Профиль не найден. Необходимо пройти регистрацию.",
+            reply_markup=reply_kb.begin_registration()
+        )
+        await state.set_state(LeomatchRegistration.BEGIN)
+        return
     await start(message, state)
 
 
@@ -393,6 +429,18 @@ async def handle_media_upload(message: types.Message, state: FSMContext, bot: Bo
         print(f"Error in SET_PHOTO handler: {e}")
         print(f"Error traceback: {traceback.format_exc()}")
         await message.answer("❌ Произошла ошибка при обновлении фото/видео")
+
+
+# =============== LEGACY COMPATIBILITY ===============
+
+# Legacy function for backward compatibility
+async def bot_start(message: types.Message, state: FSMContext):
+    """Legacy funksiya - backward compatibility uchun"""
+    await start(message, state)
+
+
+# Legacy alias
+profile_start = start  # Yangi nom uchun alias
 
 
 # =============== UTILITY FUNCTIONS ===============
