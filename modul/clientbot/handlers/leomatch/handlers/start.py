@@ -16,11 +16,21 @@ from modul.models import UserTG
 @client_bot_router.callback_query(F.data == "start_registration", LeomatchRegistration.BEGIN)
 async def handle_start_registration_callback(callback: types.CallbackQuery, state: FSMContext):
     print("Start registration start 18 callback triggered for user:", callback.from_user.id)
+
+    if callback.from_user.username == None:
+        await callback.message.answer(
+            "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните")
+
+    # Age keyboard'ini import qiling
+    from modul.clientbot.handlers.leomatch.handlers.shorts import create_age_input_keyboard
+    keyboard = await create_age_input_keyboard()
+
     await callback.message.answer(
-        ("Отлично! Давай начнем с твоего возраста. Пожалуйста, введи свой возраст в годах."),
+        "Отлично! Давай начнем с твоего возраста. Выбери свой возраст:",
+        reply_markup=keyboard
     )
     await state.set_state(LeomatchRegistration.AGE)
-    await callback.answer()
+    await callback.answer("✅ Начинаем регистрацию!")
 
 @client_bot_router.callback_query(F.data == "dont_want_search", LeomatchRegistration.BEGIN)
 async def handle_dont_want_search_callback(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
