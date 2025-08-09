@@ -215,9 +215,9 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                 )
                 print(f"User {'created' if created else 'found'}: {user}")
 
-                # LeoMatch topish yoki yaratish
+                # MUHIM: user_id ishlatish user o'rniga
                 leo, leo_created = LeoMatchModel.objects.get_or_create(
-                    user=user,
+                    user_id=user.id,  # user.id ishlatish
                     bot_username=bot_username,
                     defaults={
                         'photo': photo,
