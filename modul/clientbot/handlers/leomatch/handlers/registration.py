@@ -259,6 +259,11 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
             if success:
                 await state.clear()
                 await callback.message.edit_text("✅ Регистрация завершена успешно!")
+
+                # Kichik kechikish - database commit uchun
+                import asyncio
+                await asyncio.sleep(0.5)
+
                 await manage(callback.message, state)
                 await callback.answer("Добро пожаловать!")
             else:
