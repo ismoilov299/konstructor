@@ -38,9 +38,10 @@ def get_leo_match(user):
 
 async def get_leo(uid: int):
     try:
-        user = await sync_to_async(LeoMatchModel.objects.select_related('user').get)(user__uid=uid)
-        return user
-    except LeoMatchModel.DoesNotExist:
+        leo = await sync_to_async(LeoMatchModel.objects.select_related('user').filter(user__uid=str(uid)).first)()
+        return leo
+    except Exception as e:
+        print(f"DEBUG: Error in get_leo: {e}")
         return None
 
 # async def get_leo(uid: int):
