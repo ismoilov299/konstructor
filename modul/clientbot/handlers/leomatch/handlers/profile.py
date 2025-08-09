@@ -35,7 +35,16 @@ async def start(message: types.Message, state: FSMContext):
         await state.set_state(LeomatchRegistration.BEGIN)
         return
 
+    # Avval profilni ko'rsatish
     await show_profile_db(message, user_id)
+
+    # Keyin inline keyboard bilan menyu
+    keyboard = create_profile_menu_keyboard()
+    await message.answer(
+        "⚙️ Управление профилем\n\nВыберите действие:",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchMain.PROFILE_MANAGE)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Отредактировать профиль", callback_data="edit_full_profile")],
@@ -457,7 +466,7 @@ profile_start = start  # Yangi nom uchun alias
 
 # =============== UTILITY FUNCTIONS ===============
 
-async def create_profile_menu_keyboard():
+def create_profile_menu_keyboard():
     """Profil boshqaruv menyusi klaviaturasini yaratish"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Отредактировать профиль", callback_data="edit_full_profile")],
@@ -468,7 +477,7 @@ async def create_profile_menu_keyboard():
     ])
 
 
-async def create_deactivation_keyboard():
+def create_deactivation_keyboard():
     """Deaktivatsiya tasdiqlash klaviaturasi"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Да, деактивировать", callback_data="confirm_deactivate")],
@@ -476,7 +485,7 @@ async def create_deactivation_keyboard():
     ])
 
 
-async def create_cancel_keyboard(cancel_action: str):
+def create_cancel_keyboard(cancel_action: str):
     """Bekor qilish klaviaturasi"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отменить", callback_data=cancel_action)]
