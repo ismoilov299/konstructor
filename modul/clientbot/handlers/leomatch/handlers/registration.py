@@ -216,6 +216,10 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                     which_search,
                     bot_username
                 )
+                if success:
+                    print("✅ LeoMatch created successfully")
+                else:
+                    print("❌ Failed to create LeoMatch")
             else:
                 print(f"Updating existing LeoMatch for user {callback.from_user.id}")
                 success = await update_leo(
@@ -229,6 +233,10 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                     city=city,
                     which_search=which_search
                 )
+                if success:
+                    print("✅ LeoMatch updated successfully")
+                else:
+                    print("❌ Failed to update LeoMatch")
 
             if success:
                 await state.clear()
