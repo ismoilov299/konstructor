@@ -4,7 +4,7 @@ import traceback
 from aiogram import types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
-from modul.clientbot.handlers.leomatch.data.state import LeomatchMain
+from modul.clientbot.handlers.leomatch.data.state import LeomatchMain, LeomatchRegistration
 from modul.clientbot.handlers.leomatch.shortcuts import get_leo, show_profile_db, update_profile
 from modul.clientbot.handlers.leomatch.handlers.shorts import begin_registration
 from modul.clientbot.handlers.leomatch.handlers import profiles
