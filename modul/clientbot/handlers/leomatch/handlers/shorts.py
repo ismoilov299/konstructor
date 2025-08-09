@@ -9,7 +9,14 @@ from modul.clientbot.handlers.leomatch.shortcuts import get_leo
 async def manage(message: types.Message, state: FSMContext):
     """Asosiy boshqaruv menyusi"""
     data = await state.get_data()
-    me = data.get("me") if data.get("me") else message.from_user.id
+    me = data.get("me")
+
+    # Agar state'da me yo'q bo'lsa, message'dan olish (lekin callback'da bu bot ID bo'lishi mumkin)
+    if not me:
+        me = message.from_user.id
+        print(f"DEBUG: No 'me' in state, using message.from_user.id: {me}")
+    else:
+        print(f"DEBUG: Using 'me' from state: {me}")
 
     print(f"DEBUG: manage() called for user {me}")
 

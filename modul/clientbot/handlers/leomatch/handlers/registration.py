@@ -260,6 +260,9 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                 await state.clear()
                 await callback.message.edit_text("✅ Регистрация завершена успешно!")
 
+                # MUHIM: callback.from_user.id ni state'ga saqlash
+                await state.update_data(me=callback.from_user.id)
+
                 # Kichik kechikish - database commit uchun
                 import asyncio
                 await asyncio.sleep(0.5)
