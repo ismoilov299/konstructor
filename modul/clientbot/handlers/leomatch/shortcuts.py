@@ -182,13 +182,17 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             media_type = "PHOTO"
             print(f"Using default media_type: {media_type}")
 
-        # UserTG ni topish (uid int sifatida)
-        user = UserTG.objects.filter(uid=uid).first()  # uid int bo'lishi kerak
+        # UserTG ni topish - MUHIM: to'g'ri model nomini ishlatish
+        user = UserTG.objects.filter(uid=uid).first()
+
+        # Debug: user ning tipini tekshirish
+        print(f"User object type: {type(user)}")
+        print(f"User object value: {user}")
 
         if not user:
             print(f"User {uid} does not exist in UserTG table. Creating user...")
             user = UserTG.objects.create(
-                uid=uid,  # int sifatida saqlash
+                uid=uid,
                 username=f"user_{uid}",
                 first_name=full_name if full_name else f"User {uid}"
             )
@@ -196,8 +200,17 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         else:
             print(f"Found existing user with ID {user.id} and UID {user.uid}")
 
+        # MUHIM: User object ekanligini tasdiqlash
+        if not isinstance(user, UserTG):
+            print(f"ERROR: user is not UserTG instance: {type(user)}")
+            return False
+
         # LeoMatchModel ni topish
         leo = LeoMatchModel.objects.filter(user=user).first()
+
+        # Debug: leo tipini tekshirish
+        print(f"Leo object type: {type(leo)}")
+        print(f"Leo object: {leo}")
 
         if not leo:
             print(f"Creating new LeoMatchModel for user {uid}")
@@ -211,7 +224,7 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                 about_me=about_me,
                 city=city,
                 which_search=which_search,
-                active=True,  # Default qiymatlar
+                active=True,
                 search=True,
                 blocked=False,
                 count_likes=0
