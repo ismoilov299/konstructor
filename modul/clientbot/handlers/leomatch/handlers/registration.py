@@ -198,22 +198,46 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
         bot_info = await bot.get_me()
         bot_username = bot_info.username
 
+        # Leo mavjudligini tekshirish
         leo = await get_leo(callback.from_user.id)
 
         try:
             if not leo:
                 print(f"Creating new LeoMatch for user {callback.from_user.id}")
-                await add_leo(callback.from_user.id, photo, media_type, sex, age, full_name, about_me, city,
-                              which_search, bot_username)
+                success = await add_leo(
+                    callback.from_user.id,
+                    photo,
+                    media_type,
+                    sex,
+                    age,
+                    full_name,
+                    about_me,
+                    city,
+                    which_search,
+                    bot_username
+                )
             else:
                 print(f"Updating existing LeoMatch for user {callback.from_user.id}")
-                await update_leo(uid=callback.from_user.id, photo=photo, media_type=media_type, sex=sex, age=age,
-                                 full_name=full_name, about_me=about_me, city=city, which_search=which_search)
+                success = await update_leo(
+                    uid=callback.from_user.id,
+                    photo=photo,
+                    media_type=media_type,
+                    sex=sex,
+                    age=age,
+                    full_name=full_name,
+                    about_me=about_me,
+                    city=city,
+                    which_search=which_search
+                )
 
-            await state.clear()
-            await callback.message.edit_text("✅ Регистрация завершена успешно!")
-            await manage(callback.message, state)
-            await callback.answer("Добро пожаловать!")
+            if success:
+                await state.clear()
+                await callback.message.edit_text("✅ Регистрация завершена успешно!")
+                await manage(callback.message, state)
+                await callback.answer("Добро пожаловать!")
+            else:
+                await callback.message.edit_text("❌ Произошла ошибка при сохранении. Попробуйте еще раз.")
+                await callback.answer("Ошибка сохранения")
 
         except Exception as db_error:
             print(f"Database error: {db_error}")
