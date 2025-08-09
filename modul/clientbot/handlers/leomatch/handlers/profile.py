@@ -4,7 +4,7 @@ import traceback
 from aiogram import types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
-from modul.clientbot.handlers.leomatch.data.state import LeomatchMain, LeomatchRegistration
+from modul.clientbot.handlers.leomatch.data.state import LeomatchMain
 from modul.clientbot.handlers.leomatch.shortcuts import get_leo, show_profile_db, update_profile
 from modul.clientbot.handlers.leomatch.handlers.shorts import begin_registration
 from modul.clientbot.handlers.leomatch.handlers import profiles
@@ -19,8 +19,14 @@ __all__ = ['start', 'bot_start', 'profile_start']
 
 async def start(message: types.Message, state: FSMContext):
     """Profil boshqaruv menyusini ko'rsatish"""
+    # State'dan user ID olish
+    data = await state.get_data()
+    user_id = data.get("me") if data.get("me") else message.from_user.id
+
+    print(f"DEBUG: profile start() called for user {user_id}")
+
     # Avval leo profili mavjudligini tekshiramiz
-    leo = await get_leo(message.from_user.id)
+    leo = await get_leo(user_id)
     if not leo:
         await message.answer(
             "❌ Профиль не найден. Необходимо пройти регистрацию.",
@@ -29,7 +35,7 @@ async def start(message: types.Message, state: FSMContext):
         await state.set_state(LeomatchRegistration.BEGIN)
         return
 
-    await show_profile_db(message, message.from_user.id)
+    await show_profile_db(message, user_id)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Отредактировать профиль", callback_data="edit_full_profile")],
@@ -64,7 +70,7 @@ async def handle_view_profiles_from_wait(callback: types.CallbackQuery, state: F
 async def handle_my_profile_from_wait(callback: types.CallbackQuery, state: FSMContext):
     """Mening profilim (WAIT state'dan)"""
     # Leo profili mavjudligini tekshirish
-    leo = await get_leo(callback.from_user.id)
+    leo = await get_leo(callback.from_user.id)  # callback.from_user.id ishlatish
     if not leo:
         await callback.message.edit_text(
             "❌ Профиль не найден. Необходимо пройти регистрацию.",
@@ -74,6 +80,9 @@ async def handle_my_profile_from_wait(callback: types.CallbackQuery, state: FSMC
         await callback.answer()
         return
 
+    # User ID ni state'ga saqlash
+    await state.update_data(me=callback.from_user.id)
+
     await callback.message.edit_reply_markup()
     await start(callback.message, state)
     await callback.answer()
@@ -82,6 +91,9 @@ async def handle_my_profile_from_wait(callback: types.CallbackQuery, state: FSMC
 @client_bot_router.callback_query(F.data == "stop_search", LeomatchMain.WAIT)
 async def handle_stop_search(callback: types.CallbackQuery, state: FSMContext):
     """Qidiruvni to'xtatish"""
+    # User ID ni state'ga saqlash
+    await state.update_data(me=callback.from_user.id)
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Да, деактивировать", callback_data="confirm_deactivate")],
         [InlineKeyboardButton(text="❌ Нет, показать матчи", callback_data="show_matches")]
