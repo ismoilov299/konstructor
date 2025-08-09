@@ -182,10 +182,9 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             media_type = "PHOTO"
             print(f"Using default media_type: {media_type}")
 
-        # UserTG ni topish - MUHIM: to'g'ri model nomini ishlatish
+        # UserTG ni topish
         user = UserTG.objects.filter(uid=uid).first()
 
-        # Debug: user ning tipini tekshirish
         print(f"User object type: {type(user)}")
         print(f"User object value: {user}")
 
@@ -200,22 +199,15 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         else:
             print(f"Found existing user with ID {user.id} and UID {user.uid}")
 
-        # MUHIM: User object ekanligini tasdiqlash
-        if not isinstance(user, UserTG):
-            print(f"ERROR: user is not UserTG instance: {type(user)}")
-            return False
+        # MUHIM: user_id orqali query qilish
+        leo = LeoMatchModel.objects.filter(user_id=user.id).first()
 
-        # LeoMatchModel ni topish
-        leo = LeoMatchModel.objects.filter(user=user).first()
-
-        # Debug: leo tipini tekshirish
-        print(f"Leo object type: {type(leo)}")
-        print(f"Leo object: {leo}")
+        print(f"Leo query result: {leo}")
 
         if not leo:
             print(f"Creating new LeoMatchModel for user {uid}")
             leo = LeoMatchModel.objects.create(
-                user=user,
+                user_id=user.id,  # user_id ishlatish
                 photo=photo,
                 media_type=media_type,
                 sex=sex,
@@ -251,7 +243,6 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
         return False
-
 async def show_media(bot: Bot, to_account: int, from_account: int, text_before: str = "",
                      reply_markup: types.ReplyKeyboardMarkup = None):
     account = await get_leo(from_account)
