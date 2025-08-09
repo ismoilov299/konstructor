@@ -39,8 +39,8 @@ async def manage(message: types.Message, state: FSMContext):
                 print(f"DEBUG: Found user: {user}")
 
                 if user:
-                    # Keyin LeoMatchModel ni topamiz
-                    leo = LeoMatchModel.objects.filter(user=user).first()
+                    # MUHIM: user_id ishlatish user o'rniga
+                    leo = LeoMatchModel.objects.filter(user_id=user.id).first()
                     print(f"DEBUG: Found leo: {leo}")
 
                     if leo:

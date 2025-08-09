@@ -37,18 +37,30 @@ def get_leo_match(user):
 
 
 async def get_leo(uid: int):
-    try:
-        print(f"DEBUG: get_leo called with uid: {uid}")
-        # MUHIM: str(uid) ishlatish
-        leo = await sync_to_async(LeoMatchModel.objects.select_related('user').get)(user__uid=str(uid))
-        print(f"DEBUG: Found leo: {leo}")
-        return leo
-    except LeoMatchModel.DoesNotExist:
-        print(f"DEBUG: LeoMatchModel not found for uid: {str(uid)}")
-        return None
-    except Exception as e:
-        print(f"DEBUG: Error in get_leo: {e}")
-        return None
+    from asgiref.sync import sync_to_async
+
+    @sync_to_async
+    def get_leo_sync():
+        try:
+            print(f"DEBUG: get_leo_sync called with uid: {uid}")
+            # 1. UserTG topish
+            user = UserTG.objects.filter(uid=str(uid)).first()
+            if not user:
+                print(f"DEBUG: UserTG not found for uid: {uid}")
+                return None
+
+            print(f"DEBUG: Found UserTG: {user}, id: {user.id}")
+
+            # 2. LeoMatchModel topish user_id orqali
+            leo = LeoMatchModel.objects.filter(user_id=user.id).first()
+            print(f"DEBUG: Found LeoMatchModel: {leo}")
+
+            return leo
+        except Exception as e:
+            print(f"DEBUG: Error in get_leo_sync: {e}")
+            return None
+
+    return await get_leo_sync()
 
 # async def get_leo(uid: int):
 #     user = await get_client(uid)
