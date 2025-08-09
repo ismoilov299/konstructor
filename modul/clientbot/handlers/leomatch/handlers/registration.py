@@ -198,45 +198,63 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
         bot_info = await bot.get_me()
         bot_username = bot_info.username
 
-        # Leo mavjudligini tekshirish
-        leo = await get_leo(callback.from_user.id)
-
         try:
-            if not leo:
-                print(f"Creating new LeoMatch for user {callback.from_user.id}")
-                success = await add_leo(
-                    callback.from_user.id,
-                    photo,
-                    media_type,
-                    sex,
-                    age,
-                    full_name,
-                    about_me,
-                    city,
-                    which_search,
-                    bot_username
+            # Get or create approach - xavfsizroq
+            from modul.models import UserTG, LeoMatchModel
+            from asgiref.sync import sync_to_async
+
+            @sync_to_async
+            def get_or_create_leo():
+                # User topish yoki yaratish
+                user, created = UserTG.objects.get_or_create(
+                    uid=str(callback.from_user.id),
+                    defaults={
+                        'username': f"user_{callback.from_user.id}",
+                        'first_name': full_name if full_name else f"User {callback.from_user.id}"
+                    }
                 )
-                if success:
-                    print("✅ LeoMatch created successfully")
-                else:
-                    print("❌ Failed to create LeoMatch")
-            else:
-                print(f"Updating existing LeoMatch for user {callback.from_user.id}")
-                success = await update_leo(
-                    uid=callback.from_user.id,
-                    photo=photo,
-                    media_type=media_type,
-                    sex=sex,
-                    age=age,
-                    full_name=full_name,
-                    about_me=about_me,
-                    city=city,
-                    which_search=which_search
+                print(f"User {'created' if created else 'found'}: {user}")
+
+                # LeoMatch topish yoki yaratish
+                leo, leo_created = LeoMatchModel.objects.get_or_create(
+                    user=user,
+                    bot_username=bot_username,
+                    defaults={
+                        'photo': photo,
+                        'media_type': media_type,
+                        'sex': sex,
+                        'age': age,
+                        'full_name': full_name,
+                        'about_me': about_me,
+                        'city': city,
+                        'which_search': which_search,
+                        'active': True,
+                        'search': True,
+                        'blocked': False,
+                        'count_likes': 0
+                    }
                 )
-                if success:
-                    print("✅ LeoMatch updated successfully")
+
+                if not leo_created:
+                    # Update existing record
+                    leo.photo = photo
+                    leo.media_type = media_type
+                    leo.sex = sex
+                    leo.age = age
+                    leo.full_name = full_name
+                    leo.about_me = about_me
+                    leo.city = city
+                    leo.which_search = which_search
+                    leo.active = True
+                    leo.search = True
+                    leo.save()
+                    print("LeoMatch updated successfully")
                 else:
-                    print("❌ Failed to update LeoMatch")
+                    print("LeoMatch created successfully")
+
+                return True
+
+            success = await get_or_create_leo()
 
             if success:
                 await state.clear()
