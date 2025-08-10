@@ -51,8 +51,13 @@ async def get_leo(uid: int):
 
             print(f"DEBUG: Found UserTG: {user}, id: {user.id}")
 
-            # 2. LeoMatchModel topish user_id orqali
-            leo = LeoMatchModel.objects.filter(user_id=user.id).first()
+            # UserTG bilan bog'langan Django User mavjudligini tekshiramiz
+            if not user.user:
+                print(f"DEBUG: Django User not linked for UserTG {user.id}")
+                return None
+
+            # 2. LeoMatchModel topish user orqali
+            leo = LeoMatchModel.objects.filter(user=user.user).first()
             print(f"DEBUG: Found LeoMatchModel: {leo}")
 
             return leo
@@ -187,7 +192,7 @@ def save_model_sync(model):
 
 
 @sync_to_async
-def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search):
+def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, which_search, bot_username):
     try:
         # Debug
         print(f"Updating LeoMatch data for user {uid}")
@@ -222,14 +227,28 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
         else:
             print(f"Found existing user with ID {user.id} and UID {user.uid}")
 
-        # Поиск существующей LeoMatchModel записи по user
-        leo = LeoMatchModel.objects.filter(user=user).first()
+        # Ensure there's a linked Django User
+        if not user.user:
+            django_user = User.objects.create(
+                username=f"tg_user_{uid}",
+                first_name=full_name if full_name else f"User {uid}",
+                last_name="",
+            )
+            user.user = django_user
+            user.save()
+            print(f"Created Django User {django_user.id} for UserTG {user.id}")
+        else:
+            django_user = user.user
+            print(f"Linked Django User {django_user.id} for UserTG {user.id}")
+
+        # Поиск существующей LeoMatchModel записи по user и bot_username
+        leo = LeoMatchModel.objects.filter(user=django_user, bot_username=bot_username).first()
 
         # Если записи нет - создаём новую
         if not leo:
             print(f"Creating new LeoMatchModel for user {uid}")
             leo = LeoMatchModel.objects.create(
-                user=user,
+                user=django_user,
                 photo=photo,
                 media_type=media_type,
                 sex=sex,
@@ -237,7 +256,8 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
                 full_name=full_name,
                 about_me=about_me,
                 city=city,
-                which_search=which_search
+                which_search=which_search,
+                bot_username=bot_username,
             )
             print(f"Created new LeoMatchModel for user {uid}")
         else:
@@ -250,6 +270,7 @@ def update_leo(uid, photo, media_type, sex, age, full_name, about_me, city, whic
             leo.about_me = about_me
             leo.city = city
             leo.which_search = which_search
+            leo.bot_username = bot_username
             leo.save()
             print(f"Updated existing LeoMatchModel for user {uid}")
 

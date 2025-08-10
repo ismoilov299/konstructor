@@ -8,9 +8,8 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 from modul.clientbot.handlers.leomatch.handlers.shorts import manage, begin_registration, set_which_search, set_sex
-from modul.clientbot.handlers.leomatch.shortcuts import add_leo, get_leo, show_profile, update_leo
+from modul.clientbot.handlers.leomatch.shortcuts import get_leo, show_profile, update_leo
 from modul.clientbot.utils.functs import return_main
-from modul.clientbot.shortcuts import get_current_bot
 from modul.loader import client_bot_router, bot_session
 from aiogram.fsm.context import FSMContext
 
@@ -198,87 +197,34 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
         bot_info = await bot.get_me()
         bot_username = bot_info.username
 
-        try:
-            # Get or create approach - xavfsizroq
-            from modul.models import UserTG, LeoMatchModel
-            from asgiref.sync import sync_to_async
+        success = await update_leo(
+            uid=callback.from_user.id,
+            photo=photo,
+            media_type=media_type,
+            sex=sex,
+            age=age,
+            full_name=full_name,
+            about_me=about_me,
+            city=city,
+            which_search=which_search,
+            bot_username=bot_username,
+        )
 
-            @sync_to_async
-            def get_or_create_leo():
-                # User topish yoki yaratish
-                user, created = UserTG.objects.get_or_create(
-                    uid=str(callback.from_user.id),
-                    defaults={
-                        'username': f"user_{callback.from_user.id}",
-                        'first_name': full_name if full_name else f"User {callback.from_user.id}"
-                    }
-                )
-                print(f"User {'created' if created else 'found'}: {user}")
+        if success:
+            await state.clear()
+            await callback.message.edit_text("✅ Регистрация завершена успешно!")
 
-                # MUHIM: user_id ishlatish user o'rniga
-                leo, leo_created = LeoMatchModel.objects.get_or_create(
-                    user_id=user.id,  # user.id ishlatish
-                    bot_username=bot_username,
-                    defaults={
-                        'photo': photo,
-                        'media_type': media_type,
-                        'sex': sex,
-                        'age': age,
-                        'full_name': full_name,
-                        'about_me': about_me,
-                        'city': city,
-                        'which_search': which_search,
-                        'active': True,
-                        'search': True,
-                        'blocked': False,
-                        'count_likes': 0
-                    }
-                )
+            # MUHIM: callback.from_user.id ni state'ga saqlash
+            await state.update_data(me=callback.from_user.id)
 
-                if not leo_created:
-                    # Update existing record
-                    leo.photo = photo
-                    leo.media_type = media_type
-                    leo.sex = sex
-                    leo.age = age
-                    leo.full_name = full_name
-                    leo.about_me = about_me
-                    leo.city = city
-                    leo.which_search = which_search
-                    leo.active = True
-                    leo.search = True
-                    leo.save()
-                    print("LeoMatch updated successfully")
-                else:
-                    print("LeoMatch created successfully")
+            # Kichik kechikish - database commit uchun
+            import asyncio
+            await asyncio.sleep(0.5)
 
-                return True
-
-            success = await get_or_create_leo()
-
-            if success:
-                await state.clear()
-                await callback.message.edit_text("✅ Регистрация завершена успешно!")
-
-                # MUHIM: callback.from_user.id ni state'ga saqlash
-                await state.update_data(me=callback.from_user.id)
-
-                # Kichik kechikish - database commit uchun
-                import asyncio
-                await asyncio.sleep(0.5)
-
-                await manage(callback.message, state)
-                await callback.answer("Добро пожаловать!")
-            else:
-                await callback.message.edit_text("❌ Произошла ошибка при сохранении. Попробуйте еще раз.")
-                await callback.answer("Ошибка сохранения")
-
-        except Exception as db_error:
-            print(f"Database error: {db_error}")
-            import traceback
-            print(f"Traceback: {traceback.format_exc()}")
-
-            await callback.message.edit_text("❌ Произошла ошибка при сохранении данных. Попробуйте еще раз.")
+            await manage(callback.message, state)
+            await callback.answer("Добро пожаловать!")
+        else:
+            await callback.message.edit_text("❌ Произошла ошибка при сохранении. Попробуйте еще раз.")
             await callback.answer("Ошибка сохранения")
 
     except Exception as e:
@@ -487,16 +433,24 @@ async def handle_final_yes_text(message: types.Message, state: FSMContext, bot: 
     bot_info = await bot.get_me()
     bot_username = bot_info.username
 
-    leo = await get_leo(message.from_user.id)
-    if not leo:
-        await add_leo(message.from_user.id, photo, media_type, sex, age, full_name, about_me, city, which_search,
-                      bot_username)
-    else:
-        await update_leo(uid=message.from_user.id, photo=photo, media_type=media_type, sex=sex, age=age,
-                         full_name=full_name, about_me=about_me, city=city, which_search=which_search)
+    success = await update_leo(
+        uid=message.from_user.id,
+        photo=photo,
+        media_type=media_type,
+        sex=sex,
+        age=age,
+        full_name=full_name,
+        about_me=about_me,
+        city=city,
+        which_search=which_search,
+        bot_username=bot_username,
+    )
 
-    await state.clear()
-    await manage(message, state)
+    if success:
+        await state.clear()
+        await manage(message, state)
+    else:
+        await message.answer("❌ Произошла ошибка при сохранении. Попробуйте еще раз.")
 
 
 @client_bot_router.message(F.text == ("Изменить анкету"), LeomatchRegistration.FINAL)
