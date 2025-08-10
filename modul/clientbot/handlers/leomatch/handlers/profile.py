@@ -13,19 +13,15 @@ from modul.loader import client_bot_router
 from aiogram.fsm.context import FSMContext
 from aiogram import Bot
 
-# Export funksiyalar ro'yxati
 __all__ = ['start', 'bot_start', 'profile_start']
 
 
 async def start(message: types.Message, state: FSMContext):
-    """Profil boshqaruv menyusini ko'rsatish"""
-    # State'dan user ID olish
     data = await state.get_data()
     user_id = data.get("me") if data.get("me") else message.from_user.id
 
     print(f"DEBUG: profile start() called for user {user_id}")
 
-    # Avval leo profili mavjudligini tekshiramiz
     leo = await get_leo(user_id)
     if not leo:
         await message.answer(
@@ -35,16 +31,7 @@ async def start(message: types.Message, state: FSMContext):
         await state.set_state(LeomatchRegistration.BEGIN)
         return
 
-    # Avval profilni ko'rsatish
     await show_profile_db(message, user_id)
-
-    # Keyin inline keyboard bilan menyu
-    keyboard = create_profile_menu_keyboard()
-    await message.answer(
-        "⚙️ Управление профилем\n\nВыберите действие:",
-        reply_markup=keyboard
-    )
-    await state.set_state(LeomatchMain.PROFILE_MANAGE)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Отредактировать профиль", callback_data="edit_full_profile")],
@@ -61,7 +48,7 @@ async def start(message: types.Message, state: FSMContext):
     await state.set_state(LeomatchMain.PROFILE_MANAGE)
 
 
-# =============== CALLBACK QUERY HANDLERS ===============
+
 
 @client_bot_router.callback_query(F.data == "view_profiles", LeomatchMain.WAIT)
 async def handle_view_profiles_from_wait(callback: types.CallbackQuery, state: FSMContext):
