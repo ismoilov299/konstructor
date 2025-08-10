@@ -20,7 +20,7 @@ from asgiref.sync import sync_to_async
 from aiogram import Bot
 from aiogram.types import URLInputFile
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 lock = Lock()
 
@@ -71,7 +71,7 @@ def get_and_delete_task():
             task_id = task.id
             task_copy = models.TaskModel.objects.filter(id=task_id).get()
             models.TaskModel.objects.filter(id=task_id).delete()
-            print(task_copy)
+            logger.debug(task_copy)
             return task_copy
     return None
 
@@ -94,7 +94,7 @@ async def task_runner():
 
         client = task.client
         bot = client.bot
-        print(client.uid, task.task_type)
+        logger.debug(f"%s %s", client.uid, task.task_type)
 
         if task.task_type == models.TaskTypeEnum.DOWNLOAD_MEDIA:
             url = task.data['url']
