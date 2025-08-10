@@ -26,19 +26,17 @@ from modul.config import scheduler, settings_conf
 from modul.helpers.filters import setup_main_bot_filter
 from modul.loader import dp, main_bot_router, client_bot_router, bot_session, main_bot
 import tracemalloc
-
-tracemalloc.start()
-
-print(scheduler.print_jobs())
-default = DefaultBotProperties(parse_mode="HTML")
-
 import logging
 import time
 
+tracemalloc.start()
+
 # Настройка логгера
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+logger.debug(scheduler.print_jobs())
+default = DefaultBotProperties(parse_mode="HTML")
 
 async def setup_routers():
     logger.info("Setting up routers")
