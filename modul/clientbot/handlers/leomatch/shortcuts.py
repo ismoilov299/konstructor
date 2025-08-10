@@ -285,7 +285,10 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
         kwargs = {}
         if keyboard:
-            kwargs['reply_markup'] = keyboard
+            if isinstance(keyboard, type):
+                kwargs['reply_markup'] = keyboard()
+            else:
+                kwargs['reply_markup'] = keyboard
 
         # Преобразуем относительный путь в абсолютный
         abs_base_dir = "/var/www/konstructor"
