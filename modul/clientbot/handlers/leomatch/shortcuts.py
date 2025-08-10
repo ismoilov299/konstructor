@@ -284,11 +284,19 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         text = f"\n\nВам сообщение: {comment}" if comment else ""
         caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
         kwargs = {}
+
+        # KEYBOARD NI TO'G'RI HANDLE QILISH
         if keyboard:
+            # Agar keyboard class bo'lsa (masalan ReplyKeyboardMarkup), uni ignore qilamiz
             if isinstance(keyboard, type):
-                kwargs['reply_markup'] = keyboard()
-            else:
+                print(f"DEBUG: Ignoring keyboard class: {keyboard}")
+                # Keyboard ni qo'shmaymiz, kwargs bo'sh qoladi
+            # Agar keyboard valid instance bo'lsa, ishlatamiz
+            elif hasattr(keyboard, 'keyboard') or isinstance(keyboard, (ReplyKeyboardMarkup, dict)):
                 kwargs['reply_markup'] = keyboard
+                print(f"DEBUG: Using valid keyboard: {type(keyboard)}")
+            else:
+                print(f"DEBUG: Unknown keyboard type: {type(keyboard)}, ignoring")
 
         # Преобразуем относительный путь в абсолютный
         abs_base_dir = "/var/www/konstructor"
@@ -350,7 +358,17 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
     except Exception as e:
         print(f"DEBUG: Error in show_profile: {e}")
         print(f"DEBUG: Error traceback: {traceback.format_exc()}")
-        await message.answer(f"{full_name}, {age}, {city}\n{about_me}\nОшибка при загрузке медиа: {str(e)}", **kwargs)
+
+        # Error da ham keyboard muammosini oldini olamiz
+        error_kwargs = {}  # Bo'sh kwargs ishlatamiz
+        try:
+            await message.answer(f"{full_name}, {age}, {city}\n{about_me}\nОшибка при загрузке медиа: {str(e)}",
+                                 **error_kwargs)
+        except Exception as inner_e:
+            print(f"DEBUG: Error in error handler: {inner_e}")
+            # Eng oddiy xabar
+            await message.answer(f"Произошла ошибка при отображении профиля")
+
 
 async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int, city: str, about_me: str, url: str,
                            type: str, username: str, keyboard=None):
@@ -358,8 +376,15 @@ async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int,
     bot = await get_bot_by_username(leo.bot_username)
     caption = f"{full_name}, {age}, {city}\n{about_me}"
     kwargs = {}
+
     if keyboard:
-        kwargs['reply_markup'] = keyboard
+        if isinstance(keyboard, type):
+            print(f"DEBUG: Ignoring keyboard class in bot_show_profile: {keyboard}")
+        elif hasattr(keyboard, 'keyboard') or isinstance(keyboard, (ReplyKeyboardMarkup, dict)):
+            kwargs['reply_markup'] = keyboard
+        else:
+            print(f"DEBUG: Unknown keyboard type in bot_show_profile: {type(keyboard)}")
+
     async with Bot(bot.token, bot_session, parse_mode="HTML").context(auto_close=False) as bot_:
         await bot_.send_message(to_uid, "Есть взаимная симпатия!")
         if type == "PHOTO" or type == MediaTypeEnum.PHOTO:
@@ -376,7 +401,7 @@ async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int,
         else:
             link = from_uid
         try:
-            await bot_.send_message(to_uid, ("Начнинай общаться!"), reply_markup=write_profile(link, is_username))
+            await bot_.send_message(to_uid, ("Начинай общаться!"), reply_markup=write_profile(link, is_username))
         except:
             await bot_.send_message(to_uid,
                                     ("Извините, Вы не сможете начать общение так как у пользователя приватный аккаунт"))
