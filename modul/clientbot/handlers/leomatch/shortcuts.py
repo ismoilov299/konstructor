@@ -43,7 +43,6 @@ async def get_leo(uid: int):
     def get_leo_sync():
         try:
             print(f"DEBUG: get_leo_sync called with uid: {uid}")
-            # 1. UserTG topish
             user = UserTG.objects.filter(uid=str(uid)).first()
             if not user:
                 print(f"DEBUG: UserTG not found for uid: {uid}")
@@ -51,8 +50,11 @@ async def get_leo(uid: int):
 
             print(f"DEBUG: Found UserTG: {user}, id: {user.id}")
 
-            # 2. LeoMatchModel topish user_id orqali
-            leo = LeoMatchModel.objects.filter(user_id=user.id).first()
+            if not user.user:
+                print(f"DEBUG: UserTG has no connected User!")
+                return None
+
+            leo = LeoMatchModel.objects.filter(user_id=user.user.id).first()  # ✅ TO'G'RI!
             print(f"DEBUG: Found LeoMatchModel: {leo}")
 
             return leo
