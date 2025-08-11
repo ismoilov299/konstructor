@@ -217,7 +217,7 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
 
                 # MUHIM: user_id ishlatish user o'rniga
                 leo, leo_created = LeoMatchModel.objects.get_or_create(
-                    user_id=user.id,  # user.id ishlatish
+                    user_id=user.user.id, # user.id ishlatish
                     bot_username=bot_username,
                     defaults={
                         'photo': photo,
