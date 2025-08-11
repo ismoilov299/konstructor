@@ -183,8 +183,10 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
 
 @client_bot_router.callback_query(F.data == "restart_search")
 async def handle_restart_search(callback: types.CallbackQuery, state: FSMContext):
-    """Qidiruvni qaytadan boshlash"""
     await callback.message.edit_reply_markup()
+
+    await state.update_data(me=callback.from_user.id)
+
     await start(callback.message, state)
     await callback.answer("🔄 Поиск перезапущен")
 
