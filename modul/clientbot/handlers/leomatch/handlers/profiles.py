@@ -184,20 +184,17 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
 @client_bot_router.callback_query(F.data == "restart_search")
 async def handle_restart_search(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_reply_markup()
-
     await state.update_data(me=callback.from_user.id)
-
     await start(callback.message, state)
     await callback.answer("🔄 Поиск перезапущен")
 
 
 @client_bot_router.callback_query(F.data == "back_to_main")
 async def handle_back_to_main(callback: types.CallbackQuery, state: FSMContext):
-    """Asosiy menyuga qaytish"""
     await callback.message.edit_reply_markup()
+    await state.update_data(me=callback.from_user.id)
     await manage(callback.message, state)
     await callback.answer()
-
 
 @client_bot_router.callback_query(F.data == "cancel_message_input", LeomatchProfiles.INPUT_MESSAGE)
 async def handle_cancel_message_input(callback: types.CallbackQuery, state: FSMContext):
