@@ -89,40 +89,92 @@ def get_user_uid_sync(leo):
     return leo.user.uid
 
 
-
 async def get_leos_id(me: int):
     try:
         leo_me = await get_leo(me)
         if not leo_me:
+            print(f"DEBUG: Current user not found: {me}")
             return []
+
+        print(f"DEBUG: Current user: {leo_me.full_name}, sex: {leo_me.sex}, which_search: {leo_me.which_search}")
 
         kwargs = {}
         if leo_me.which_search != SexEnum.ANY.value:
             kwargs['sex'] = leo_me.which_search
+            print(f"DEBUG: Searching for sex: {leo_me.which_search}")
 
         @sync_to_async
-        def filter_leos_sync(kwargs, my_sex, my_id):
-            return list(LeoMatchModel.objects.filter(
+        def filter_leos_sync(kwargs, my_id):
+            # Step by step debugging
+            total_leos = LeoMatchModel.objects.all().count()
+            print(f"DEBUG: Total LEOs in database: {total_leos}")
+
+            # Har bir Leo haqida ma'lumot
+            all_leos = LeoMatchModel.objects.all()
+            for leo in all_leos:
+                print(
+                    f"DEBUG: Leo {leo.id}: {leo.full_name}, active={leo.active}, search={leo.search}, blocked={leo.blocked}")
+
+            active_leos = LeoMatchModel.objects.filter(active=True).count()
+            print(f"DEBUG: Active LEOs: {active_leos}")
+
+            search_leos = LeoMatchModel.objects.filter(search=True).count()
+            print(f"DEBUG: Search=True LEOs: {search_leos}")
+
+            not_blocked_leos = LeoMatchModel.objects.filter(blocked=False).count()
+            print(f"DEBUG: Not blocked LEOs: {not_blocked_leos}")
+
+            combined_filter = LeoMatchModel.objects.filter(
+                active=True,
+                search=True,
+                blocked=False
+            ).count()
+            print(f"DEBUG: Active + Search + Not blocked LEOs: {combined_filter}")
+
+            # O'zimizni exclude qilish
+            excluding_me = LeoMatchModel.objects.filter(
+                active=True,
+                search=True,
+                blocked=False
+            ).exclude(id=my_id).count()
+            print(f"DEBUG: After excluding myself (id={my_id}): {excluding_me}")
+
+            # Sex filtri bilan
+            final_query = LeoMatchModel.objects.filter(
                 Q(active=True) &
                 Q(search=True) &
+                Q(blocked=False) &
                 Q(**kwargs) &
                 ~Q(id=my_id)
-            ).select_related('user'))
+            )
 
-        leos = await filter_leos_sync(kwargs, leo_me.sex, leo_me.id)
+            final_count = final_query.count()
+            print(f"DEBUG: With sex filter: {final_count}")
+
+            # Final SQL queryni ko'rish
+            print(f"DEBUG: Final SQL: {final_query.query}")
+
+            return list(final_query.select_related('user'))
+
+        leos = await filter_leos_sync(kwargs, leo_me.id)
+        print(f"DEBUG: Final filtered LEOs count: {len(leos)}")
 
         users_id = []
         for leo in leos:
             try:
+                print(f"DEBUG: Adding user: {leo.full_name}, uid: {leo.user.uid}")
                 users_id.append(leo.user.uid)
             except Exception as e:
                 print(f"Error getting user_uid for leo {leo.id}: {e}")
                 continue
 
+        print(f"DEBUG: Final users_id list: {users_id}")
         return users_id
 
     except Exception as e:
         print(f"Error in get_leos_id: {e}")
+        import traceback
+        print(traceback.format_exc())
         return []
 
 
