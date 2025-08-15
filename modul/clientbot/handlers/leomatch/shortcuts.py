@@ -52,14 +52,24 @@ async def get_leo(uid: int):
 
             if not user.user:
                 print(f"DEBUG: UserTG has no connected User!")
-                return None
+                # Django User yaratish
+                django_user = User.objects.create(
+                    username=f"tg_user_{user.uid}",
+                    first_name=user.first_name or f"User {user.uid}",
+                    last_name=user.last_name or "",
+                )
+                user.user = django_user
+                user.save()
+                print(f"DEBUG: Created Django User {django_user.id} for UserTG {user.uid}")
 
-            leo = LeoMatchModel.objects.filter(user_id=user.user.id).first()  # ✅ TO'G'RI!
+            leo = LeoMatchModel.objects.filter(user_id=user.user.id).first()
             print(f"DEBUG: Found LeoMatchModel: {leo}")
 
             return leo
         except Exception as e:
             print(f"DEBUG: Error in get_leo_sync: {e}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
             return None
 
     return await get_leo_sync()
