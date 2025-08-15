@@ -37,7 +37,9 @@ def get_leo_match(user):
 
 
 async def get_leo(uid: int):
-    from asgiref.sync import sync_to_async
+    """
+    Leo profilni olish (avtomatik bog'lash bilan)
+    """
 
     @sync_to_async
     def get_leo_sync():
@@ -50,18 +52,25 @@ async def get_leo(uid: int):
 
             print(f"DEBUG: Found UserTG: {user}, id: {user.id}")
 
+            # Agar UserTG.user None bo'lsa, bog'lashga harakat qilish
             if not user.user:
-                print(f"DEBUG: UserTG has no connected User!")
-                # Django User yaratish
-                django_user = User.objects.create(
-                    username=f"tg_user_{user.uid}",
-                    first_name=user.first_name or f"User {user.uid}",
-                    last_name=user.last_name or "",
-                )
-                user.user = django_user
-                user.save()
-                print(f"DEBUG: Created Django User {django_user.id} for UserTG {user.uid}")
+                print(f"DEBUG: UserTG has no connected User, trying to connect...")
+                username = f"tg_user_{user.uid}"
 
+                # Mavjud Django User'ni topish
+                django_user = User.objects.filter(username=username).first()
+
+                if django_user:
+                    print(f"DEBUG: Found existing Django User with username {username}, connecting...")
+                    user.user = django_user
+                    user.save()
+                    print(f"DEBUG: Connected existing Django User {django_user.id} to UserTG {user.uid}")
+                else:
+                    print(f"DEBUG: No existing Django User found with username {username}")
+                    # Bu holda None qaytaramiz, registratsiya qilsin
+                    return None
+
+            # Leo profilni topish
             leo = LeoMatchModel.objects.filter(user_id=user.user.id).first()
             print(f"DEBUG: Found LeoMatchModel: {leo}")
 
@@ -189,7 +198,53 @@ async def get_leos_id(me: int):
 
 
 async def exists_leo(uid: int):
-    return await get_leo(uid) is not None
+    """
+    Leo profil mavjudligini tekshirish (avtomatik bog'lash bilan)
+    """
+
+    @sync_to_async
+    def exists_leo_sync():
+        try:
+            print(f"DEBUG: exists_leo called for uid: {uid}")
+
+            # UserTG mavjudligini tekshirish
+            user = UserTG.objects.filter(uid=str(uid)).first()
+            if not user:
+                print(f"DEBUG: UserTG not found for uid: {uid}")
+                return False
+
+            print(f"DEBUG: UserTG found: {user}")
+
+            # Agar UserTG.user None bo'lsa, bog'lashga harakat qilish
+            if user.user is None:
+                print(f"DEBUG: UserTG.user is None, trying to connect...")
+                username = f"tg_user_{user.uid}"
+                django_user = User.objects.filter(username=username).first()
+
+                if django_user:
+                    print(f"DEBUG: Found existing Django User, connecting...")
+                    user.user = django_user
+                    user.save()
+                    print(f"DEBUG: Connected successfully")
+                else:
+                    print(f"DEBUG: No Django User found with username {username}")
+
+            # Leo profil mavjudligini tekshirish
+            if user.user:
+                leo_exists = LeoMatchModel.objects.filter(user_id=user.user.id).exists()
+                print(f"DEBUG: Leo profile exists: {leo_exists}")
+                return leo_exists
+            else:
+                print(f"DEBUG: No connected Django User, Leo doesn't exist")
+                return False
+
+        except Exception as e:
+            print(f"DEBUG: Error in exists_leo: {e}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
+            return False
+
+    return await exists_leo_sync()
 
 
 @sync_to_async

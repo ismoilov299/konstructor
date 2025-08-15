@@ -43,21 +43,30 @@ async def handle_refuse_registration_callback(callback: types.CallbackQuery, sta
     await callback.answer("Регистрация отменена")
 
 
-
 @client_bot_router.message(F.text == "🫰 Знакомства")
 async def bot_start(message: types.Message, state: FSMContext):
-    has_user = await exists_leo(message.from_user.id)
-    if not has_user:
-        await message.answer(
-            ("Добро пожаловать! Я - бот для знакомств. Я помогу тебе найти свою вторую половинку. "),
-            reply_markup=reply_kb.begin_registration())
-        await state.set_state(LeomatchRegistration.BEGIN)
-    else:
-        account = await get_leo(message.from_user.id)
-        if account.blocked:
-            await message.answer(("Ваш аккаунт заблокирован"))
+    print(f"DEBUG: bot_start called for user {message.from_user.id}")
+
+    # Leo profil mavjudligini tekshiramiz (bu avtomatik bog'lash ham qiladi)
+    has_leo = await exists_leo(message.from_user.id)
+    print(f"DEBUG: Leo exists: {has_leo}")
+
+    if has_leo:
+        # Leo profil mavjud
+        leo = await get_leo(message.from_user.id)
+        if leo and leo.blocked:
+            await message.answer("Ваш аккаунт заблокирован")
             return
+        # Asosiy menyuga o'tish
         await manage(message, state)
+    else:
+        # Leo profil yo'q - registratsiyaga
+        print(f"DEBUG: No Leo profile, starting registration")
+        await message.answer(
+            "Добро пожаловать! Я - бот для знакомств. Я помогу тебе найти свою вторую половинку.",
+            reply_markup=reply_kb.begin_registration()
+        )
+        await state.set_state(LeomatchRegistration.BEGIN)
 
 @client_bot_router.message(F.text == ("Я не хочу никого искать"), LeomatchRegistration.BEGIN)
 async def bot_start_cancel(message: types.Message, state: FSMContext, bot: Bot):
