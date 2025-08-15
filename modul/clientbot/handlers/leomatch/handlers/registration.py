@@ -14,6 +14,8 @@ from modul.clientbot.shortcuts import get_current_bot
 from modul.loader import client_bot_router, bot_session
 from aiogram.fsm.context import FSMContext
 
+from modul.models import User
+
 
 async def now_send_photo(message: types.Message, state: FSMContext):
     leo = await get_leo(message.from_user.id)
@@ -215,9 +217,24 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                 )
                 print(f"User {'created' if created else 'found'}: {user}")
 
-                # MUHIM: user_id ishlatish user o'rniga
+                # Agar UserTG.user None bo'lsa, Django User yaratish
+                if user.user is None:
+                    print(f"UserTG has no connected User, creating Django User...")
+                    django_user = User.objects.create(
+                        username=f"tg_user_{user.uid}",
+                        first_name=user.first_name or full_name,
+                        last_name=user.last_name or "",
+                    )
+                    user.user = django_user
+                    user.save()
+                    print(f"Created Django User with ID {django_user.id} for UserTG {user.uid}")
+                else:
+                    django_user = user.user
+                    print(f"Using existing Django User with ID {django_user.id}")
+
+                # LeoMatchModel yaratish yoki yangilash
                 leo, leo_created = LeoMatchModel.objects.get_or_create(
-                    user_id=user.user.id, # user.id ishlatish
+                    user_id=django_user.id,  # To'g'ridan-to'g'ri django_user.id ishlatish
                     bot_username=bot_username,
                     defaults={
                         'photo': photo,
