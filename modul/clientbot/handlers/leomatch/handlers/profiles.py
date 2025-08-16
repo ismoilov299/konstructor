@@ -90,6 +90,9 @@ async def next_l_direct(message: types.Message, state: FSMContext):
         current = leos.pop(0)
         await state.update_data(leos=leos)
 
+        # profile_view_action importini ichkarida qilish
+        from modul.clientbot.handlers.leomatch.keyboards.inline_kb import profile_view_action
+
         # Profilni ko'rsatish
         await show_profile_db(message, current, keyboard=profile_view_action(current))
         await state.set_state(LeomatchProfiles.LOOCK)

@@ -54,41 +54,46 @@ async def start(message: types.Message, state: FSMContext):
 
 
 @client_bot_router.callback_query(F.data == "view_profiles", LeomatchMain.WAIT)
-async def handle_view_profiles_from_wait_v2(callback: types.CallbackQuery, state: FSMContext):
-    """Muqobil yechim - to'g'ridan-to'g'ri profiles ni chaqirish"""
+async def handle_view_profiles_from_wait(callback: types.CallbackQuery, state: FSMContext):
+    """Profil ko'rishni boshlash (WAIT state'dan)"""
+    print(f"\n🔥 === CALLBACK DEBUG START ===")
+    print(f"callback.from_user.id: {callback.from_user.id}")
+    print(f"callback.from_user.username: {callback.from_user.username}")
 
+    # REAL USER ID
     real_user_id = callback.from_user.id
-    print(f"🔥 ALTERNATIVE: Real user ID: {real_user_id}")
+    print(f"✅ Using real_user_id: {real_user_id}")
 
     # State'ga saqlash
-    await state.clear()  # State'ni tozalash
     await state.update_data(me=real_user_id)
 
-    # To'g'ridan-to'g'ri search qilish
-    print(f"🔍 Direct search for {real_user_id}")
-    leos = await get_leos_id_simple(real_user_id)
-    print(f"📊 Found: {len(leos)} users")
-
-    if len(leos) == 0:
+    # Leo profilini tekshirish
+    leo = await get_leo(real_user_id)
+    if not leo:
+        print(f"❌ Leo not found for user: {real_user_id}")
         await callback.message.edit_text(
-            "😔 Сейчас нет доступных профилей для просмотра.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔄 Попробовать еще раз", callback_data="restart_search")],
-                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
-            ])
+            "❌ Профиль не найден. Необходимо пройти регистрацию.",
+            reply_markup=reply_kb.begin_registration()
         )
+        await state.set_state(LeomatchRegistration.BEGIN)
         await callback.answer()
         return
 
-    # Muvaffaqiyatli natija
-    await state.update_data(leos=leos)
-    await callback.message.edit_text("🔍 Начинаем поиск...")
+    print(f"✅ Leo found: {leo.full_name}")
 
-    # To'g'ridan-to'g'ri next_l ni chaqirish
-    await state.set_state(LeomatchProfiles.LOOCK)
-    await next_l_direct(callback.message, state)
+    # Active qilish
+    if not leo.active or not leo.search:
+        await update_profile(real_user_id, {"active": True, "search": True})
 
-    await callback.answer("✅ Поиск начат")
+    await callback.message.edit_reply_markup()
+
+    # profiles modulini import qilish (ichkarida, circular import'ni oldini olish uchun)
+    from modul.clientbot.handlers.leomatch.handlers import profiles
+
+    await profiles.start(callback.message, state)
+    print(f"=== CALLBACK DEBUG END ===\n")
+
+    await callback.answer("🔍 Начинаем поиск профилей")
 
 
 async def get_leos_id_simple(me: int):
@@ -124,7 +129,7 @@ async def get_leos_id_simple(me: int):
             print(f"📋 Processing users:")
             for i, leo in enumerate(not_blocked, 1):
                 try:
-                    if leo.user and leo.user.uid:
+                    if leo.user and hasattr(leo.user, 'uid') and leo.user.uid:
                         result.append(leo.user.uid)
                         print(f"  {i}. ✅ {leo.full_name} (UID: {leo.user.uid})")
                     else:
