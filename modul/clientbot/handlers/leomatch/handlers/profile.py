@@ -3,8 +3,10 @@ import traceback
 
 from aiogram import types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from asgiref.sync import sync_to_async
+
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
-from modul.clientbot.handlers.leomatch.data.state import LeomatchMain, LeomatchRegistration
+from modul.clientbot.handlers.leomatch.data.state import LeomatchMain, LeomatchRegistration, LeomatchProfiles
 from modul.clientbot.handlers.leomatch.shortcuts import get_leo, show_profile_db, update_profile
 from modul.clientbot.handlers.leomatch.handlers.shorts import begin_registration
 from modul.clientbot.handlers.leomatch.handlers import profiles
@@ -14,6 +16,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram import Bot
 
 __all__ = ['start', 'bot_start', 'profile_start']
+
+from modul.models import LeoMatchModel
 
 
 async def start(message: types.Message, state: FSMContext):
@@ -48,19 +52,97 @@ async def start(message: types.Message, state: FSMContext):
     await state.set_state(LeomatchMain.PROFILE_MANAGE)
 
 
-
-
 @client_bot_router.callback_query(F.data == "view_profiles", LeomatchMain.WAIT)
-async def handle_view_profiles_from_wait(callback: types.CallbackQuery, state: FSMContext):
-    """Профил ko'rishni boshlash (WAIT state'dan)"""
-    leo = await get_leo(callback.from_user.id)
-    if not leo.active or not leo.search:
-        await update_profile(callback.from_user.id, {"active": True, "search": True})
+async def handle_view_profiles_from_wait_v2(callback: types.CallbackQuery, state: FSMContext):
+    """Muqobil yechim - to'g'ridan-to'g'ri profiles ni chaqirish"""
 
-    await callback.message.edit_reply_markup()
-    await profiles.start(callback.message, state)
-    await callback.answer("🔍 Начинаем поиск профилей")
+    real_user_id = callback.from_user.id
+    print(f"🔥 ALTERNATIVE: Real user ID: {real_user_id}")
 
+    # State'ga saqlash
+    await state.clear()  # State'ni tozalash
+    await state.update_data(me=real_user_id)
+
+    # To'g'ridan-to'g'ri search qilish
+    print(f"🔍 Direct search for {real_user_id}")
+    leos = await get_leos_id_simple(real_user_id)
+    print(f"📊 Found: {len(leos)} users")
+
+    if len(leos) == 0:
+        await callback.message.edit_text(
+            "😔 Сейчас нет доступных профилей для просмотра.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Попробовать еще раз", callback_data="restart_search")],
+                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
+            ])
+        )
+        await callback.answer()
+        return
+
+    # Muvaffaqiyatli natija
+    await state.update_data(leos=leos)
+    await callback.message.edit_text("🔍 Начинаем поиск...")
+
+    # To'g'ridan-to'g'ri next_l ni chaqirish
+    await state.set_state(LeomatchProfiles.LOOCK)
+    await next_l_direct(callback.message, state)
+
+    await callback.answer("✅ Поиск начат")
+
+
+async def get_leos_id_simple(me: int):
+    """Soddalashtirilgan qidiruv - debug bilan"""
+    try:
+        print(f"\n🔍 === SIMPLE SEARCH DEBUG ===")
+        print(f"Search for user: {me}")
+
+        leo_me = await get_leo(me)
+        if not leo_me:
+            print(f"❌ Current user not found in get_leos_id_simple")
+            return []
+
+        print(f"✅ Current user: {leo_me.full_name}")
+
+        @sync_to_async
+        def get_all_others(my_id):
+            print(f"🔍 Looking for others, excluding my_id: {my_id}")
+
+            # Barcha LeoMatchModel
+            all_leos = LeoMatchModel.objects.all()
+            print(f"📊 Total LeoMatch records: {all_leos.count()}")
+
+            # O'zimni exclude qilish
+            others = LeoMatchModel.objects.exclude(id=my_id)
+            print(f"📊 After excluding self: {others.count()}")
+
+            # Blocked emas
+            not_blocked = others.filter(blocked=False)
+            print(f"📊 Not blocked: {not_blocked.count()}")
+
+            result = []
+            print(f"📋 Processing users:")
+            for i, leo in enumerate(not_blocked, 1):
+                try:
+                    if leo.user and leo.user.uid:
+                        result.append(leo.user.uid)
+                        print(f"  {i}. ✅ {leo.full_name} (UID: {leo.user.uid})")
+                    else:
+                        print(f"  {i}. ⚠️ {leo.full_name}: no UID")
+                except Exception as e:
+                    print(f"  {i}. ❌ Error with {leo.full_name}: {e}")
+
+            print(f"🎯 Final result: {result}")
+            return result
+
+        users_id = await get_all_others(leo_me.id)
+        print(f"=== SIMPLE SEARCH DEBUG END ===\n")
+        return users_id
+
+    except Exception as e:
+        print(f"❌ Error in simple search: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return []
 
 @client_bot_router.callback_query(F.data == "my_profile", LeomatchMain.WAIT)
 async def handle_my_profile_from_wait(callback: types.CallbackQuery, state: FSMContext):
