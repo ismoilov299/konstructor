@@ -5,7 +5,6 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 
 from modul.clientbot.handlers.leomatch.data.state import LeomatchProfiles, LeomatchMain
-from modul.clientbot.handlers.leomatch.handlers.profile import get_leos_id_simple
 from modul.clientbot.handlers.leomatch.shortcuts import bot_show_profile_db, clear_all_likes, delete_like, get_leo, \
     get_leos_id, get_first_like, leo_set_like, show_media, show_profile_db
 from modul.clientbot.handlers.leomatch.keyboards.inline_kb import profile_alert, profile_alert_action, \
