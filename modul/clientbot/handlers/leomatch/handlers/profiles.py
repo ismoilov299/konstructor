@@ -24,9 +24,50 @@ from aiogram import types, F
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("🔍 Начинаем поиск...", reply_markup=types.ReplyKeyboardRemove())
-    leos = await get_leos_id(message.from_user.id)
+
+    print(f"\n🚀 === PROFILE SEARCH STARTED ===")
+    print(f"User: {message.from_user.id} (@{message.from_user.username})")
+
+    # Avval oddiy versiyani sinab ko'ring
+    leos = await get_leos_id_simple(message.from_user.id)
+
+    # Agar oddiy versiyada ham muammo bo'lsa, batafsil versiyani ishlatamiz
+    if len(leos) == 0:
+        print(f"⚠️ Simple search returned 0 results, trying detailed search...")
+        leos = await get_leos_id(message.from_user.id)
+
+    print(f"📊 Search completed: {len(leos)} potential matches found")
+
+    if len(leos) == 0:
+        print(f"😞 No matches found - showing help message")
+
+        # Test uchun: database'da umuman boshqa userlar bormi?
+        from asgiref.sync import sync_to_async
+
+        @sync_to_async
+        def check_total_users():
+            total = LeoMatchModel.objects.count()
+            my_leo = LeoMatchModel.objects.filter(user__uid=str(message.from_user.id)).first()
+            my_id = my_leo.id if my_leo else None
+            others = LeoMatchModel.objects.exclude(id=my_id).count() if my_id else total
+            return total, others
+
+        total_users, other_users = await check_total_users()
+        print(f"📈 Database stats: {total_users} total users, {other_users} others")
+
+        # Foydalanuvchiga xabar berish
+        if total_users <= 1:
+            help_text = "😔 В базе данных пока нет других пользователей.\n\n🎯 Пригласите друзей или подождите, пока зарегистрируются новые пользователи!"
+        else:
+            help_text = "😔 Сейчас нет подходящих анкет.\n\n🔄 Возможные причины:\n• Все пользователи заблокированы\n• Несовместимые критерии поиска\n• Пользователи неактивны"
+    else:
+        help_text = f"✨ Найдено {len(leos)} анкет для просмотра!"
+
     await state.set_data({"leos": leos})
+
+    # Далее по старому алгоритму
     await next_l(message, state)
+    print(f"=== PROFILE SEARCH COMPLETED ===\n")
 
 
 async def next_l(message: types.Message, state: FSMContext):

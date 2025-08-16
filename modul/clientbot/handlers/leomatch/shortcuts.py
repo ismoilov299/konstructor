@@ -110,88 +110,114 @@ def get_user_uid_sync(leo):
 
 async def get_leos_id(me: int):
     try:
+        print(f"\n🔍 === SEARCH DEBUG START ===")
+        print(f"Looking for matches for user: {me}")
+
         leo_me = await get_leo(me)
         if not leo_me:
-            print(f"DEBUG: Current user not found: {me}")
+            print(f"❌ Current user not found: {me}")
             return []
 
-        print(f"DEBUG: Current user: {leo_me.full_name}, sex: {leo_me.sex}, which_search: {leo_me.which_search}")
-
-        kwargs = {}
-        if leo_me.which_search != SexEnum.ANY.value:
-            kwargs['sex'] = leo_me.which_search
-            print(f"DEBUG: Searching for sex: {leo_me.which_search}")
+        print(f"✅ Current user: {leo_me.full_name} (ID: {leo_me.id})")
+        print(f"   - My sex: {leo_me.sex}")
+        print(f"   - I'm looking for: {leo_me.which_search}")
+        print(f"   - My status: active={leo_me.active}, search={leo_me.search}, blocked={leo_me.blocked}")
 
         @sync_to_async
-        def filter_leos_sync(kwargs, my_id):
-            # Step by step debugging
-            total_leos = LeoMatchModel.objects.all().count()
-            print(f"DEBUG: Total LEOs in database: {total_leos}")
+        def filter_leos_sync(my_id, my_sex, my_search_preference):
+            print(f"\n📊 DATABASE ANALYSIS:")
 
-            # Har bir Leo haqida ma'lumot
+            # 1. Barcha foydalanuvchilarni ko'rish
             all_leos = LeoMatchModel.objects.all()
-            for leo in all_leos:
-                print(
-                    f"DEBUG: Leo {leo.id}: {leo.full_name}, active={leo.active}, search={leo.search}, blocked={leo.blocked}")
+            total_count = all_leos.count()
+            print(f"Total users in database: {total_count}")
 
-            active_leos = LeoMatchModel.objects.filter(active=True).count()
-            print(f"DEBUG: Active LEOs: {active_leos}")
+            if total_count == 0:
+                print("❌ No users in database at all!")
+                return []
 
-            search_leos = LeoMatchModel.objects.filter(search=True).count()
-            print(f"DEBUG: Search=True LEOs: {search_leos}")
+            # 2. Har bir foydalanuvchi haqida batafsil ma'lumot
+            print(f"\n👥 ALL USERS IN DATABASE:")
+            for i, leo in enumerate(all_leos, 1):
+                try:
+                    user_uid = leo.user.uid if leo.user else "NO_UID"
+                    print(f"  {i}. {leo.full_name} (ID: {leo.id}, UID: {user_uid})")
+                    print(f"     Sex: {leo.sex}, Looking for: {leo.which_search}")
+                    print(f"     Status: active={leo.active}, search={leo.search}, blocked={leo.blocked}")
+                except Exception as e:
+                    print(f"  {i}. Error reading user {leo.id}: {e}")
 
-            not_blocked_leos = LeoMatchModel.objects.filter(blocked=False).count()
-            print(f"DEBUG: Not blocked LEOs: {not_blocked_leos}")
+            # 3. O'zimni exclude qilish
+            others_query = LeoMatchModel.objects.exclude(id=my_id)
+            others_count = others_query.count()
+            print(f"\n🚫 After excluding myself: {others_count} users")
 
-            combined_filter = LeoMatchModel.objects.filter(
-                active=True,
-                search=True,
-                blocked=False
-            ).count()
-            print(f"DEBUG: Active + Search + Not blocked LEOs: {combined_filter}")
+            # 4. Faqat blocked bo'lmaganlarni olish (active va search shartini o'chirish)
+            not_blocked_query = others_query.filter(blocked=False)
+            not_blocked_count = not_blocked_query.count()
+            print(f"🔓 Not blocked users: {not_blocked_count}")
 
-            # O'zimizni exclude qilish
-            excluding_me = LeoMatchModel.objects.filter(
-                active=True,
-                search=True,
-                blocked=False
-            ).exclude(id=my_id).count()
-            print(f"DEBUG: After excluding myself (id={my_id}): {excluding_me}")
+            # 5. Sex compatibility tekshirish
+            compatible_users = []
 
-            # Sex filtri bilan
-            final_query = LeoMatchModel.objects.filter(
-                Q(active=True) &
-                Q(search=True) &
-                Q(blocked=False) &
-                Q(**kwargs) &
-                ~Q(id=my_id)
-            )
+            print(f"\n💕 COMPATIBILITY CHECK:")
+            print(f"I am {my_sex}, looking for {my_search_preference}")
 
-            final_count = final_query.count()
-            print(f"DEBUG: With sex filter: {final_count}")
+            for leo in not_blocked_query:
+                try:
+                    user_uid = leo.user.uid if leo.user else "NO_UID"
 
-            # Final SQL queryni ko'rish
-            print(f"DEBUG: Final SQL: {final_query.query}")
+                    # Men ularni qidiryapmanmi?
+                    i_want_them = (my_search_preference == SexEnum.ANY.value or
+                                   my_search_preference == leo.sex)
 
-            return list(final_query.select_related('user'))
+                    # Ular meni qidiryaptimi?
+                    they_want_me = (leo.which_search == SexEnum.ANY.value or
+                                    leo.which_search == my_sex)
 
-        leos = await filter_leos_sync(kwargs, leo_me.id)
-        print(f"DEBUG: Final filtered LEOs count: {len(leos)}")
+                    print(f"  👤 {leo.full_name} ({leo.sex}):")
+                    print(f"     - I want them: {i_want_them} (looking for {my_search_preference}, they are {leo.sex})")
+                    print(f"     - They want me: {they_want_me} (they look for {leo.which_search}, I am {my_sex})")
+                    print(f"     - Match: {i_want_them and they_want_me}")
 
+                    # Faqat mutual interest bo'lsa qo'shish
+                    if i_want_them and they_want_me:
+                        compatible_users.append(leo)
+                        print(f"     ✅ ADDED TO MATCHES!")
+                    else:
+                        print(f"     ❌ Not compatible")
+
+                except Exception as e:
+                    print(f"     ❌ Error checking compatibility: {e}")
+
+            print(f"\n🎯 FINAL COMPATIBLE USERS: {len(compatible_users)}")
+            return compatible_users
+
+        # Qidiruv bajarish
+        leos = await filter_leos_sync(leo_me.id, leo_me.sex, leo_me.which_search)
+
+        # UID larni to'plash
         users_id = []
+        print(f"\n📝 CONVERTING TO UID LIST:")
+
         for leo in leos:
             try:
-                print(f"DEBUG: Adding user: {leo.full_name}, uid: {leo.user.uid}")
-                users_id.append(leo.user.uid)
+                if leo.user and leo.user.uid:
+                    users_id.append(leo.user.uid)
+                    print(f"  ✅ Added: {leo.full_name} (UID: {leo.user.uid})")
+                else:
+                    print(f"  ⚠️ Skipped {leo.full_name}: no UID")
             except Exception as e:
-                print(f"Error getting user_uid for leo {leo.id}: {e}")
-                continue
+                print(f"  ❌ Error with {leo.full_name}: {e}")
 
-        print(f"DEBUG: Final users_id list: {users_id}")
+        print(f"\n🎯 FINAL RESULT: {len(users_id)} matches")
+        print(f"UIDs: {users_id}")
+        print(f"=== SEARCH DEBUG END ===\n")
+
         return users_id
 
     except Exception as e:
-        print(f"Error in get_leos_id: {e}")
+        print(f"❌ CRITICAL ERROR in get_leos_id: {e}")
         import traceback
         print(traceback.format_exc())
         return []
