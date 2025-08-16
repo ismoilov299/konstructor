@@ -223,6 +223,54 @@ async def get_leos_id(me: int):
         return []
 
 
+async def get_leos_id_simple(me: int):
+    """Soddalashtirilgan qidiruv"""
+    try:
+        print(f"\n🔍 === SIMPLE SEARCH ===")
+        print(f"Search for user: {me}")
+
+        leo_me = await get_leo(me)
+        if not leo_me:
+            print(f"❌ Current user not found")
+            return []
+
+        print(f"✅ Current user: {leo_me.full_name}")
+
+        @sync_to_async
+        def get_all_others(my_id):
+            try:
+                # Barcha boshqa userlar
+                others = LeoMatchModel.objects.exclude(id=my_id).filter(blocked=False)
+                print(f"📊 Found {others.count()} other users")
+
+                result = []
+                for i, leo in enumerate(others, 1):
+                    try:
+                        # UserTG orqali UID olish
+                        user_tg = UserTG.objects.filter(user=leo.user).first()
+                        if user_tg and user_tg.uid:
+                            result.append(user_tg.uid)
+                            print(f"  {i}. ✅ {leo.full_name} (UID: {user_tg.uid})")
+                        else:
+                            print(f"  {i}. ⚠️ {leo.full_name}: no UserTG found")
+                    except Exception as e:
+                        print(f"  {i}. ❌ Error with {leo.full_name}: {e}")
+
+                print(f"🎯 Final result: {len(result)} UIDs")
+                return result
+            except Exception as e:
+                print(f"❌ Error in get_all_others: {e}")
+                return []
+
+        users_id = await get_all_others(leo_me.id)
+        print(f"=== SEARCH COMPLETE ===\n")
+        return users_id
+
+    except Exception as e:
+        print(f"❌ Error in get_leos_id_simple: {e}")
+        return []
+
+
 async def exists_leo(uid: int):
     """
     Leo profil mavjudligini tekshirish (avtomatik bog'lash bilan)

@@ -24,76 +24,66 @@ from aiogram import types, F
 
 async def start(message: types.Message, state: FSMContext):
     print(f"\n🎯 === PROFILES.START DEBUG ===")
-    print(f"message.from_user: {message.from_user}")
-    if message.from_user:
-        print(f"message.from_user.id: {message.from_user.id}")
-        print(f"message.from_user.username: {message.from_user.username}")
-    else:
-        print(f"message.from_user is None!")
 
-    # State'dan ma'lumot olish
+    # State'dan user ID olish
     data = await state.get_data()
-    print(f"State data: {data}")
-
     user_id = data.get("me")
+
+    print(f"State data: {data}")
     print(f"user_id from state: {user_id}")
 
     if not user_id:
-        user_id = message.from_user.id if message.from_user else None
-        print(f"user_id from message: {user_id}")
-
-        if not user_id:
-            print(f"❌ CRITICAL: No user_id available!")
+        if message.from_user:
+            user_id = message.from_user.id
+            print(f"user_id from message: {user_id}")
+        else:
+            print(f"❌ No user_id available!")
             await message.answer("❌ Ошибка: не удается определить пользователя")
             return
 
-        # Bot ID tekshirish
-        if str(user_id).startswith('200') or len(str(user_id)) == 10:
-            print(f"❌ DETECTED BOT ID: {user_id}")
-            await message.answer("❌ Ошибка: обнаружен ID бота вместо пользователя")
-            return
+    # Bot ID tekshirish
+    if str(user_id).startswith('200') or len(str(user_id)) == 10:
+        print(f"❌ DETECTED BOT ID: {user_id}")
+        await message.answer("❌ Ошибка: обнаружен ID бота")
+        return
 
     print(f"✅ Final user_id: {user_id}")
 
-    # State'ga qayta saqlash
+    await state.clear()
     await state.update_data(me=user_id)
 
-    await state.clear()
     await message.answer("🔍 Начинаем поиск...", reply_markup=types.ReplyKeyboardRemove())
 
-    print(f"🔍 Starting search for user_id: {user_id}")
+    # shortcuts.py dagi funksiyani chaqirish
+    from modul.clientbot.handlers.leomatch.shortcuts import get_leos_id_simple
 
-    # Test qidiruv
-    test_leos = await get_leos_id_simple(user_id)
-    print(f"📊 Test search result: {len(test_leos)} users")
-    print(f"📊 User IDs: {test_leos}")
+    leos = await get_leos_id_simple(user_id)
+    print(f"📊 Search result: {len(leos)} users")
 
-    if len(test_leos) == 0:
-        print(f"⚠️ Simple search failed, trying detailed...")
-        test_leos = await get_leos_id(user_id)
-        print(f"📊 Detailed search result: {len(test_leos)} users")
+    if len(leos) == 0:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Попробовать еще раз", callback_data="restart_search")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
+        ])
+        await message.answer("😔 Сейчас нет доступных профилей", reply_markup=keyboard)
+        return
 
-    await state.update_data(leos=test_leos)
+    await state.update_data(leos=leos)
     await next_l(message, state)
     print(f"=== PROFILES.START DEBUG END ===\n")
 
 
 async def next_l_direct(message: types.Message, state: FSMContext):
-    """To'g'ridan-to'g'ri next_l - state'dan user ID olish"""
+    """To'g'ridan-to'g'ri next_l"""
     data = await state.get_data()
     leos = data.get("leos", [])
-    user_id = data.get("me")
 
-    print(f"🎯 next_l_direct: user_id={user_id}, leos={len(leos)}")
+    print(f"🎯 next_l_direct: {len(leos)} users in queue")
 
     if len(leos) > 0:
         current = leos.pop(0)
         await state.update_data(leos=leos)
 
-        # profile_view_action importini ichkarida qilish
-        from modul.clientbot.handlers.leomatch.keyboards.inline_kb import profile_view_action
-
-        # Profilni ko'rsatish
         await show_profile_db(message, current, keyboard=profile_view_action(current))
         await state.set_state(LeomatchProfiles.LOOCK)
         print(f"✅ Showing profile: {current}")

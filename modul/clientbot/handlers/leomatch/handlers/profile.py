@@ -96,59 +96,7 @@ async def handle_view_profiles_from_wait(callback: types.CallbackQuery, state: F
     await callback.answer("🔍 Начинаем поиск профилей")
 
 
-async def get_leos_id_simple(me: int):
-    """Soddalashtirilgan qidiruv - debug bilan"""
-    try:
-        print(f"\n🔍 === SIMPLE SEARCH DEBUG ===")
-        print(f"Search for user: {me}")
 
-        leo_me = await get_leo(me)
-        if not leo_me:
-            print(f"❌ Current user not found in get_leos_id_simple")
-            return []
-
-        print(f"✅ Current user: {leo_me.full_name}")
-
-        @sync_to_async
-        def get_all_others(my_id):
-            print(f"🔍 Looking for others, excluding my_id: {my_id}")
-
-            # Barcha LeoMatchModel
-            all_leos = LeoMatchModel.objects.all()
-            print(f"📊 Total LeoMatch records: {all_leos.count()}")
-
-            # O'zimni exclude qilish
-            others = LeoMatchModel.objects.exclude(id=my_id)
-            print(f"📊 After excluding self: {others.count()}")
-
-            # Blocked emas
-            not_blocked = others.filter(blocked=False)
-            print(f"📊 Not blocked: {not_blocked.count()}")
-
-            result = []
-            print(f"📋 Processing users:")
-            for i, leo in enumerate(not_blocked, 1):
-                try:
-                    if leo.user and hasattr(leo.user, 'uid') and leo.user.uid:
-                        result.append(leo.user.uid)
-                        print(f"  {i}. ✅ {leo.full_name} (UID: {leo.user.uid})")
-                    else:
-                        print(f"  {i}. ⚠️ {leo.full_name}: no UID")
-                except Exception as e:
-                    print(f"  {i}. ❌ Error with {leo.full_name}: {e}")
-
-            print(f"🎯 Final result: {result}")
-            return result
-
-        users_id = await get_all_others(leo_me.id)
-        print(f"=== SIMPLE SEARCH DEBUG END ===\n")
-        return users_id
-
-    except Exception as e:
-        print(f"❌ Error in simple search: {e}")
-        import traceback
-        print(traceback.format_exc())
-        return []
 
 @client_bot_router.callback_query(F.data == "my_profile", LeomatchMain.WAIT)
 async def handle_my_profile_from_wait(callback: types.CallbackQuery, state: FSMContext):
