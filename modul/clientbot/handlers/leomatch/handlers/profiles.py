@@ -6,7 +6,7 @@ from asgiref.sync import sync_to_async
 
 from modul.clientbot.handlers.leomatch.data.state import LeomatchProfiles, LeomatchMain
 from modul.clientbot.handlers.leomatch.shortcuts import bot_show_profile_db, clear_all_likes, delete_like, get_leo, \
-    get_leos_id, get_first_like, leo_set_like, show_media, show_profile_db
+    get_leos_id, get_first_like, leo_set_like, show_media, show_profile_db, get_leos_id_simple
 from modul.clientbot.handlers.leomatch.keyboards.inline_kb import profile_alert, profile_alert_action, \
     profile_like_action, \
     profile_view_action, write_profile
@@ -20,56 +20,40 @@ from modul.loader import client_bot_router, main_bot, main_bot_router
 from aiogram.fsm.context import FSMContext
 from aiogram import types, F
 
-
 async def start(message: types.Message, state: FSMContext):
-    print(f"\n🎯 === PROFILES.START DEBUG ===")
+    print(f"\n🎯 === PROFILES START ===")
 
     # State'dan user ID olish
     data = await state.get_data()
     user_id = data.get("me")
 
-    print(f"State data: {data}")
-    print(f"user_id from state: {user_id}")
-
     if not user_id:
-        if message.from_user:
-            user_id = message.from_user.id
-            print(f"user_id from message: {user_id}")
-        else:
-            print(f"❌ No user_id available!")
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
             await message.answer("❌ Ошибка: не удается определить пользователя")
             return
 
-    # Bot ID tekshirish
-    if str(user_id).startswith('200') or len(str(user_id)) == 10:
-        print(f"❌ DETECTED BOT ID: {user_id}")
-        await message.answer("❌ Ошибка: обнаружен ID бота")
-        return
-
-    print(f"✅ Final user_id: {user_id}")
+    print(f"✅ Using user_id: {user_id}")
 
     await state.clear()
     await state.update_data(me=user_id)
-
     await message.answer("🔍 Начинаем поиск...", reply_markup=types.ReplyKeyboardRemove())
 
-    # shortcuts.py dagi funksiyani chaqirish
-    from modul.clientbot.handlers.leomatch.shortcuts import get_leos_id_simple
-
+    # Qidiruv
     leos = await get_leos_id_simple(user_id)
-    print(f"📊 Search result: {len(leos)} users")
+    print(f"📊 Found {len(leos)} users: {leos}")
 
     if len(leos) == 0:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Попробовать еще раз", callback_data="restart_search")],
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
         ])
-        await message.answer("😔 Сейчас нет доступных профилей", reply_markup=keyboard)
+        await message.answer("😔 Нет доступных профилей", reply_markup=keyboard)
         return
 
     await state.update_data(leos=leos)
     await next_l(message, state)
-    print(f"=== PROFILES.START DEBUG END ===\n")
+    print(f"✅ PROFILES START COMPLETE")
 
 
 async def next_l_direct(message: types.Message, state: FSMContext):
