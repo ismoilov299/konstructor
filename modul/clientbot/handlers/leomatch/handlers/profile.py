@@ -5,7 +5,6 @@ from aiogram import types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from asgiref.sync import sync_to_async
 
-from modul.clientbot.handlers.leomatch.handlers.profiles import next_l_direct
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
 from modul.clientbot.handlers.leomatch.data.state import LeomatchMain, LeomatchRegistration, LeomatchProfiles
 from modul.clientbot.handlers.leomatch.shortcuts import get_leo, show_profile_db, update_profile
