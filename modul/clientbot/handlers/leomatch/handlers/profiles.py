@@ -78,6 +78,30 @@ async def start(message: types.Message, state: FSMContext):
     print(f"=== PROFILES.START DEBUG END ===\n")
 
 
+async def next_l_direct(message: types.Message, state: FSMContext):
+    """To'g'ridan-to'g'ri next_l - state'dan user ID olish"""
+    data = await state.get_data()
+    leos = data.get("leos", [])
+    user_id = data.get("me")
+
+    print(f"🎯 next_l_direct: user_id={user_id}, leos={len(leos)}")
+
+    if len(leos) > 0:
+        current = leos.pop(0)
+        await state.update_data(leos=leos)
+
+        # Profilni ko'rsatish
+        await show_profile_db(message, current, keyboard=profile_view_action(current))
+        await state.set_state(LeomatchProfiles.LOOCK)
+        print(f"✅ Showing profile: {current}")
+    else:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Попробовать еще раз", callback_data="restart_search")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
+        ])
+        await message.answer("😔 Больше нет пользователей для просмотра", reply_markup=keyboard)
+
+
 async def next_l(message: types.Message, state: FSMContext):
     data = await state.get_data()
     leos = data.get("leos")
