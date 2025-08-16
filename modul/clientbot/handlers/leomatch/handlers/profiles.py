@@ -29,7 +29,7 @@ async def start(message: types.Message, state: FSMContext):
     print(f"User: {message.from_user.id} (@{message.from_user.username})")
 
     # Avval oddiy versiyani sinab ko'ring
-    leos = await get_leos_id_simple(message.from_user.id)
+    leos = await get_leos_id(message.from_user.id)
 
     # Agar oddiy versiyada ham muammo bo'lsa, batafsil versiyani ishlatamiz
     if len(leos) == 0:
