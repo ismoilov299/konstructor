@@ -252,7 +252,7 @@ async def handle_search_any(callback: types.CallbackQuery, state: FSMContext):
 @client_bot_router.callback_query(F.data == "input_city", LeomatchRegistration.CITY)
 async def handle_input_city(callback: types.CallbackQuery, state: FSMContext):
     keyboard = reply_kb.text_input_with_cancel()
-    await callback.message.delete()
+    # await callback.message.delete()
     await callback.message.edit_text(
         "🏙️ Напишите название вашего города:",
         reply_markup=keyboard
