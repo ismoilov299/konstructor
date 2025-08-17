@@ -84,7 +84,12 @@ async def next_l(message: types.Message, state: FSMContext):
     if len(leos) > 0:
         current = leos.pop(0)
         await state.update_data(leos=leos)
-        await show_profile_db(message, current, keyboard=profile_view_action(current))
+        keyboard = profile_view_action(current)
+        print(f"🔍 DEBUG: Created keyboard for user {current}")
+        print(f"🔍 DEBUG: Keyboard type: {type(keyboard)}")
+        print(f"🔍 DEBUG: Keyboard content: {keyboard}")
+
+        await show_profile_db(message, current, keyboard=keyboard)
         await state.set_state(LeomatchProfiles.LOOCK)
     else:
         # Inline keyboard bilan tugmacha
