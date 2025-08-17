@@ -14,7 +14,7 @@ from modul.clientbot.handlers.leomatch.keyboards.reply_kb import cancel
 from modul.clientbot.handlers.leomatch.data.callback_datas import LeomatchLikeAction, LeomatchProfileAction, \
     LeomatchProfileAlert, LeomatchProfileBlock, LikeActionEnum, ProfileActionEnum
 from modul.clientbot.handlers.leomatch.handlers.shorts import manage
-from modul.models import LeoMatchModel, User
+from modul.models import LeoMatchModel, User, UserTG
 from modul.config import settings_conf
 from modul.loader import client_bot_router, main_bot, main_bot_router
 from aiogram.fsm.context import FSMContext
@@ -137,7 +137,7 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
         # Like qo'shish
         await leo_set_like(from_uid, to_uid, msg)
 
-        # From user ma'lumotlarini olish (like va message uchun kerak bo'ladi)
+        # From user ma'lumotlarini olish
         from_user = await get_leo(from_uid)
         from_name = from_user.full_name if from_user else "Неизвестный пользователь"
         from_age = from_user.age if from_user else ""
@@ -153,74 +153,81 @@ async def like(message: types.Message, state: FSMContext, from_uid: int, to_uid:
         # User link yaratish (HTML format)
         user_link = f'<a href="tg://user?id={from_uid}">{from_name}</a>'
 
-        # Agar xabar bo'lsa uni yuborish
-        if msg:
-            to_user = await get_leo(to_uid)
-            if to_user and to_user.user:
-                try:
-                    # Video yoki text ekanini tekshirish
-                    if isinstance(msg, str):
-                        if msg.startswith('bnVid_'):  # Video note format
-                            try:
-                                # Video note yuborishdan oldin kimdan kelganligini bildirish
-                                await message.bot.send_message(
-                                    chat_id=to_user.user.uid,
-                                    text=f"💌 Видео-сообщение от {user_link}:",
-                                    parse_mode="HTML"
-                                )
-                                await message.bot.send_video_note(
-                                    chat_id=to_user.user.uid,
-                                    video_note=msg
-                                )
-                            except (TelegramBadRequest, TelegramForbiddenError) as e:
-                                print(f"Could not send video note to user {to_user.user.uid}: {e}")
-                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(
-                                        e).lower():
-                                    await message.answer(
-                                        "⚠️ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
-                                else:
-                                    await message.answer("❌ Не удалось отправить видео-сообщение")
-                                return
-                        else:
-                            try:
-                                result = await message.bot.send_message(
-                                    chat_id=to_user.user.uid,
-                                    text=f"💌 Новое сообщение от {user_link}:\n\n{msg}",
-                                    parse_mode="HTML"
-                                )
-                                print(f"Message sent result: {result}")
-                            except (TelegramBadRequest, TelegramForbiddenError) as e:
-                                print(f"Could not send message to user {to_user.user.uid}: {e}")
-                                if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(
-                                        e).lower():
-                                    await message.answer(
-                                        "⚠️ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
-                                else:
-                                    await message.answer("❌ Не удалось отправить сообщение")
-                                return
+        # To user ma'lumotlarini olish
+        to_user = await get_leo(to_uid)
 
-                    await message.answer("✅ Сообщение отправлено!")
-                except Exception as e:
-                    print(f"Error sending message to user {to_uid}: {e}")
-                    await message.answer("❌ Не удалось отправить сообщение")
-            else:
-                print(f"User not found or invalid: {to_user}")
-                await message.answer("❌ Не удалось найти пользователя")
+        # ASYNC-SAFE user.uid olish
+        @sync_to_async
+        def get_user_uid(leo):
+            try:
+                if leo and leo.user:
+                    user_tg = UserTG.objects.filter(user=leo.user).first()
+                    return user_tg.uid if user_tg else None
+                return None
+            except Exception as e:
+                print(f"Error getting user UID: {e}")
+                return None
+
+        to_user_uid = await get_user_uid(to_user) if to_user else None
+
+        if msg and to_user and to_user_uid:
+            try:
+                # Video yoki text ekanini tekshirish
+                if isinstance(msg, str):
+                    if msg.startswith('bnVid_'):  # Video note format
+                        try:
+                            # Video note yuborishdan oldin kimdan kelganligini bildirish
+                            await message.bot.send_message(
+                                chat_id=to_user_uid,
+                                text=f"💌 Видео-сообщение от {user_link}:",
+                                parse_mode="HTML"
+                            )
+                            await message.bot.send_video_note(
+                                chat_id=to_user_uid,
+                                video_note=msg
+                            )
+                        except (TelegramBadRequest, TelegramForbiddenError) as e:
+                            print(f"Could not send video note to user {to_user_uid}: {e}")
+                            if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(e).lower():
+                                await message.answer(
+                                    "⚠️ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
+                            else:
+                                await message.answer("❌ Не удалось отправить видео-сообщение")
+                            return
+                    else:
+                        try:
+                            result = await message.bot.send_message(
+                                chat_id=to_user_uid,
+                                text=f"💌 Новое сообщение от {user_link}:\n\n{msg}",
+                                parse_mode="HTML"
+                            )
+                            print(f"Message sent result: {result}")
+                        except (TelegramBadRequest, TelegramForbiddenError) as e:
+                            print(f"Could not send message to user {to_user_uid}: {e}")
+                            if "chat not found" in str(e).lower() or "bot was blocked by the user" in str(e).lower():
+                                await message.answer(
+                                    "⚠️ Сообщение не может быть доставлено. Пользователь заблокировал бота или удалил аккаунт.")
+                            else:
+                                await message.answer("❌ Не удалось отправить сообщение")
+                            return
+
+                await message.answer("✅ Сообщение отправлено!")
+            except Exception as e:
+                print(f"Error sending message to user {to_uid}: {e}")
+                await message.answer("❌ Не удалось отправить сообщение")
         else:
             # Oddiy like yuborish (xabar yo'q)
-            to_user = await get_leo(to_uid)
-            if to_user and to_user.user:
+            if to_user and to_user_uid:
                 try:
-                    try:
-                        await message.bot.send_message(
-                            chat_id=to_user.user.uid,
-                            text=f"❤️ Вам поставил лайк {user_link}!",
-                            parse_mode="HTML"
-                        )
-                    except (TelegramBadRequest, TelegramForbiddenError) as e:
-                        print(f"Could not send like notification to user {to_user.user.uid}: {e}")
+                    await message.bot.send_message(
+                        chat_id=to_user_uid,
+                        text=f"❤️ Вам поставил лайк {user_link}!",
+                        parse_mode="HTML"
+                    )
+                except (TelegramBadRequest, TelegramForbiddenError) as e:
+                    print(f"Could not send like notification to user {to_user_uid}: {e}")
                 except Exception as e:
-                    print(f"Error getting user or sending like notification to user {to_uid}: {e}")
+                    print(f"Error sending like notification to user {to_uid}: {e}")
 
             await message.answer("💖 Лайк отправлен")
 
