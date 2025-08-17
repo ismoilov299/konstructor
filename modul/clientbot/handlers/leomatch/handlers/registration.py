@@ -93,7 +93,7 @@ async def download_file(url: str, file_path: str):
                 raise Exception(f"Failed to download file: HTTP {response.status}")
 
 
-async def show_about_step(callback, state: FSMContext):
+async def show_about_step(callback, state: FSMContext, is_text_message=False):
     """About me bosqichi"""
     leo = await get_leo(callback.message.chat.id)
     has_existing = leo and leo.about_me
@@ -106,16 +106,17 @@ async def show_about_step(callback, state: FSMContext):
 
     text = f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: {search_text}\n✅ Город: {data.get('city')}\n✅ Имя: {data.get('full_name')}\n\n📝 Расскажи о себе:"
 
-    if hasattr(callback.message, 'edit_text'):
-        await callback.message.edit_text(text, reply_markup=keyboard)
-    else:
+    # Agar text message'dan kelgan bo'lsa, yangi xabar yuborish
+    if is_text_message or not hasattr(callback.message, 'edit_text'):
         await callback.message.answer(text, reply_markup=keyboard)
+    else:
+        # Callback message'dan kelgan bo'lsa, edit qilish
+        await callback.message.edit_text(text, reply_markup=keyboard)
 
     await state.set_state(LeomatchRegistration.ABOUT_ME)
 
 
-async def show_photo_step(callback, state: FSMContext):
-    """Photo bosqichi"""
+async def show_photo_step(callback, state: FSMContext, is_text_message=False):
     leo = await get_leo(callback.message.chat.id)
     has_existing = leo and leo.photo
 
@@ -127,15 +128,15 @@ async def show_photo_step(callback, state: FSMContext):
 
     text = f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: {search_text}\n✅ Город: {data.get('city')}\n✅ Имя: {data.get('full_name')}\n✅ Описание: есть\n\n📷 Загрузи фото или видео:"
 
-    if hasattr(callback.message, 'edit_text'):
-        await callback.message.edit_text(text, reply_markup=keyboard)
-    else:
+    if is_text_message or not hasattr(callback.message, 'edit_text'):
         await callback.message.answer(text, reply_markup=keyboard)
+    else:
+        await callback.message.edit_text(text, reply_markup=keyboard)
 
     await state.set_state(LeomatchRegistration.SEND_PHOTO)
 
 
-async def show_final_step(callback, state: FSMContext):
+async def show_final_step(callback, state: FSMContext, is_text_message=False):
     """Yakuniy bosqich"""
     data = await state.get_data()
 
@@ -146,10 +147,10 @@ async def show_final_step(callback, state: FSMContext):
 
     text = f"🎯 Проверьте данные:\n\n✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: {search_text}\n✅ Город: {data.get('city')}\n✅ Имя: {data.get('full_name')}\n✅ Описание: есть\n✅ Фото/видео: есть\n\nВсё верно?"
 
-    if hasattr(callback.message, 'edit_text'):
-        await callback.message.edit_text(text, reply_markup=keyboard)
-    else:
+    if is_text_message or not hasattr(callback.message, 'edit_text'):
         await callback.message.answer(text, reply_markup=keyboard)
+    else:
+        await callback.message.edit_text(text, reply_markup=keyboard)
 
     await state.set_state(LeomatchRegistration.FINAL)
 
@@ -579,12 +580,11 @@ async def handle_name_input(message: types.Message, state: FSMContext):
 
     await state.update_data(full_name=name)
 
-    class FakeCallback:
+    class MessageWrapper:
         def __init__(self, msg):
             self.message = msg
 
-    fake_callback = FakeCallback(message)
-    await show_about_step(fake_callback, state)
+    await show_about_step(MessageWrapper(message), state, is_text_message=True)
 
 
 @client_bot_router.message(F.text == ("Оставить текущее"), LeomatchRegistration.ABOUT_ME)
@@ -605,12 +605,12 @@ async def handle_about_me_input(message: types.Message, state: FSMContext):
 
     await state.update_data(about_me=message.text)
 
-    class FakeCallback:
+    # FakeCallback o'rniga to'g'ridan-to'g'ri funksiyani chaqirish
+    class MessageWrapper:
         def __init__(self, msg):
             self.message = msg
 
-    fake_callback = FakeCallback(message)
-    await show_photo_step(fake_callback, state)
+    await show_photo_step(MessageWrapper(message), state, is_text_message=True)
 
 
 @client_bot_router.message(F.text == ("Оставить текущее"), LeomatchRegistration.SEND_PHOTO)
@@ -625,8 +625,9 @@ async def handle_save_current_photo_text(message: types.Message, state: FSMConte
 # Import kerak bo'lgan funksiya
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 
+client_bot_router.message(LeomatchRegistration.SEND_PHOTO)
 
-@client_bot_router.message(LeomatchRegistration.SEND_PHOTO)
+
 async def handle_media_upload(message: types.Message, state: FSMContext, bot: Bot):
     if not message.photo and not message.video and not message.video_note:
         await message.answer("Пожалуйста, пришлите фото, видео или видеосообщение")
@@ -663,12 +664,12 @@ async def handle_media_upload(message: types.Message, state: FSMContext, bot: Bo
 
         await state.update_data(photo=file_path, media_type=media_type)
 
-        class FakeCallback:
+        # FakeCallback o'rniga to'g'ridan-to'g'ri funksiyani chaqirish
+        class MessageWrapper:
             def __init__(self, msg):
                 self.message = msg
 
-        fake_callback = FakeCallback(message)
-        await show_final_step(fake_callback, state)
+        await show_final_step(MessageWrapper(message), state, is_text_message=True)
 
     except Exception as e:
         print(f"Error saving media: {e}")
