@@ -713,11 +713,12 @@ async def create_like(from_uid: int, to_uid: int, message: str = None):
 
     @sync_to_async
     def create_like_sync(from_leo, to_leo, message):
-        return LeoMatchLikesBasketModel.objects.create(
+        like, created = LeoMatchLikesBasketModel.objects.get_or_create(
             from_user=from_leo,
             to_user=to_leo,
-            message=message,
+            defaults={'message': message}
         )
+        return like, created
 
     return await create_like_sync(from_leo, to_leo, message)
 
