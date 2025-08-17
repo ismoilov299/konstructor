@@ -626,9 +626,7 @@ async def handle_save_current_photo_text(message: types.Message, state: FSMConte
 # Import kerak bo'lgan funksiya
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 
-client_bot_router.message(LeomatchRegistration.SEND_PHOTO)
-
-
+@client_bot_router.message(LeomatchRegistration.SEND_PHOTO)
 async def handle_media_upload(message: types.Message, state: FSMContext, bot: Bot):
     if not message.photo and not message.video and not message.video_note:
         await message.answer("Пожалуйста, пришлите фото, видео или видеосообщение")
