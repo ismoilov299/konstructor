@@ -478,18 +478,9 @@ async def show_profile(message: types.Message, uid: int, full_name: str, age: in
         caption = f"{full_name}, {age}, {city}\n{about_me}{text}"
         kwargs = {}
 
-        # KEYBOARD NI TO'G'RI HANDLE QILISH
+        # KEYBOARD - SODDA VERSIYA
         if keyboard:
-            # Agar keyboard class bo'lsa (masalan ReplyKeyboardMarkup), uni ignore qilamiz
-            if isinstance(keyboard, type):
-                print(f"DEBUG: Ignoring keyboard class: {keyboard}")
-                # Keyboard ni qo'shmaymiz, kwargs bo'sh qoladi
-            # Agar keyboard valid instance bo'lsa, ishlatamiz
-            elif hasattr(keyboard, 'keyboard') or isinstance(keyboard, (ReplyKeyboardMarkup, dict)):
-                kwargs['reply_markup'] = keyboard
-                print(f"DEBUG: Using valid keyboard: {type(keyboard)}")
-            else:
-                print(f"DEBUG: Unknown keyboard type: {type(keyboard)}, ignoring")
+            kwargs['reply_markup'] = keyboard
 
         # Преобразуем относительный путь в абсолютный
         abs_base_dir = "/var/www/konstructor"
