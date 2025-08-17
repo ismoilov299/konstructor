@@ -305,6 +305,52 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
         await callback.answer("Произошла ошибка")
 
 
+@client_bot_router.callback_query(F.data.startswith("age_"), LeomatchRegistration.AGE)
+async def handle_age_selection(callback: types.CallbackQuery, state: FSMContext):
+    """Yosh tanlash callback handler"""
+    try:
+        # age_21 -> 21
+        age_str = callback.data.replace("age_", "")
+        age = int(age_str)
+
+        print(f"Age selected: {age}")
+
+        await state.set_data({"age": age})
+        await callback.message.edit_text("Теперь определимся с полом!")
+        await callback.message.answer("Теперь определимся с полом!", reply_markup=reply_kb.chooice_sex())
+        await state.set_state(LeomatchRegistration.SEX)
+        await callback.answer(f"✅ Возраст: {age}")
+
+    except ValueError:
+        await callback.message.answer("❌ Ошибка: неверный формат возраста")
+        await callback.answer("Ошибка")
+    except Exception as e:
+        print(f"Error in age selection: {e}")
+        await callback.answer("Ошибка")
+
+
+@client_bot_router.callback_query(F.data == "custom_age", LeomatchRegistration.AGE)
+async def handle_custom_age(callback: types.CallbackQuery, state: FSMContext):
+    """Boshqa yosh kiritish"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_registration")]
+    ])
+
+    await callback.message.edit_text(
+        "✏️ Введите ваш возраст цифрами (например: 25):",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+@client_bot_router.callback_query(F.data == "cancel_registration")
+async def handle_cancel_registration(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
+    """Registratsiyani bekor qilish"""
+    await callback.message.edit_text("❌ Регистрация отменена")
+    await return_main(callback.message, state, bot)
+    await callback.answer("Регистрация отменена")
+
+
+
 @client_bot_router.callback_query(F.data == "final_edit", LeomatchRegistration.FINAL)
 async def handle_final_edit(callback: types.CallbackQuery, state: FSMContext):
     await begin_registration(callback.message, state)
