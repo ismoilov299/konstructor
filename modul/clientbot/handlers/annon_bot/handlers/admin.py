@@ -33,7 +33,7 @@ class AdminFilter(BaseFilter):
         return message.from_user.id == admin_id
 
 def anon_admin_panel():
-    @client_bot_router.message(Command(commands=["admin"]), F.chat.type == "private")
+    @client_bot_router.message(Command(commands=["admin"]), F.chat.type == "private",AdminFilter())
     async def admin_mm(message: Message):
         try:
             await message.answer('Админ панель', reply_markup=admin_kb)
