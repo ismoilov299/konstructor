@@ -296,7 +296,7 @@ async def handle_save_current_about(callback: types.CallbackQuery, state: FSMCon
 @client_bot_router.callback_query(F.data == "input_new_about", LeomatchRegistration.ABOUT_ME)
 async def handle_input_new_about(callback: types.CallbackQuery, state: FSMContext):
     keyboard = reply_kb.text_input_with_cancel()
-    await callback.message.delete()
+    # await callback.message.delete()
     await callback.message.edit_text(
         "📝 Напишите описание о себе (до 300 символов):",
         reply_markup=keyboard
