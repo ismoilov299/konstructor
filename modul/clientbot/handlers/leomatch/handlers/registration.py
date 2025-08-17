@@ -252,7 +252,7 @@ async def handle_search_any(callback: types.CallbackQuery, state: FSMContext):
 @client_bot_router.callback_query(F.data == "input_city", LeomatchRegistration.CITY)
 async def handle_input_city(callback: types.CallbackQuery, state: FSMContext):
     keyboard = reply_kb.text_input_with_cancel()
-
+    await callback.message.delete()
     await callback.message.edit_text(
         "🏙️ Напишите название вашего города:",
         reply_markup=keyboard
@@ -296,7 +296,7 @@ async def handle_save_current_about(callback: types.CallbackQuery, state: FSMCon
 @client_bot_router.callback_query(F.data == "input_new_about", LeomatchRegistration.ABOUT_ME)
 async def handle_input_new_about(callback: types.CallbackQuery, state: FSMContext):
     keyboard = reply_kb.text_input_with_cancel()
-
+    await callback.message.delete()
     await callback.message.edit_text(
         "📝 Напишите описание о себе (до 300 символов):",
         reply_markup=keyboard
@@ -318,7 +318,8 @@ async def handle_save_current_photo(callback: types.CallbackQuery, state: FSMCon
 @client_bot_router.callback_query(F.data == "upload_new_photo", LeomatchRegistration.SEND_PHOTO)
 async def handle_upload_new_photo(callback: types.CallbackQuery, state: FSMContext):
     keyboard = reply_kb.text_input_with_cancel()
-
+    await callback.message.delete()
+    await state.set_state(LeomatchRegistration.SEND_PHOTO)
     await callback.message.edit_text(
         "📷 Пришлите фото или видео (до 15 сек):",
         reply_markup=keyboard
