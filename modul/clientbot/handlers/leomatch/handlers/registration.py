@@ -652,7 +652,6 @@ async def handle_media_upload(message: types.Message, state: FSMContext, bot: Bo
         url = message.video_note.file_id
         media_type = "VIDEO_NOTE"
 
-    # File download
     base_dir = "modul/clientbot/data"
     os.makedirs(base_dir, exist_ok=True)
     format_ext = "jpg" if media_type == "PHOTO" else "mp4"
