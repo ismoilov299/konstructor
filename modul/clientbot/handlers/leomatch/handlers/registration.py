@@ -4,6 +4,7 @@ import aiohttp
 from aiogram import types, Bot, F
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from asgiref.sync import sync_to_async
 
 from modul.clientbot.handlers.leomatch.keyboards import reply_kb
 from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
@@ -92,92 +93,235 @@ async def download_file(url: str, file_path: str):
                 raise Exception(f"Failed to download file: HTTP {response.status}")
 
 
+async def show_about_step(callback, state: FSMContext):
+    """About me bosqichi"""
+    leo = await get_leo(callback.message.chat.id)
+    has_existing = leo and leo.about_me
+
+    keyboard = reply_kb.about_me_options(has_existing=has_existing)
+
+    data = await state.get_data()
+    sex_text = "Парень" if data.get('sex') == "MALE" else "Девушка"
+    search_text = {"MALE": "Парня", "FEMALE": "Девушку", "ANY": "Всех"}[data.get('which_search')]
+
+    text = f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: {search_text}\n✅ Город: {data.get('city')}\n✅ Имя: {data.get('full_name')}\n\n📝 Расскажи о себе:"
+
+    if hasattr(callback.message, 'edit_text'):
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await callback.message.answer(text, reply_markup=keyboard)
+
+    await state.set_state(LeomatchRegistration.ABOUT_ME)
+
+
+async def show_photo_step(callback, state: FSMContext):
+    """Photo bosqichi"""
+    leo = await get_leo(callback.message.chat.id)
+    has_existing = leo and leo.photo
+
+    keyboard = reply_kb.photo_options(has_existing=has_existing)
+
+    data = await state.get_data()
+    sex_text = "Парень" if data.get('sex') == "MALE" else "Девушка"
+    search_text = {"MALE": "Парня", "FEMALE": "Девушку", "ANY": "Всех"}[data.get('which_search')]
+
+    text = f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: {search_text}\n✅ Город: {data.get('city')}\n✅ Имя: {data.get('full_name')}\n✅ Описание: есть\n\n📷 Загрузи фото или видео:"
+
+    if hasattr(callback.message, 'edit_text'):
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await callback.message.answer(text, reply_markup=keyboard)
+
+    await state.set_state(LeomatchRegistration.SEND_PHOTO)
+
+
+async def show_final_step(callback, state: FSMContext):
+    """Yakuniy bosqich"""
+    data = await state.get_data()
+
+    keyboard = reply_kb.final_registration()
+
+    sex_text = "Парень" if data.get('sex') == "MALE" else "Девушка"
+    search_text = {"MALE": "Парня", "FEMALE": "Девушку", "ANY": "Всех"}[data.get('which_search')]
+
+    text = f"🎯 Проверьте данные:\n\n✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: {search_text}\n✅ Город: {data.get('city')}\n✅ Имя: {data.get('full_name')}\n✅ Описание: есть\n✅ Фото/видео: есть\n\nВсё верно?"
+
+    if hasattr(callback.message, 'edit_text'):
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await callback.message.answer(text, reply_markup=keyboard)
+
+    await state.set_state(LeomatchRegistration.FINAL)
+
+
 # =============== CALLBACK QUERY HANDLERS ===============
 
 @client_bot_router.callback_query(F.data == "start_registration", LeomatchRegistration.BEGIN)
 async def handle_start_registration(callback: types.CallbackQuery, state: FSMContext):
-    message = callback.message
     if callback.from_user.username == None:
-        await message.answer(
-            (
-                "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните"))
+        await callback.message.answer(
+            "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните")
 
-    await begin_registration(message, state)
+    await begin_registration(callback.message, state)
     await callback.answer()
 
 
 @client_bot_router.callback_query(F.data == "sex_male", LeomatchRegistration.SEX)
 async def handle_sex_male(callback: types.CallbackQuery, state: FSMContext):
-    await set_sex("MALE", callback.message, state)
+    """Erkak tanlash"""
+    data = await state.get_data()
+    await state.update_data(sex="MALE")
+
+    keyboard = reply_kb.which_search()
+
+    await callback.message.edit_text(
+        f"✅ Возраст: {data.get('age')}\n✅ Пол: Парень\n\n💕 Кого ищешь?",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchRegistration.WHICH_SEARCH)
     await callback.answer()
 
 
 @client_bot_router.callback_query(F.data == "sex_female", LeomatchRegistration.SEX)
 async def handle_sex_female(callback: types.CallbackQuery, state: FSMContext):
-    await set_sex("FEMALE", callback.message, state)
-    await callback.answer()
+    """Ayol tanlash"""
+    data = await state.get_data()
+    await state.update_data(sex="FEMALE")
 
+    keyboard = reply_kb.which_search()
+
+    await callback.message.edit_text(
+        f"✅ Возраст: {data.get('age')}\n✅ Пол: Девушка\n\n💕 Кого ищешь?",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchRegistration.WHICH_SEARCH)
+    await callback.answer()
 
 @client_bot_router.callback_query(F.data == "search_male", LeomatchRegistration.WHICH_SEARCH)
 async def handle_search_male(callback: types.CallbackQuery, state: FSMContext):
-    await set_which_search("MALE", callback.message, state)
-    await callback.answer()
+    """Erkak qidirish"""
+    data = await state.get_data()
+    await state.update_data(which_search="MALE")
 
+    keyboard = reply_kb.city_input()
+
+    sex_text = "Парень" if data.get('sex') == "MALE" else "Девушка"
+
+    await callback.message.edit_text(
+        f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: Парня\n\n🏙️ Введи свой город:",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchRegistration.CITY)
+    await callback.answer()
 
 @client_bot_router.callback_query(F.data == "search_female", LeomatchRegistration.WHICH_SEARCH)
 async def handle_search_female(callback: types.CallbackQuery, state: FSMContext):
-    await set_which_search("FEMALE", callback.message, state)
+    data = await state.get_data()
+    await state.update_data(which_search="FEMALE")
+
+    keyboard = reply_kb.city_input()
+
+    sex_text = "Парень" if data.get('sex') == "MALE" else "Девушка"
+
+    await callback.message.edit_text(
+        f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: Девушку\n\n🏙️ Введи свой город:",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchRegistration.CITY)
     await callback.answer()
 
 
 @client_bot_router.callback_query(F.data == "search_any", LeomatchRegistration.WHICH_SEARCH)
 async def handle_search_any(callback: types.CallbackQuery, state: FSMContext):
-    await set_which_search("ANY", callback.message, state)
+    data = await state.get_data()
+    await state.update_data(which_search="ANY")
+
+    keyboard = reply_kb.city_input()
+
+    sex_text = "Парень" if data.get('sex') == "MALE" else "Девушка"
+
+    await callback.message.edit_text(
+        f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: Всех\n\n🏙️ Введи свой город:",
+        reply_markup=keyboard
+    )
+    await state.set_state(LeomatchRegistration.CITY)
     await callback.answer()
 
+
+@client_bot_router.callback_query(F.data == "input_city", LeomatchRegistration.CITY)
+async def handle_input_city(callback: types.CallbackQuery, state: FSMContext):
+    keyboard = reply_kb.text_input_with_cancel()
+
+    await callback.message.edit_text(
+        "🏙️ Напишите название вашего города:",
+        reply_markup=keyboard
+    )
+    await callback.answer()
 
 @client_bot_router.callback_query(F.data.startswith("name_"), LeomatchRegistration.FULL_NAME)
 async def handle_name_selection(callback: types.CallbackQuery, state: FSMContext):
     name = callback.data.replace("name_", "")
     if len(name) > 15:
-        await callback.message.answer(("Пожалуйста, введите имя не более 15 символов"))
-        await callback.answer()
+        await callback.answer("Имя слишком длинное (макс 15 символов)")
         return
 
     await state.update_data(full_name=name)
-
-    leo = await get_leo(callback.from_user.id)
-    kwargs = {}
-    if leo:
-        kwargs['reply_markup'] = reply_kb.save_current_about()
-
-    await callback.message.answer(
-        ("Расскажи о себе и кого хочешь найти, чем предлагаешь заняться. Это поможет лучше подобрать тебе компанию."),
-        **kwargs)
-    await state.set_state(LeomatchRegistration.ABOUT_ME)
+    await show_about_step(callback, state)
     await callback.answer()
 
+@client_bot_router.callback_query(F.data == "input_custom_name", LeomatchRegistration.FULL_NAME)
+async def handle_input_custom_name(callback: types.CallbackQuery, state: FSMContext):
+    keyboard = reply_kb.text_input_with_cancel()
+
+    await callback.message.edit_text(
+        "📝 Напишите ваше имя (до 15 символов):",
+        reply_markup=keyboard
+    )
+    await callback.answer()
 
 @client_bot_router.callback_query(F.data == "save_current_about", LeomatchRegistration.ABOUT_ME)
 async def handle_save_current_about(callback: types.CallbackQuery, state: FSMContext):
     leo = await get_leo(callback.from_user.id)
-    if not leo:
-        await callback.message.answer("❌ Предыдущий текст не сохранен. Пожалуйста, введите новый текст.")
-        await callback.answer()
+    if not leo or not leo.about_me:
+        await callback.answer("Нет сохраненного описания")
         return
+
     await state.update_data(about_me=leo.about_me)
-    await now_send_photo(callback.message, state)
+    await show_photo_step(callback, state)
     await callback.answer()
 
+
+
+@client_bot_router.callback_query(F.data == "input_new_about", LeomatchRegistration.ABOUT_ME)
+async def handle_input_new_about(callback: types.CallbackQuery, state: FSMContext):
+    keyboard = reply_kb.text_input_with_cancel()
+
+    await callback.message.edit_text(
+        "📝 Напишите описание о себе (до 300 символов):",
+        reply_markup=keyboard
+    )
+    await callback.answer()
 
 @client_bot_router.callback_query(F.data == "save_current_photo", LeomatchRegistration.SEND_PHOTO)
 async def handle_save_current_photo(callback: types.CallbackQuery, state: FSMContext):
     leo = await get_leo(callback.from_user.id)
-    if not leo:
-        await callback.message.answer("❌ Предыдущее медиа не сохранено. Пожалуйста, загрузите новое фото или видео.")
-        await callback.answer()
+    if not leo or not leo.photo:
+        await callback.answer("Нет сохраненного фото")
         return
-    await save_media(callback.message, state, leo.photo, leo.media_type)
+
+    await state.update_data(photo=leo.photo, media_type=leo.media_type)
+    await show_final_step(callback, state)
+    await callback.answer()
+
+
+@client_bot_router.callback_query(F.data == "upload_new_photo", LeomatchRegistration.SEND_PHOTO)
+async def handle_upload_new_photo(callback: types.CallbackQuery, state: FSMContext):
+    keyboard = reply_kb.text_input_with_cancel()
+
+    await callback.message.edit_text(
+        "📷 Пришлите фото или видео (до 15 сек):",
+        reply_markup=keyboard
+    )
     await callback.answer()
 
 
@@ -201,9 +345,7 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
         bot_username = bot_info.username
 
         try:
-            # Get or create approach - xavfsizroq
             from modul.models import UserTG, LeoMatchModel
-            from asgiref.sync import sync_to_async
 
             @sync_to_async
             def get_or_create_leo():
@@ -217,9 +359,8 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                 )
                 print(f"User {'created' if created else 'found'}: {user}")
 
-                # Agar UserTG.user None bo'lsa, Django User yaratish
+                # Django User yaratish agar yo'q bo'lsa
                 if user.user is None:
-                    print(f"UserTG has no connected User, creating Django User...")
                     django_user = User.objects.create(
                         username=f"tg_user_{user.uid}",
                         first_name=user.first_name or full_name,
@@ -227,14 +368,13 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                     )
                     user.user = django_user
                     user.save()
-                    print(f"Created Django User with ID {django_user.id} for UserTG {user.uid}")
+                    print(f"Created Django User with ID {django_user.id}")
                 else:
                     django_user = user.user
-                    print(f"Using existing Django User with ID {django_user.id}")
 
                 # LeoMatchModel yaratish yoki yangilash
                 leo, leo_created = LeoMatchModel.objects.get_or_create(
-                    user_id=django_user.id,  # To'g'ridan-to'g'ri django_user.id ishlatish
+                    user_id=django_user.id,
                     bot_username=bot_username,
                     defaults={
                         'photo': photo,
@@ -265,9 +405,6 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                     leo.active = True
                     leo.search = True
                     leo.save()
-                    print("LeoMatch updated successfully")
-                else:
-                    print("LeoMatch created successfully")
 
                 return True
 
@@ -277,10 +414,8 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
                 await state.clear()
                 await callback.message.edit_text("✅ Регистрация завершена успешно!")
 
-                # MUHIM: callback.from_user.id ni state'ga saqlash
                 await state.update_data(me=callback.from_user.id)
 
-                # Kichik kechikish - database commit uchun
                 import asyncio
                 await asyncio.sleep(0.5)
 
@@ -300,30 +435,28 @@ async def handle_final_yes(callback: types.CallbackQuery, state: FSMContext, bot
 
     except Exception as e:
         print(f"Error in final_yes handler: {e}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
         await callback.answer("Произошла ошибка")
 
 
 @client_bot_router.callback_query(F.data.startswith("age_"), LeomatchRegistration.AGE)
 async def handle_age_selection(callback: types.CallbackQuery, state: FSMContext):
-    """Yosh tanlash callback handler"""
+    """Yosh tanlash"""
     try:
-        # age_21 -> 21
         age_str = callback.data.replace("age_", "")
         age = int(age_str)
 
-        print(f"Age selected: {age}")
+        await state.update_data(age=age)
 
-        await state.set_data({"age": age})
-        await callback.message.edit_text("Теперь определимся с полом!")
-        await callback.message.answer("Теперь определимся с полом!", reply_markup=reply_kb.chooice_sex())
+        # Jins tanlash keyboard
+        keyboard = reply_kb.chooice_sex()
+
+        await callback.message.edit_text(
+            f"✅ Возраст: {age}\n\n👤 Теперь определимся с полом!",
+            reply_markup=keyboard
+        )
         await state.set_state(LeomatchRegistration.SEX)
-        await callback.answer(f"✅ Возраст: {age}")
+        await callback.answer()
 
-    except ValueError:
-        await callback.message.answer("❌ Ошибка: неверный формат возраста")
-        await callback.answer("Ошибка")
     except Exception as e:
         print(f"Error in age selection: {e}")
         await callback.answer("Ошибка")
@@ -332,9 +465,7 @@ async def handle_age_selection(callback: types.CallbackQuery, state: FSMContext)
 @client_bot_router.callback_query(F.data == "custom_age", LeomatchRegistration.AGE)
 async def handle_custom_age(callback: types.CallbackQuery, state: FSMContext):
     """Boshqa yosh kiritish"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_registration")]
-    ])
+    keyboard = reply_kb.text_input_with_cancel()
 
     await callback.message.edit_text(
         "✏️ Введите ваш возраст цифрами (например: 25):",
@@ -363,8 +494,7 @@ async def handle_final_edit(callback: types.CallbackQuery, state: FSMContext):
 async def bot_start_lets_leo(message: types.Message, state: FSMContext):
     if message.from_user.username == None:
         await message.answer(
-            (
-                "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните"))
+            "Настоятельно рекомендуем указать username или в настройках разрешение на пересылку сообщения иначе Вам не смогут написать те, кого вы лайкните")
     await begin_registration(message, state)
 
 
@@ -372,15 +502,16 @@ async def bot_start_lets_leo(message: types.Message, state: FSMContext):
 async def handle_age_input(message: Message, state: FSMContext, bot: Bot):
     try:
         age = int(message.text)
-        await state.set_data({"age": age})
-        await message.answer(("Теперь определимся с полом!"), reply_markup=reply_kb.chooice_sex())
+        await state.update_data(age=age)
+
+        keyboard = reply_kb.chooice_sex()
+        await message.answer(f"✅ Возраст: {age}\n\n👤 Теперь определимся с полом!", reply_markup=keyboard)
         await state.set_state(LeomatchRegistration.SEX)
-    except:
+    except ValueError:
         if message.text == "Отменить":
-            await message.answer(("Отменена регистрация!"), )
             await return_main(message, state, bot)
             return
-        await message.answer(("Пожалуйста, введите возрост цифрами"), )
+        await message.answer("Пожалуйста, введите возраст цифрами")
 
 
 # Message handlers for backward compatibility
@@ -421,14 +552,21 @@ async def handle_search_fallback(message: types.Message):
 
 @client_bot_router.message(LeomatchRegistration.CITY)
 async def handle_city_input(message: types.Message, state: FSMContext):
-    city = message.text
+    city = message.text.strip()
     await state.update_data(city=city)
 
-    # Inline keyboard yaratamiz
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=message.from_user.full_name, callback_data=f"name_{message.from_user.full_name}")]
-    ])
-    await message.answer(("Как мне тебя называть?"), reply_markup=keyboard)
+    data = await state.get_data()
+    suggested_name = message.from_user.full_name or message.from_user.first_name or "Пользователь"
+
+    keyboard = reply_kb.name_suggestion(suggested_name)
+
+    sex_text = "Парень" if data.get('sex') == "MALE" else "Девушка"
+    search_text = {"MALE": "Парня", "FEMALE": "Девушку", "ANY": "Всех"}[data.get('which_search')]
+
+    await message.answer(
+        f"✅ Возраст: {data.get('age')}\n✅ Пол: {sex_text}\n✅ Ищешь: {search_text}\n✅ Город: {city}\n\n📝 Как тебя зовут?",
+        reply_markup=keyboard
+    )
     await state.set_state(LeomatchRegistration.FULL_NAME)
 
 
@@ -436,19 +574,17 @@ async def handle_city_input(message: types.Message, state: FSMContext):
 async def handle_name_input(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if len(name) > 15:
-        await message.answer(("Пожалуйста, введите имя не более 15 символов"))
+        await message.answer("Пожалуйста, введите имя не более 15 символов")
         return
+
     await state.update_data(full_name=name)
 
-    leo = await get_leo(message.from_user.id)
-    kwargs = {}
-    if leo:
-        kwargs['reply_markup'] = reply_kb.save_current_about()
+    class FakeCallback:
+        def __init__(self, msg):
+            self.message = msg
 
-    await message.answer(
-        ("Расскажи о себе и кого хочешь найти, чем предлагаешь заняться. Это поможет лучше подобрать тебе компанию."),
-        **kwargs)
-    await state.set_state(LeomatchRegistration.ABOUT_ME)
+    fake_callback = FakeCallback(message)
+    await show_about_step(fake_callback, state)
 
 
 @client_bot_router.message(F.text == ("Оставить текущее"), LeomatchRegistration.ABOUT_ME)
@@ -464,10 +600,17 @@ async def handle_save_current_about_text(message: types.Message, state: FSMConte
 @client_bot_router.message(LeomatchRegistration.ABOUT_ME)
 async def handle_about_me_input(message: types.Message, state: FSMContext):
     if len(message.text) > 300:
-        await message.answer(("Пожалуйста, введите описание не более 300 символов"))
+        await message.answer("Описание слишком длинное (макс 300 символов)")
         return
+
     await state.update_data(about_me=message.text)
-    await now_send_photo(message, state)
+
+    class FakeCallback:
+        def __init__(self, msg):
+            self.message = msg
+
+    fake_callback = FakeCallback(message)
+    await show_photo_step(fake_callback, state)
 
 
 @client_bot_router.message(F.text == ("Оставить текущее"), LeomatchRegistration.SEND_PHOTO)
@@ -486,51 +629,50 @@ from modul.clientbot.handlers.leomatch.data.state import LeomatchRegistration
 @client_bot_router.message(LeomatchRegistration.SEND_PHOTO)
 async def handle_media_upload(message: types.Message, state: FSMContext, bot: Bot):
     if not message.photo and not message.video and not message.video_note:
-        await message.answer("Пожалуйста, пришли фото, видео или видеосообщение")
+        await message.answer("Пожалуйста, пришлите фото, видео или видеосообщение")
         return
 
+    # Media processing
     url = ""
-    type = ""
+    media_type = ""
     if message.photo:
         url = message.photo[-1].file_id
-        type = "PHOTO"
+        media_type = "PHOTO"
     elif message.video:
         if message.video.duration > 15:
-            await message.answer("Пожалуйста, пришли видео не более 15 секунд")
+            await message.answer("Пожалуйста, пришлите видео не более 15 секунд")
             return
         url = message.video.file_id
-        type = "VIDEO"
+        media_type = "VIDEO"
     elif message.video_note:
         if message.video_note.duration > 15:
-            await message.answer("Пожалуйста, пришли видеосообщение не более 15 секунд")
+            await message.answer("Пожалуйста, пришлите видеосообщение не более 15 секунд")
             return
         url = message.video_note.file_id
-        type = "VIDEO_NOTE"
+        media_type = "VIDEO_NOTE"
 
-    print(f"Received media - type: {type}, file_id: {url}")
-
+    # File download
     base_dir = "modul/clientbot/data"
     os.makedirs(base_dir, exist_ok=True)
-
-    format = "jpg" if type == "PHOTO" else "mp4"
-    file_path = f"{base_dir}/leo{message.from_user.id}.{format}"
+    format_ext = "jpg" if media_type == "PHOTO" else "mp4"
+    file_path = f"{base_dir}/leo{message.from_user.id}.{format_ext}"
 
     try:
         file = await bot.get_file(url)
         await bot.download_file(file.file_path, file_path)
 
-        print(f"File saved to: {file_path}")
+        await state.update_data(photo=file_path, media_type=media_type)
 
-        await state.update_data(photo=url, media_type=type)
+        class FakeCallback:
+            def __init__(self, msg):
+                self.message = msg
 
-        updated_data = await state.get_data()
-        print(f"State after saving photo: {updated_data}")
-
-        await save_media(message, state, file_path, type)
+        fake_callback = FakeCallback(message)
+        await show_final_step(fake_callback, state)
 
     except Exception as e:
         print(f"Error saving media: {e}")
-        await message.answer("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
+        await message.answer("Произошла ошибка. Попробуйте еще раз.")
 
 
 @client_bot_router.message(F.text == ("Да"), LeomatchRegistration.FINAL)
@@ -569,4 +711,4 @@ async def handle_final_edit_text(message: types.Message, state: FSMContext):
 
 @client_bot_router.message(LeomatchRegistration.FINAL)
 async def handle_final_fallback(message: types.Message, state: FSMContext):
-    await message.answer(("Пожалуйста, нажмите на кнопку"), reply_markup=reply_kb.final_registration())
+    await message.answer("Пожалуйста, нажмите на кнопку", reply_markup=reply_kb.final_registration())

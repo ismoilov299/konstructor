@@ -37,6 +37,7 @@ async def start(message: types.Message, state: FSMContext):
 
     await state.clear()
     await state.update_data(me=user_id)
+    await message.delete()
     await message.answer("🔍 Начинаем поиск...", reply_markup=types.ReplyKeyboardRemove())
 
     # Qidiruv
