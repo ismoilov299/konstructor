@@ -318,7 +318,7 @@ async def handle_save_current_photo(callback: types.CallbackQuery, state: FSMCon
 @client_bot_router.callback_query(F.data == "upload_new_photo", LeomatchRegistration.SEND_PHOTO)
 async def handle_upload_new_photo(callback: types.CallbackQuery, state: FSMContext):
     keyboard = reply_kb.text_input_with_cancel()
-    await callback.message.delete()
+    # await callback.message.delete()
     await state.set_state(LeomatchRegistration.SEND_PHOTO)
     await callback.message.edit_text(
         "📷 Пришлите фото или видео (до 15 сек):",
