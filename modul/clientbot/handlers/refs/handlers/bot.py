@@ -477,6 +477,7 @@ async def profile(message: Message):
                 print(f"Added new user {message.from_user.id} from profile")
 
                 user_info = await get_user_info_db(message.from_user.id)
+                print(f"User info after adding: {user_info}")
 
                 if not user_info:
                     await message.answer(
