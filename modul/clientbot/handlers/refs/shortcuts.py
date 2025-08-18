@@ -109,7 +109,7 @@ from django.db import transaction
 @sync_to_async
 def get_bot_user_info(user_id, bot_token):
     """
-    FAQAT shu bot uchun balans va referrallar
+    FAQAT shu bot uchun balans va referrallar - avtomatik ClientBotUser yaratish bilan
     """
     try:
         print(f"DEBUG: get_bot_user_info called with user_id={user_id}, bot_token={bot_token}")
@@ -125,25 +125,47 @@ def get_bot_user_info(user_id, bot_token):
 
         print(f"DEBUG: Found bot: id={bot.id}, username={bot.username}")
 
-        # Получаем информацию о пользователе ТОЛЬКО ДЛЯ ЭТОГО БОТА
-        client_bot_user = ClientBotUser.objects.filter(
-            uid=user_id,
-            bot=bot
-        ).first()
+        # Сначала получаем или создаем UserTG
+        user_tg, user_created = UserTG.objects.get_or_create(
+            uid=str(user_id),
+            defaults={
+                'username': f'user_{user_id}',
+                'first_name': f'User {user_id}',
+                'balance': 0.0,
+                'refs': 0
+            }
+        )
 
-        if client_bot_user:
-            print(
-                f"DEBUG: Found ClientBotUser for bot {bot.username}: balance={client_bot_user.balance}, referral_count={client_bot_user.referral_count}")
-
-            # ВОЗВРАЩАЕМ ТОЛЬКО ДАННЫЕ ДЛЯ ЭТОГО БОТА
-            bot_balance = client_bot_user.balance  # Балас только в этом боте
-            bot_referrals = client_bot_user.referral_count  # Рефералы только в этом боте
-
-            print(f"DEBUG: Returning BOT-SPECIFIC balance={bot_balance}, referrals={bot_referrals}")
-            return [bot_balance, bot_referrals]
+        if user_created:
+            print(f"DEBUG: Created new UserTG for user_id={user_id}")
         else:
-            print(f"DEBUG: ClientBotUser not found for user={user_id} in bot={bot.username}")
-            return [0, 0]  # Пользователь не зарегистрирован в этом боте
+            print(f"DEBUG: Found existing UserTG: balance={user_tg.balance}, refs={user_tg.refs}")
+
+        # Получаем или создаем ClientBotUser для ЭТОГО БОТА
+        client_bot_user, client_created = ClientBotUser.objects.get_or_create(
+            uid=user_id,  # Используем uid как в вашем коде
+            bot=bot,
+            defaults={
+                'user': user_tg,  # Связываем с UserTG
+                'balance': user_tg.balance,  # Копируем баланс из UserTG
+                'referral_count': user_tg.refs  # Копируем refs из UserTG
+            }
+        )
+
+        if client_created:
+            print(f"DEBUG: Created new ClientBotUser for user={user_id} in bot={bot.username}")
+            print(
+                f"DEBUG: Initialized with balance={client_bot_user.balance}, referral_count={client_bot_user.referral_count}")
+        else:
+            print(
+                f"DEBUG: Found existing ClientBotUser: balance={client_bot_user.balance}, referral_count={client_bot_user.referral_count}")
+
+        # ВОЗВРАЩАЕМ ТОЛЬКО ДАННЫЕ ДЛЯ ЭТОГО БОТА
+        bot_balance = client_bot_user.balance  # Баланс только в этом боте
+        bot_referrals = client_bot_user.referral_count  # Рефералы только в этом боте
+
+        print(f"DEBUG: Returning BOT-SPECIFIC balance={bot_balance}, referrals={bot_referrals}")
+        return [bot_balance, bot_referrals]
 
     except Exception as e:
         print(f"DEBUG: Error in get_bot_user_info: {e}")
