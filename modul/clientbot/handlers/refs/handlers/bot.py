@@ -494,7 +494,7 @@ async def profile(message: Message):
                 return
 
         # Получаем информацию о пользователе в этом боте
-        bot_user_info = await get_bot_user_info(message.from_user.id, message.bot.token)
+        bot_user_info = await get_user_info_db(message.from_user.id, message.bot.token)
         print(f"Bot user info for {message.from_user.id}: {bot_user_info}")
 
         # Используем данные по конкретному боту или нули, если информация не найдена
