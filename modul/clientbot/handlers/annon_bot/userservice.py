@@ -32,8 +32,6 @@ def check_user(uid):
     return UserTG.objects.filter(uid=uid).exists()
 
 
-@sync_to_async
-@transaction.atomic
 async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None, invited: str = "Никто",
                    invited_id: int = None, user_link: str = None, bot_token: str = None, **kwargs):
     # tg_id va user_id ikkalasi ham qabul qilish uchun
@@ -56,7 +54,9 @@ async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None
     )
 
     # Bot olish
-    bot = await get_bot()
+    from modul.models import Bot
+
+    bot = await sync_to_async(Bot.objects.filter(enable_anon=True).first)()
     if not bot:
         return None
 
