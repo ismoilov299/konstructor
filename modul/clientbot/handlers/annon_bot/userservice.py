@@ -35,7 +35,7 @@ def check_user(uid):
 @sync_to_async
 @transaction.atomic
 async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None, invited: str = "Никто",
-                   invited_id: int = None, user_link: str = None):
+                   invited_id: int = None, user_link: str = None, bot_token: str = None, **kwargs):
     # tg_id va user_id ikkalasi ham qabul qilish uchun
     actual_user_id = tg_id or user_id
 
