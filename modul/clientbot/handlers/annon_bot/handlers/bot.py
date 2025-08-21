@@ -382,7 +382,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                         bot_token=message.bot.token  # Bot tokenini qo'shdik
                     )
                     # So'ng referral jarayonini ishga tushirish
-                    success = await process_referral(referral_id, message.from_user.id)
+                    success = await process_referral(referral_id, message.from_user.id, bot.token)
                     print(f"Annon bot: Referral process result: {success}")
                 else:
                     # O'zini o'zi referral qilolmaydi
