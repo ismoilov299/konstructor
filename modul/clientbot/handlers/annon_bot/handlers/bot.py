@@ -507,10 +507,14 @@ async def process_referral(inviter_id: int, new_user_id: int):
 
         # Bildirishnoma jo'natish
         try:
+            # Aynan joriy botdan xabar yuborish
             from aiogram import Bot
             from modul.loader import bot_session
 
-            async with Bot(token=bot.token, session=bot_session).context() as bot_instance:
+            # Joriy bot tokenini olish
+            current_bot_token = bot.token
+
+            async with Bot(token=current_bot_token, session=bot_session).context() as bot_instance:
                 user_link = f'<a href="tg://user?id={actual_new_user_id}">новый друг</a>'
                 notification_text = f"🎉 У вас {user_link}!\n💰 Баланс пополнен на {reward_amount}₽"
 
