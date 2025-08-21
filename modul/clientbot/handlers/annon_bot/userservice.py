@@ -64,11 +64,27 @@ async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None
     inviter_client = None
     if invited_id:
         try:
+            logger.info(f"🔍 Searching for inviter {invited_id} in bot {bot.id}")
             inviter_client = await sync_to_async(ClientBotUser.objects.filter(
                 uid=invited_id,
                 bot=bot
             ).first)()
             logger.info(f"Found inviter client: {inviter_client}")
+
+            if not inviter_client:
+                # Agar ClientBotUser mavjud bo'lmasa, UserTG ni tekshiramiz
+                inviter_usertg = await sync_to_async(UserTG.objects.filter(uid=invited_id).first)()
+                logger.info(f"Found inviter UserTG: {inviter_usertg}")
+
+                if inviter_usertg:
+                    # ClientBotUser yaratamiz
+                    inviter_client = await sync_to_async(ClientBotUser.objects.create)(
+                        uid=invited_id,
+                        user=inviter_usertg,
+                        bot=bot,
+                        current_ai_limit=12
+                    )
+                    logger.info(f"Created inviter ClientBotUser: {inviter_client}")
         except Exception as e:
             logger.error(f"Error finding inviter: {e}")
 

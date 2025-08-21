@@ -448,24 +448,19 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
 async def process_referral(inviter_id: int, new_user_id: int):
     """Referal jarayonini to'liq boshqarish"""
+    from asgiref.sync import sync_to_async  # Bu importni qo'shing
+
     logger.info(f"Annon process_referral: Processing referral from {inviter_id} to {new_user_id}")
 
     try:
-        # get_bot() funksiyasini bot parametrisiz chaqirish
-        from modul.clientbot.shortcuts import get_bot_by_token
-        from aiogram.types import Bot as BotType
+        # To'g'ridan-to'g'ri anon botni topamiz
+        from modul.models import Bot
+        from asgiref.sync import sync_to_async
 
-        # Bot tokenini olish uchun
-        bot_info = await BotType.get_current().get_me()
-        bot = await get_bot_by_token(bot_info.token) if hasattr(bot_info, 'token') else None
+        bot = await sync_to_async(Bot.objects.filter(enable_anon=True).first)()
 
         if not bot:
-            # Agar yuqoridagi usul ishlamasa, to'g'ridan-to'g'ri DB dan olamiz
-            from modul.models import Bot
-            from asgiref.sync import sync_to_async
-            bot = await sync_to_async(Bot.objects.filter(username__icontains='anon').first)()
-
-        if not bot:
+            logger.error("Anon bot not found in database")
             return False
 
         # Inviter ni topish
