@@ -34,21 +34,24 @@ def check_user(uid):
 
 @sync_to_async
 @transaction.atomic
-async def add_user(user_id: int, user_name: str = None, invited: str = "Никто", invited_id: int = None,
-                   user_link: str = None):
-    logger.info(f"🔧 DEBUG: annon_bot/userservice add_user called for user {user_id}")
+async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None, invited: str = "Никто",
+                   invited_id: int = None, user_link: str = None):
+    # tg_id va user_id ikkalasi ham qabul qilish uchun
+    actual_user_id = tg_id or user_id
+
+    logger.info(f"🔧 DEBUG: annon_bot/userservice add_user called for user {actual_user_id}")
     logger.info(f"Parameters: user_name={user_name}, invited={invited}, invited_id={invited_id}, user_link={user_link}")
 
     # UserTG yaratish yoki olish
     user_tg, created = await sync_to_async(UserTG.objects.get_or_create)(
-        uid=user_id,
+        uid=actual_user_id,
         defaults={
             'username': user_name,
-            'first_name': user_name or str(user_id),
+            'first_name': user_name or str(actual_user_id),
             'last_name': '',
             'invited': invited,
             'invited_id': invited_id,
-            'user_link': user_link or str(user_id)
+            'user_link': user_link or str(actual_user_id)
         }
     )
 
@@ -57,7 +60,7 @@ async def add_user(user_id: int, user_name: str = None, invited: str = "Никт
     if not bot:
         return None
 
-    # BU QISMNI O'ZGARTIRING - Inviter ni topish
+    # Inviter ni topish
     inviter_client = None
     if invited_id:
         try:
@@ -69,25 +72,25 @@ async def add_user(user_id: int, user_name: str = None, invited: str = "Никт
         except Exception as e:
             logger.error(f"Error finding inviter: {e}")
 
-    # BU QISMNI O'ZGARTIRING - ClientBotUser yaratishda inviter ni to'g'ri o'rnatish
+    # ClientBotUser yaratishda inviter ni to'g'ri o'rnatish
     client_user, created = await sync_to_async(ClientBotUser.objects.get_or_create)(
-        uid=user_id,
+        uid=actual_user_id,
         bot=bot,
         defaults={
             'user': user_tg,
-            'inviter': inviter_client,  # Oldin None edi, endi to'g'ri inviter
+            'inviter': inviter_client,  # Bu o'zgartirildi
             'current_ai_limit': 12
         }
     )
 
     if created:
-        logger.info(f"✅ DEBUG: annon_bot created ClientBotUser for {user_id} WITH INVITER={inviter_client}")
+        logger.info(f"✅ DEBUG: annon_bot created ClientBotUser for {actual_user_id} WITH INVITER={inviter_client}")
     else:
-        logger.info(f"🔄 DEBUG: annon_bot found existing ClientBotUser for {user_id}")
+        logger.info(f"🔄 DEBUG: annon_bot found existing ClientBotUser for {actual_user_id}")
 
     # user_link ni yangilash
     if not user_tg.user_link:
-        user_tg.user_link = str(user_id)
+        user_tg.user_link = str(actual_user_id)
         await sync_to_async(user_tg.save)()
         logger.info(f"✅ User_link set to: {user_tg.user_link}")
 

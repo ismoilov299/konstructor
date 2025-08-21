@@ -467,7 +467,7 @@ async def process_referral(inviter_id: int, new_user_id: int):
             logger.warning(f"Inviter {inviter_id} not found")
             return False
 
-        # BU QISMNI O'ZGARTIRING - Referral balansini to'g'ri yangilash
+        # Referral balansini to'g'ri yangilash
         reward_amount = 3.0
 
         inviter.balance += reward_amount
@@ -480,7 +480,7 @@ async def process_referral(inviter_id: int, new_user_id: int):
         logger.info(f"Annon bot: Referral stats updated for user {inviter_id}, reward amount: {reward_amount}")
         logger.info(f"New balance: {inviter.balance}, referral count: {inviter.referral_count}")
 
-        # Bildirishnoma jo'natish (bot_instance o'rniga to'g'ri bot obyektini ishlatish)
+        # Bildirishnoma jo'natish
         try:
             from aiogram import Bot
             from modul.loader import bot_session
