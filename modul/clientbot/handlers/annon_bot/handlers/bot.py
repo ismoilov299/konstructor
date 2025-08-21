@@ -451,7 +451,9 @@ async def process_referral(inviter_id: int, new_user_id: int):
     logger.info(f"Annon process_referral: Processing referral from {inviter_id} to {new_user_id}")
 
     try:
-        bot = await get_bot()
+        from aiogram import Bot as CurrentBot
+        current_bot = CurrentBot.get_current()
+        bot = await get_bot(current_bot)
         if not bot:
             return False
 
