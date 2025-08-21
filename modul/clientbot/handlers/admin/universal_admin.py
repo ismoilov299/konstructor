@@ -96,46 +96,131 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)', reply_markup=cancel_kb)
 
 
-
 @client_bot_router.message(SendMessagesForm.message)
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
-    bot_db = await shortcuts.get_bot(message.bot)
-    users = await get_all_users(bot_db)
 
-    if not users:
-        await message.answer("Нет пользователей для рассылки.")
-        return
+    try:
+        print(f"📤 Broadcast started by user: {message.from_user.id}")
 
-    success_count = 0
-    fail_count = 0
+        # Bot ma'lumotlarini olish
+        bot_db = await shortcuts.get_bot(message.bot)
+        print(f"🤖 Bot found: {bot_db}")
 
-    for user_id in users:
+        if not bot_db:
+            await message.answer("❌ Bot ma'lumotlari topilmadi!")
+            return
+
+        # Shu botdagi barcha foydalanuvchilarni olish
+        users = await get_all_users(bot_db)
+        print(f"👥 Users found: {len(users)} - {users}")
+
+        if not users:
+            await message.answer("❌ Рассылка uchun foydalanuvchilar topilmadi.")
+            return
+
+        success_count = 0
+        fail_count = 0
+        total_users = len(users)
+
+        # Progress xabari
+        progress_msg = await message.answer(f"📤 Рассылка boshlandi...\n👥 Jami: {total_users} foydalanuvchi")
+
+        for user_id in users:
+            try:
+                print(f"📨 Sending to user: {user_id}")
+
+                if message.text:
+                    await message.bot.send_message(
+                        chat_id=user_id,
+                        text=message.text,
+                        parse_mode="HTML"
+                    )
+                elif message.photo:
+                    await message.bot.send_photo(
+                        chat_id=user_id,
+                        photo=message.photo[-1].file_id,
+                        caption=message.caption or "",
+                        parse_mode="HTML"
+                    )
+                elif message.video:
+                    await message.bot.send_video(
+                        chat_id=user_id,
+                        video=message.video.file_id,
+                        caption=message.caption or "",
+                        parse_mode="HTML"
+                    )
+                elif message.audio:
+                    await message.bot.send_audio(
+                        chat_id=user_id,
+                        audio=message.audio.file_id,
+                        caption=message.caption or "",
+                        parse_mode="HTML"
+                    )
+                elif message.voice:
+                    await message.bot.send_voice(
+                        chat_id=user_id,
+                        voice=message.voice.file_id,
+                        caption=message.caption or ""
+                    )
+                elif message.document:
+                    await message.bot.send_document(
+                        chat_id=user_id,
+                        document=message.document.file_id,
+                        caption=message.caption or "",
+                        parse_mode="HTML"
+                    )
+                elif message.sticker:
+                    await message.bot.send_sticker(
+                        chat_id=user_id,
+                        sticker=message.sticker.file_id
+                    )
+                else:
+                    # Boshqa turdagi xabarlar uchun
+                    await message.bot.copy_message(
+                        chat_id=user_id,
+                        from_chat_id=message.chat.id,
+                        message_id=message.message_id
+                    )
+
+                success_count += 1
+                print(f"✅ Successfully sent to {user_id}")
+
+                # Flood control uchun kichik kutish
+                import asyncio
+                await asyncio.sleep(0.05)  # 50ms
+
+            except Exception as e:
+                fail_count += 1
+                print(f"❌ Error sending to {user_id}: {e}")
+                logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+        # Progress xabarini yangilash
         try:
-            if message.text:
-                await message.bot.send_message(chat_id=user_id, text=message.text)
-            elif message.photo:
-                await message.bot.send_photo(chat_id=user_id, photo=message.photo[-1].file_id, caption=message.caption)
-            elif message.video:
-                await message.bot.send_video(chat_id=user_id, video=message.video.file_id, caption=message.caption)
-            elif message.audio:
-                await message.bot.send_audio(chat_id=user_id, audio=message.audio.file_id, caption=message.caption)
-            elif message.document:
-                await message.bot.send_document(chat_id=user_id, document=message.document.file_id, caption=message.caption)
-            else:
-                await message.bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
+            await progress_msg.delete()
+        except:
+            pass
 
-            success_count += 1
-        except Exception as e:
-            fail_count += 1
-            logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+        # Natijani ko'rsatish
+        result_text = f"""
+📊 <b>Рассылка завершена!</b>
 
-    await message.answer(
-        f'Рассылка завершена!\n'
-        f'Успешно отправлено: {success_count}\n'
-        f'Не удалось отправить: {fail_count}'
-    )
+👥 Всего пользователей: {total_users}
+✅ Успешно отправлено: {success_count}
+❌ Ошибок: {fail_count}
+📈 Успешность: {(success_count / total_users * 100):.1f}%
 
+🤖 Бот: {bot_db.username}
+"""
+
+        await message.answer(result_text, parse_mode="HTML")
+        print(f"📊 Broadcast completed: {success_count}/{total_users}")
+
+    except Exception as e:
+        print(f"❌ Broadcast error: {e}")
+        logger.error(f"Broadcast error: {e}")
+        await message.answer("❌ Рассылка sırasında xatolik yuz berdi!")
+        await state.clear()
 
 
 @client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
