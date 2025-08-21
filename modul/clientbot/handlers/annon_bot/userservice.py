@@ -7,6 +7,7 @@ from django.db.models import Count, F
 from django.utils import timezone
 from psycopg2 import IntegrityError
 
+from modul.clientbot.shortcuts import get_bot
 from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today, \
     ChannelSponsor, ClientBotUser, Bot
 import pytz
@@ -33,73 +34,64 @@ def check_user(uid):
 
 @sync_to_async
 @transaction.atomic
-def add_user(tg_id, user_name, invited="Никто", invited_id=None, bot_token=None, user_link=None):
-    """
-    Anonim bot uchun foydalanuvchi qo'shish
-    MUHIM: user_link parametri ixtiyoriy
-    """
-    try:
-        from modul.models import Bot, UserTG, ClientBotUser
+async def add_user(user_id: int, user_name: str = None, invited: str = "Никто", invited_id: int = None,
+                   user_link: str = None):
+    logger.info(f"🔧 DEBUG: annon_bot/userservice add_user called for user {user_id}")
+    logger.info(f"Parameters: user_name={user_name}, invited={invited}, invited_id={invited_id}, user_link={user_link}")
 
-        print(f"🔧 DEBUG: annon_bot/userservice add_user called for user {tg_id}")
-        print(f"Parameters: user_name={user_name}, invited={invited}, invited_id={invited_id}, user_link={user_link}")
+    # UserTG yaratish yoki olish
+    user_tg, created = await sync_to_async(UserTG.objects.get_or_create)(
+        uid=user_id,
+        defaults={
+            'username': user_name,
+            'first_name': user_name or str(user_id),
+            'last_name': '',
+            'invited': invited,
+            'invited_id': invited_id,
+            'user_link': user_link or str(user_id)
+        }
+    )
 
-        # Botni topish
-        bot_obj = Bot.objects.get(token=bot_token)
+    # Bot olish
+    bot = await get_bot()
+    if not bot:
+        return None
 
-        # Allaqachon mavjud yoki yo'qligini tekshirish
-        existing_client = ClientBotUser.objects.filter(
-            uid=tg_id,
-            bot=bot_obj
-        ).first()
+    # BU QISMNI O'ZGARTIRING - Inviter ni topish
+    inviter_client = None
+    if invited_id:
+        try:
+            inviter_client = await sync_to_async(ClientBotUser.objects.filter(
+                uid=invited_id,
+                bot=bot
+            ).first)()
+            logger.info(f"Found inviter client: {inviter_client}")
+        except Exception as e:
+            logger.error(f"Error finding inviter: {e}")
 
-        if existing_client:
-            print(f"⚠️ User {tg_id} already exists for bot {bot_obj.username}")
-            return False
+    # BU QISMNI O'ZGARTIRING - ClientBotUser yaratishda inviter ni to'g'ri o'rnatish
+    client_user, created = await sync_to_async(ClientBotUser.objects.get_or_create)(
+        uid=user_id,
+        bot=bot,
+        defaults={
+            'user': user_tg,
+            'inviter': inviter_client,  # Oldin None edi, endi to'g'ri inviter
+            'current_ai_limit': 12
+        }
+    )
 
-        # UserTG ni yaratish yoki olish
-        user_tg, created = UserTG.objects.get_or_create(
-            uid=tg_id,
-            defaults={
-                'username': user_name,
-                'first_name': user_name,
-                'last_name': '',
-                'balance': 0,
-                'paid': 0,
-                'refs': 0,
-                'invited': invited,
-                'invited_id': invited_id,
-                'banned': False,
-                'user_link': user_link if user_link else str(tg_id),  # Default user_link
-                'greeting': "Добро пожаловать!"
-            }
-        )
+    if created:
+        logger.info(f"✅ DEBUG: annon_bot created ClientBotUser for {user_id} WITH INVITER={inviter_client}")
+    else:
+        logger.info(f"🔄 DEBUG: annon_bot found existing ClientBotUser for {user_id}")
 
-        # Agar UserTG allaqachon mavjud bo'lsa va user_link yo'q bo'lsa, yangilash
-        if not created and not user_tg.user_link and user_link:
-            user_tg.user_link = user_link
-            user_tg.save()
+    # user_link ni yangilash
+    if not user_tg.user_link:
+        user_tg.user_link = str(user_id)
+        await sync_to_async(user_tg.save)()
+        logger.info(f"✅ User_link set to: {user_tg.user_link}")
 
-        # ClientBotUser yaratish - INVITER NI BELGILAMAYDI
-        client_user = ClientBotUser.objects.create(
-            uid=tg_id,
-            user=user_tg,
-            bot=bot_obj,
-            inviter=None,  # MUHIM: Bu yerda None
-            balance=0,
-            referral_count=0,
-            referral_balance=0
-        )
-
-        print(f"✅ DEBUG: annon_bot created ClientBotUser for {tg_id} WITH INVITER=None")
-        print(f"✅ User_link set to: {user_tg.user_link}")
-        return True
-
-    except Exception as e:
-        print(f"❌ Error in annon_bot add_user: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    return client_user
 
 
 @sync_to_async

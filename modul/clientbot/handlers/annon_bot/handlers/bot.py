@@ -26,7 +26,7 @@ from modul.clientbot.handlers.kino_bot.shortcuts import get_all_channels_sponsor
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt2
 from modul.clientbot.handlers.refs.shortcuts import get_actual_price, get_actual_min_amount
 from modul.loader import client_bot_router
-from modul.clientbot.shortcuts import get_bot_by_token
+from modul.clientbot.shortcuts import get_bot_by_token, get_bot
 from modul.models import UserTG, AdminInfo, ClientBotUser
 
 logger = logging.getLogger(__name__)
@@ -446,51 +446,62 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
     )
 
 
-async def process_referral(message: Message, referral_id: int):
-    try:
-        print(f"Annon process_referral: Processing referral from {referral_id} to {message.from_user.id}")
+async def process_referral(inviter_id: int, new_user_id: int):
+    """Referal jarayonini to'liq boshqarish"""
+    logger.info(f"Annon process_referral: Processing referral from {inviter_id} to {new_user_id}")
 
-        # O'zini o'zi referral qilishni tekshirish
-        if str(referral_id) == str(message.from_user.id):
-            print(f"Annon process_referral: Self-referral blocked for user {message.from_user.id}")
+    try:
+        bot = await get_bot()
+        if not bot:
             return False
 
-        # Referral beruvchini tekshirish
-        inviter = await get_user_by_id(referral_id)
-        print(f"Annon process_referral: Inviter check result: {inviter}")
+        # Inviter ni topish
+        inviter = await sync_to_async(ClientBotUser.objects.filter(
+            uid=inviter_id,
+            bot=bot
+        ).select_related('user').first)()
+
+        logger.info(f"Annon process_referral: Inviter check result: {inviter}")
 
         if not inviter:
-            print(f"Annon process_referral: Inviter {referral_id} not found")
+            logger.warning(f"Inviter {inviter_id} not found")
             return False
 
-        # Referral statistikasini yangilash
-        stats_updated = await update_referral_stats(referral_id)
-        print(f"Annon process_referral: Stats updated: {stats_updated}")
+        # BU QISMNI O'ZGARTIRING - Referral balansini to'g'ri yangilash
+        reward_amount = 3.0
 
-        if stats_updated:
-            # Referral beruvchiga xabar yuborish
-            try:
-                print(f"Annon process_referral: Preparing notification for referrer {referral_id}")
-                user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
+        inviter.balance += reward_amount
+        inviter.referral_count += 1
+        inviter.referral_balance += reward_amount
 
-                await message.bot.send_message(
-                    chat_id=referral_id,
-                    text=f"У вас новый {user_link}!",
+        # MUHIM: save() ni await bilan chaqirish
+        await sync_to_async(inviter.save)()
+
+        logger.info(f"Annon bot: Referral stats updated for user {inviter_id}, reward amount: {reward_amount}")
+        logger.info(f"New balance: {inviter.balance}, referral count: {inviter.referral_count}")
+
+        # Bildirishnoma jo'natish (bot_instance o'rniga to'g'ri bot obyektini ishlatish)
+        try:
+            from aiogram import Bot
+            from modul.loader import bot_session
+
+            async with Bot(token=bot.token, session=bot_session).context() as bot_instance:
+                user_link = f'<a href="tg://user?id={new_user_id}">новый друг</a>'
+                notification_text = f"🎉 У вас {user_link}!\n💰 Баланс пополнен на {reward_amount}₽"
+
+                await bot_instance.send_message(
+                    chat_id=inviter_id,
+                    text=notification_text,
                     parse_mode="HTML"
                 )
-                print(f"Annon process_referral: Notification sent to {referral_id} about user {message.from_user.id}")
-                return True
-            except Exception as e:
-                print(f"Annon process_referral: Error sending notification: {e}")
-                traceback.print_exc()
-                return False
-        else:
-            print(f"Annon process_referral: Failed to update referral stats for {referral_id}")
-            return False
+                logger.info(f"Annon process_referral: Notification sent to {inviter_id} about user {new_user_id}")
+        except Exception as e:
+            logger.error(f"Error sending notification: {e}")
+
+        return True
 
     except Exception as e:
-        print(f"Annon process_referral: Error in process_referral: {e}")
-        traceback.print_exc()
+        logger.error(f"Error in process_referral: {e}")
         return False
 
 
