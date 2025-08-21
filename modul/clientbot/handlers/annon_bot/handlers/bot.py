@@ -448,14 +448,31 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
 async def process_referral(inviter_id: int, new_user_id: int):
     """Referal jarayonini to'liq boshqarish"""
-    from asgiref.sync import sync_to_async  # Bu importni qo'shing
+    from asgiref.sync import sync_to_async
 
-    logger.info(f"Annon process_referral: Processing referral from {inviter_id} to {new_user_id}")
+    # Debug: parametrlarni tekshirish
+    logger.info(f"Annon process_referral: inviter_id type: {type(inviter_id)}, value: {inviter_id}")
+    logger.info(f"Annon process_referral: new_user_id type: {type(new_user_id)}, value: {new_user_id}")
+
+    # Agar parametrlar noto'g'ri kelsa, to'g'rilash
+    if hasattr(inviter_id, 'from_user'):
+        # Agar Message obyekti kelsa
+        actual_inviter_id = inviter_id.from_user.id
+        actual_new_user_id = new_user_id
+    elif hasattr(inviter_id, 'id'):
+        # Agar User obyekti kelsa
+        actual_inviter_id = inviter_id.id
+        actual_new_user_id = new_user_id
+    else:
+        # Oddiy int qiymatlar
+        actual_inviter_id = int(inviter_id)
+        actual_new_user_id = int(new_user_id)
+
+    logger.info(f"Annon process_referral: Processing referral from {actual_inviter_id} to {actual_new_user_id}")
 
     try:
         # To'g'ridan-to'g'ri anon botni topamiz
         from modul.models import Bot
-        from asgiref.sync import sync_to_async
 
         bot = await sync_to_async(Bot.objects.filter(enable_anon=True).first)()
 
@@ -465,14 +482,14 @@ async def process_referral(inviter_id: int, new_user_id: int):
 
         # Inviter ni topish
         inviter = await sync_to_async(ClientBotUser.objects.filter(
-            uid=inviter_id,
+            uid=actual_inviter_id,
             bot=bot
         ).select_related('user').first)()
 
         logger.info(f"Annon process_referral: Inviter check result: {inviter}")
 
         if not inviter:
-            logger.warning(f"Inviter {inviter_id} not found")
+            logger.warning(f"Inviter {actual_inviter_id} not found")
             return False
 
         # Referral balansini to'g'ri yangilash
@@ -485,7 +502,7 @@ async def process_referral(inviter_id: int, new_user_id: int):
         # MUHIM: save() ni await bilan chaqirish
         await sync_to_async(inviter.save)()
 
-        logger.info(f"Annon bot: Referral stats updated for user {inviter_id}, reward amount: {reward_amount}")
+        logger.info(f"Annon bot: Referral stats updated for user {actual_inviter_id}, reward amount: {reward_amount}")
         logger.info(f"New balance: {inviter.balance}, referral count: {inviter.referral_count}")
 
         # Bildirishnoma jo'natish
@@ -494,15 +511,16 @@ async def process_referral(inviter_id: int, new_user_id: int):
             from modul.loader import bot_session
 
             async with Bot(token=bot.token, session=bot_session).context() as bot_instance:
-                user_link = f'<a href="tg://user?id={new_user_id}">новый друг</a>'
+                user_link = f'<a href="tg://user?id={actual_new_user_id}">новый друг</a>'
                 notification_text = f"🎉 У вас {user_link}!\n💰 Баланс пополнен на {reward_amount}₽"
 
                 await bot_instance.send_message(
-                    chat_id=inviter_id,
+                    chat_id=actual_inviter_id,
                     text=notification_text,
                     parse_mode="HTML"
                 )
-                logger.info(f"Annon process_referral: Notification sent to {inviter_id} about user {new_user_id}")
+                logger.info(
+                    f"Annon process_referral: Notification sent to {actual_inviter_id} about user {actual_new_user_id}")
         except Exception as e:
             logger.error(f"Error sending notification: {e}")
 
