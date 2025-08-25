@@ -44,6 +44,7 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('Суперпользователь должен иметь is_superuser=True.')
 
         return self.create_user(uid, username, first_name, last_name, profile_image, password, **extra_fields)
+from tortoise import fields
 from django.db import models  # ✅ To'g'ri import
 
 class ReferralCode(models.Model):
@@ -382,7 +383,7 @@ class AdminInfo(models.Model):
 
 
 class ChannelSponsor(models.Model):
-    channel_id = models.BigIntegerField()
+    chanel_id = models.BigIntegerField()
 
 
 class Messages(models.Model):

@@ -27,11 +27,21 @@ from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt2
 from modul.clientbot.handlers.refs.shortcuts import get_actual_price, get_actual_min_amount
 from modul.loader import client_bot_router
 from modul.clientbot.shortcuts import get_bot_by_token, get_bot
-from modul.models import UserTG, AdminInfo, ClientBotUser
+from modul.models import UserTG, AdminInfo, ClientBotUser, Channels
 
 logger = logging.getLogger(__name__)
 
-
+# async def get_channels_for_check():
+#     from asgiref.sync import sync_to_async
+#
+#     try:
+#         channels = await sync_to_async(list)(
+#             Channels.objects.values_list('channel_id', 'channel_url')
+#         )
+#         return channels
+#     except Exception as e:
+#         logger.error(f"Error getting channels: {e}")
+#         return []
 async def check_channels(user_id: int, bot: Bot) -> bool:
     try:
         channels = await get_channels_for_check()
@@ -535,20 +545,7 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
 
 # YORDAMCHI FUNKSIYALAR
 
-async def get_channels_for_check():
-    """Majburiy kanallar ro'yxatini olish"""
-    from asgiref.sync import sync_to_async
-    from modul.models import ChannelSponsor
 
-    try:
-        channels = await sync_to_async(list)(
-            ChannelSponsor.objects.values_list('chanel_id', 'channel_url')
-        )
-        print(f"Found channels in DB: {await sync_to_async(list)(ChannelSponsor.objects.all())}")
-        return channels
-    except Exception as e:
-        logger.error(f"Error getting channels: {e}")
-        return []
 
 
 async def create_channels_keyboard(channels, bot):
