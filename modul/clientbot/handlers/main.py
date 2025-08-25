@@ -121,27 +121,24 @@ async def on_start(message: Message, command: CommandObject, state: FSMContext, 
             inviter = None
             if command.args and command.args.isdigit():
                 inviter_id = int(command.args)
-                inviter = await shortcuts.get_user(inviter_id, bot)
-                if inviter:
-                    with suppress(TelegramForbiddenError):
-                        user_link = html.link('реферал', f'tg://user?id={uid}')
-                        await bot.send_message(
-                            chat_id=inviter_id,
-                            text=f"У вас новый {user_link}!"
-                        )
-                        print("main start")
+                if inviter_id != uid:  # O'zini referral qilmaslik
+                    inviter = await shortcuts.get_user(inviter_id, bot)
+                    if inviter:
+                        # BITTA funksiyada ref va balance yangilash
+                        referral_success = await update_referral_bonus(inviter_id, bot.token)
 
-                    ref_success = await plus_ref(inviter_id)
-                    if ref_success:
-                        logger.info(f"Referral count updated for user {inviter_id}")
-                    else:
-                        logger.error(f"Failed to update referral count for user {inviter_id}")
+                        if referral_success:
+                            logger.info(f"Referral bonus updated for user {inviter_id}")
 
-                    balance_success = await plus_money(inviter_id)
-                    if balance_success:
-                        logger.info(f"Balance updated for user {inviter_id}")
-                    else:
-                        logger.error(f"Failed to update balance for user {inviter_id}")
+                            with suppress(TelegramForbiddenError):
+                                user_link = html.link('реферал', f'tg://user?id={uid}')
+                                await bot.send_message(
+                                    chat_id=inviter_id,
+                                    text=f"У вас новый {user_link}!"
+                                )
+                                print("main start")
+                        else:
+                            logger.error(f"Failed to update referral bonus for user {inviter_id}")
 
             await save_user(u=message.from_user, inviter=inviter, bot=bot)
 
