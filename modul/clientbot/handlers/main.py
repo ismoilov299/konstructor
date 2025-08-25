@@ -104,6 +104,47 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         raise
 
 
+@sync_to_async
+@transaction.atomic
+def update_referral_bonus(inviter_id: int, bot_token: str):
+    """Ref count va balance ni birgalikda yangilash"""
+    try:
+        print(f"DEBUG: update_referral_bonus called for {inviter_id}, bot: {bot_token}")
+
+        bot_instance = models.Bot.objects.filter(token=bot_token).first()
+        if not bot_instance:
+            print(f"ERROR: Bot not found: {bot_token}")
+            return False
+
+        client_user = models.ClientBotUser.objects.select_for_update().filter(
+            uid=inviter_id,
+            bot=bot_instance
+        ).first()
+
+        if not client_user:
+            print(f"ERROR: ClientBotUser not found for {inviter_id} in bot {bot_instance.username}")
+            return False
+
+        admin_info = models.AdminInfo.objects.filter(bot_token=bot_token).first()
+        bonus_amount = admin_info.price if admin_info and admin_info.price else 3.0
+
+        print(f"DEBUG: Current balance: {client_user.balance}, refs: {client_user.referral_count}")
+
+        client_user.balance += bonus_amount
+        client_user.referral_count += 1
+        client_user.referral_balance += bonus_amount
+        client_user.save()
+
+        print(f"DEBUG: Updated balance: {client_user.balance}, refs: {client_user.referral_count}")
+        return True
+
+    except Exception as e:
+        print(f"ERROR in update_referral_bonus: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 @client_bot_router.message(CommandStart())
 async def on_start(message: Message, command: CommandObject, state: FSMContext, bot: Bot):
     try:
