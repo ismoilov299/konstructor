@@ -1096,25 +1096,31 @@ async def anon_mes(message: Message, state: FSMContext):
         )
         await state.clear()
 
+
 @client_bot_router.message(Links.change_greeting)
 async def change_greeting(message: Message, state: FSMContext):
     if message.text:
         new_greeting = "👋" + message.text
-        if 4 < len(new_greeting) < 301:
-            await message.bot.send_message(chat_id=message.from_user.id,
-                                           text="👋 Приветствие не может быть короче 5 и длиннее 300 символов.\n"
-                                                "Пожалуйста, попробуйте заново.", reply_markup=await main_menu_bt())
+
+        if len(new_greeting) < 5 or len(new_greeting) > 300:
+            await message.answer(
+                "👋 Приветствие не может быть короче 5 и длиннее 300 символов.\n"
+                "Пожалуйста, попробуйте заново.",
+                reply_markup=await main_menu_bt()
+            )
             await state.clear()
         else:
-            await message.bot.send_message(chat_id=message.from_user.id, text=f"Отлично!\n\n"
-                                                                              f"Ваше новое приветсвие: {new_greeting}",
-                                           reply_markup=await main_menu_bt())
+            await message.answer(
+                f"Отлично!\n\nВаше новое приветствие: {new_greeting}",
+                reply_markup=await main_menu_bt()
+            )
             change_greeting_user(message.from_user.id, new_greeting)
             await state.clear()
     else:
-        await message.bot.send_message(chat_id=message.from_user.id,
-                                       text="Ошибка! 👋Приветствие может состоять только из символов и эмодзи",
-                                       reply_markup=await main_menu_bt())
+        await message.answer(
+            "Ошибка! 👋Приветствие может состоять только из символов и эмодзи",
+            reply_markup=await main_menu_bt()
+        )
         await state.clear()
 
 
