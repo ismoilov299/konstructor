@@ -25,7 +25,7 @@ MEDIA_ROOT = BASE_DIR / "downloads"
 class Settings(BaseSettings):
     WEBHOOK_PATH: str = "bot/webhook/{token}"
     WEBHOOK_URL = 'https://ismoilov299.uz/bot/webhook/{token}'
-    BOT_TOKEN: str = '6746881064:AAFeVCH1odRrxqqHLkBKvW39wABT3PO37-w'
+    BOT_TOKEN: str = '6746881064:AAGQty_ycdbrq8kU7RUKw8Jci3Z5pkYujNU'
     ADMIN: int = 889121031
     DOLLAR_CURRENCY: float = 0.0
     # ADMIN_LIST = [ADMIN, 302942780]
