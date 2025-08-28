@@ -55,13 +55,13 @@ async def bot_management_keyboard(bot_id, is_active=True):
     """Клавиатура управления ботом"""
     buttons = [
         [InlineKeyboardButton(text="📊 Статистика", callback_data=f"bot_stats:{bot_id}")],
-        [InlineKeyboardButton(text="🔧 Модули", callback_data=f"edit_modules:{bot_id}")],
-        [InlineKeyboardButton(text="⚙️ Настройки", callback_data=f"bot_settings:{bot_id}")],
+        # [InlineKeyboardButton(text="🔧 Модули", callback_data=f"edit_modules:{bot_id}")],
+        # [InlineKeyboardButton(text="⚙️ Настройки", callback_data=f"bot_settings:{bot_id}")],
         [
-            InlineKeyboardButton(
-                text="🔴 Выключить" if is_active else "🟢 Включить",
-                callback_data=f"toggle_bot:{bot_id}"
-            ),
+            # InlineKeyboardButton(
+            #     text="🔴 Выключить" if is_active else "🟢 Включить",
+            #     callback_data=f"toggle_bot:{bot_id}"
+            # ),
             InlineKeyboardButton(
                 text="🗑️ Удалить",
                 callback_data=f"delete_bot:{bot_id}"
