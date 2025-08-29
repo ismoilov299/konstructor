@@ -62,36 +62,88 @@ async def check_channels(user_id: int, bot: Bot) -> bool:
 
 @sync_to_async
 @transaction.atomic
-def save_user(u, bot: Bot, link=None, inviter=None):
+def save_user(telegram_user, bot: Bot, inviter_uid=None):
+    """
+    Anon bot uchun user yaratish
+    """
     try:
         bot_instance = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
         if not bot_instance:
             raise ValueError(f"Bot with token {bot.token} not found")
 
-        user, user_created = models.UserTG.objects.update_or_create(
-            uid=u.id,
+        # UserTG yaratish/topish
+        user_tg, user_created = models.UserTG.objects.get_or_create(
+            uid=telegram_user.id,
             defaults={
-                "username": u.username,
-                "first_name": u.first_name,
-                "last_name": u.last_name,
-                "user_link": link,
+                "username": telegram_user.username,
+                "first_name": telegram_user.first_name if telegram_user.first_name else f"User_{telegram_user.id}",
+                "last_name": telegram_user.last_name,
+                "user_link": str(telegram_user.id),
             }
         )
 
-        client_user, client_user_created = models.ClientBotUser.objects.update_or_create(
-            uid=u.id,
+        if not user_created and telegram_user.username:
+            user_tg.username = telegram_user.username
+            user_tg.save(update_fields=['username'])
+
+        # Inviter topish
+        inviter_client = None
+        if inviter_uid and str(inviter_uid).isdigit():
+            inviter_client = models.ClientBotUser.objects.filter(
+                uid=int(inviter_uid), bot=bot_instance
+            ).first()
+
+        # ClientBotUser yaratish/topish
+        client_user, client_created = models.ClientBotUser.objects.get_or_create(
+            uid=telegram_user.id,
             bot=bot_instance,
             defaults={
-                "user": user,
-                "inviter": inviter,
+                "user": user_tg,
+                "inviter": inviter_client,
                 "current_ai_limit": 12 if user_created else 0,
             }
         )
 
-        return client_user
+        # AnonClientModel yaratish/topish
+        anon_client, anon_created = models.AnonClientModel.objects.get_or_create(
+            user=user_tg,
+            bot_username=bot_instance.username,
+            defaults={
+                'sex': 'ANY',
+                'which_search': 'ANY',
+                'status': 0,
+            }
+        )
+
+        # Referral bonus berish
+        if client_created and inviter_client:
+            try:
+                admin_info = models.AdminInfo.objects.first()
+                bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
+            except:
+                bonus_amount = 3.0
+
+            inviter_client.balance += bonus_amount
+            inviter_client.referral_count += 1
+            inviter_client.referral_balance += bonus_amount
+            inviter_client.save(update_fields=['balance', 'referral_count', 'referral_balance'])
+
+            inviter_user_tg = inviter_client.user
+            inviter_user_tg.refs += 1
+            inviter_user_tg.save(update_fields=['refs'])
+
+            logger.info(f"Referral bonus {bonus_amount} given to {inviter_uid} for {telegram_user.id}")
+
+        return {
+            'client_user': client_user,
+            'anon_client': anon_client,
+            'user_created': user_created,
+            'client_created': client_created,
+            'inviter': inviter_client
+        }
 
     except Exception as e:
-        logger.error(f"Error saving user {u.id}: {e}")
+        logger.error(f"Error in save_user: {e}")
         raise
 
 
@@ -336,122 +388,100 @@ async def show_main_menu(message: types.Message, bot: Bot):
 
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
-    """Anon bot start command - kanal va referal tekshiruvi bilan"""
     await state.clear()
     user_id = message.from_user.id
     args = command.args
 
-    logger.info(f"Start command received from user {user_id} anon bot")
-    print(f"Full start message: {message.text}")
-    print(f"Extracted referral from command.args: {args}")
+    logger.info(f"Anon bot start: user {user_id}, args: {args}")
 
-    # 1. REFERAL MA'LUMOTLARINI STATE GA SAQLASH
-    if args and args.isdigit():
-        referrer_id = int(args)
-        if referrer_id != user_id:  # O'zini o'zi referal qilolmaydi
-            await state.update_data(referral=args, referrer_id=args)
-            print(f"Saved referral to state with both keys: {args}")
-
-    # 2. KANALLARNI TEKSHIRISH
+    # Kanal tekshirish
     channels = await get_channels_for_check()
-    print(f"📡 Found channels: {channels}")
 
     if channels:
-        print(f"🔒 Channels exist, checking user subscription for {user_id}")
-
-        # Har bir kanalga obuna tekshirish
         subscribed_all = True
         for channel_info in channels:
             try:
-                # Channel ID ni olish (tuple yoki int)
                 if isinstance(channel_info, tuple):
                     channel_id = int(channel_info[0]) if channel_info[0] else int(channel_info[1])
                 else:
                     channel_id = int(channel_info)
 
                 member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
-                print(f"Channel {channel_id} status: {member.status}")
 
                 if member.status in ['left', 'kicked']:
                     subscribed_all = False
                     break
 
             except Exception as e:
-                logger.error(f"Error checking channel {channel_info}: {e}")
+                logger.error(f"Error checking channel: {e}")
                 subscribed_all = False
                 break
 
         if not subscribed_all:
-            print(f"🚫 User {user_id} not subscribed to all channels")
-            print(f"📝 State saved for user {user_id}: referral data will be processed after channel check")
-            print(f"🚫 NOT adding user to database - waiting for check_chan callback")
+            if args and args.isdigit() and int(args) != user_id:
+                await state.update_data(referral_uid=args)
 
-            # Kanal obuna xabarini ko'rsatish
             markup = await create_channels_keyboard(channels, bot)
-            await message.answer(
-                "🔒 Для использования бота подпишитесь на наши каналы:",
-                reply_markup=markup
-            )
+            await message.answer("Для использования бота подпишитесь на наши каналы:", reply_markup=markup)
             return
 
-    print(f"✅ User {user_id} passed channel check or no channels required")
+    # User registration
+    referrer_uid = None
+    if args and args.isdigit() and int(args) != user_id:
+        referrer_uid = int(args)
 
-    # 3. FOYDALANUVCHINI BAZAGA QO'SHISH
-    user_exists = await check_user_exists(user_id)
-    print(f"📝 User {user_id} registration status: {user_exists}")
+    try:
+        result = await save_user(message.from_user, bot, referrer_uid)
 
-    if not user_exists:
-        # Yangi foydalanuvchini qo'shish
-        result = await add_user_to_anon_bot(
-            user_id=user_id,
-            username=message.from_user.username,
-            first_name=message.from_user.first_name,
-            last_name=message.from_user.last_name,
-            bot=bot
-        )
-        print(f"➕ Added user {user_id} to database, result: {result}")
+        # Referral notification
+        if result.get('inviter') and result['user_created']:
+            try:
+                user_link = f'<a href="tg://user?id={user_id}">новый друг</a>'
+                bonus_amount = 3.0
+                await bot.send_message(
+                    chat_id=result['inviter'].uid,
+                    text=f"У вас {user_link}! Баланс пополнен на {bonus_amount}₽",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Error sending referral notification: {e}")
 
-        # 4. REFERAL BONUSINI ISHLATISH
-        state_data = await state.get_data()
-        referrer_id = state_data.get('referrer_id')
+    except Exception as e:
+        logger.error(f"Error in registration: {e}")
+        await message.answer("Произошла ошибка. Попробуйте позже.")
+        return
 
-        if referrer_id:
-            print(f"🔄 Processing referral for NEW user {user_id} from {referrer_id}")
-            await process_anon_referral_bonus(user_id, int(referrer_id), bot)
-
-    # 5. ANONIM XABAR YUBORISH LOGIKASI
+    # Anonim xabar logikasi
     if args and args.isdigit():
         target_id = int(args)
-        if await check_user_exists(target_id):  # Target user mavjudligini tekshirish
-            print(f"Anon bot: Setting up anonymous message to user {target_id}")
+        target_exists = await check_user_exists(target_id)
+
+        if target_exists and target_id != user_id:
             await state.set_state(Links.send_st)
             await state.update_data({"link_user": target_id})
+
             await message.answer(
-                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+                "Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
                 "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
                 "получит ваше сообщение, но не будет знать от кого.\n\n"
-                "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-                "(кружки), а также стикеры.\n\n"
-                "⚠️ Это полностью анонимно!",
+                "Отправить можно фото, видео, текст, голосовые, видеосообщения.\n\n"
+                "Это полностью анонимно!",
                 reply_markup=await cancel_in()
             )
             return
 
-    # 6. ASOSIY MENYU KO'RSATISH
+    # Asosiy menyu
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={user_id}"
-    print(f"Anon bot: Showing main menu to user {user_id}")
 
     await message.answer(
-        f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-        f"Твоя личная ссылка:\n👉{link}\n\n"
-        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-        f"других соц сетях, чтобы начать получать сообщения 💬",
+        f"<b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+        f"Твоя личная ссылка:\n{link}\n\n"
+        f"Размести эту ссылку в своём профиле Telegram/Instagram/TikTok или "
+        f"других соц сетях, чтобы начать получать сообщения",
         parse_mode="html",
         reply_markup=await main_menu_bt()
     )
-
-    await state.clear()
 
 
 # CALLBACK HANDLER - Kanal tekshiruvidan keyin
@@ -549,7 +579,6 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
 
 
 async def create_channels_keyboard(channels, bot):
-    """Kanallar uchun keyboard yaratish"""
     keyboard = []
 
     for channel_info in channels:
@@ -579,7 +608,6 @@ async def create_channels_keyboard(channels, bot):
 
 
 async def check_user_exists(user_id):
-    """Foydalanuvchi mavjudligini tekshirish"""
     from asgiref.sync import sync_to_async
     from modul.models import ClientBotUser, Bot as BotModel
 
@@ -589,7 +617,6 @@ async def check_user_exists(user_id):
         if not current_bot:
             return False
 
-        # User mavjudligini tekshirish
         user = await sync_to_async(ClientBotUser.objects.filter(
             uid=user_id,
             bot=current_bot
@@ -681,7 +708,6 @@ async def process_anon_referral_bonus(new_user_id, referrer_id, bot):
 
         print(f"🔧 DEBUG: Found referrer ClientBotUser: {referrer_id}, current balance: {referrer.balance}")
 
-        # Yangi foydalanuvchini topish
         new_user = await sync_to_async(ClientBotUser.objects.filter(
             uid=new_user_id,
             bot=current_bot
@@ -736,7 +762,6 @@ async def process_anon_referral_bonus(new_user_id, referrer_id, bot):
 
 
 async def process_referral(inviter_id: int, new_user_id: int, current_bot_token: str = None):
-    """Referal jarayonini to'liq boshqarish"""
     from asgiref.sync import sync_to_async
 
     # Debug: parametrlarni tekshirish
@@ -864,12 +889,12 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         link_for_db = new_link[new_link.index("=") + 1:]
 
         await add_user(
-            tg_id=callback.from_user.id,  # callback.from_user emas, callback.from_user.id bo'lishi kerak
+            tg_id=callback.from_user.id,
             user_name=callback.from_user.first_name,
             invited="Никто",
             invited_id=None,
             bot_token=bot.token,
-            user_link=link_for_db  # user_link qo'shildi
+            user_link=link_for_db
         )
 
         data = await state.get_data()

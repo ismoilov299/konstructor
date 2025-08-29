@@ -44,7 +44,6 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('Суперпользователь должен иметь is_superuser=True.')
 
         return self.create_user(uid, username, first_name, last_name, profile_image, password, **extra_fields)
-from tortoise import fields
 from django.db import models  # ✅ To'g'ri import
 
 class ReferralCode(models.Model):
@@ -306,14 +305,18 @@ class TaskModel(models.Model):
 
 class AnonClientModel(models.Model):
     user = models.ForeignKey(UserTG, on_delete=models.CASCADE)
-    sex = models.CharField(max_length=50, choices=SexEnum.choices)
+    sex = models.CharField(max_length=50, choices=SexEnum.choices, default='ANY')  # default qo'shish
+    which_search = models.CharField(max_length=50, choices=SexEnum.choices, default='ANY')  # YANGI MAYDON
     status = models.IntegerField(default=0)
     vip_date_end = models.DateTimeField(null=True)
     job_id = models.CharField(max_length=255, null=True)
     bot_username = models.CharField(max_length=100, default="")
 
+    class Meta:
+        unique_together = ['user', 'bot_username']  # Bu allaqachon mavjud
+
     def __str__(self):
-        return f"Anon Client {self.user}"
+        return f"Anon Client {self.user.uid} - {self.bot_username}"
 
 
 class AnonChatModel(models.Model):
