@@ -608,25 +608,20 @@ async def create_channels_keyboard(channels, bot):
 
 
 async def check_user_exists(user_id):
+    """
+    Foydalanuvchi umumiy bazada mavjudligini tekshirish (UserTG jadvalidan)
+    """
     from asgiref.sync import sync_to_async
-    from modul.models import ClientBotUser, Bot as BotModel
+    from modul.models import UserTG
 
     try:
-        # Joriy anon botni topish
-        current_bot = await sync_to_async(BotModel.objects.filter(enable_anon=True).first)()
-        if not current_bot:
-            return False
-
-        user = await sync_to_async(ClientBotUser.objects.filter(
-            uid=user_id,
-            bot=current_bot
-        ).first)()
-
+        # UserTG da mavjudligini tekshirish - bot-specific emas, umumiy baza
+        user = await sync_to_async(UserTG.objects.filter(uid=user_id).first)()
         return user is not None
+
     except Exception as e:
         logger.error(f"Error checking user existence: {e}")
         return False
-
 
 async def add_user_to_anon_bot(user_id, username, first_name, last_name, bot):
     """Foydalanuvchini anon botga qo'shish"""
