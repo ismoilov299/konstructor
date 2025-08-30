@@ -2110,6 +2110,7 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
         filename = f"youtube_{video_id}_{format_data['quality']}.mp4"
         filepath = os.path.join(temp_dir, filename)
         logger.info(f"📁 Temp file path: {filepath}")
+        print(format_data)
 
         await callback.message.edit_text(
             f"⏬ <b>Загружаю...</b>\n\n"
