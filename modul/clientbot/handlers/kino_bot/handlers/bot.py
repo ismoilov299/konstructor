@@ -2063,7 +2063,7 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
 
         # Download and send
         await download_and_send_youtube_fast(
-            callback, download_url, selected_quality, video_id, f"Video {video_id}", size_mb
+            callback, download_url, selected_quality, video_id, size_mb
         )
 
     except Exception as e:
