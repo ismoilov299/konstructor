@@ -118,7 +118,7 @@ def save_user(telegram_user, bot: Bot, inviter_uid=None):
         # Referral bonus berish
         if client_created and inviter_client:
             try:
-                admin_info = models.AdminInfo.objects.first()
+                admin_info = models.AdminInfo.objects.filter(bot_token=bot.token).first()
                 bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
             except:
                 bonus_amount = 3.0
@@ -678,7 +678,7 @@ async def add_user_to_anon_bot(user_id, username, first_name, last_name, bot):
 async def process_anon_referral_bonus(new_user_id, referrer_id, bot):
     """Anon bot uchun referal bonus berish"""
     from asgiref.sync import sync_to_async
-    from modul.models import ClientBotUser, Bot as BotModel
+    from modul.models import ClientBotUser, Bot as BotModel, AdminInfo
 
     try:
         print(f"🔧 DEBUG: process_anon_referral_bonus called - new_user: {new_user_id}, referrer: {referrer_id}")
@@ -714,9 +714,14 @@ async def process_anon_referral_bonus(new_user_id, referrer_id, bot):
 
         print(f"🔧 DEBUG: Found new user ClientBotUser: {new_user_id}, current inviter: {new_user.inviter}")
 
-        # Bonus berish
-        bonus_amount = 3.0
-        print(f"🔧 DEBUG: Bonus amount: {bonus_amount}")
+        # ИСПРАВЛЕНО: Получаем бонус для конкретного бота
+        try:
+            admin_info = await sync_to_async(AdminInfo.objects.filter(bot_token=current_bot.token).first)()
+            bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
+        except:
+            bonus_amount = 3.0
+
+        print(f"🔧 DEBUG: Bonus amount from AdminInfo: {bonus_amount} for bot {current_bot.token}")
 
         print(f"🔧 DEBUG: BEFORE UPDATE - Referrer bot balance: {referrer.balance}, refs: {referrer.referral_count}")
 
@@ -782,7 +787,7 @@ async def process_referral(inviter_id: int, new_user_id: int, current_bot_token:
 
     try:
         # Aynan joriy botni topish
-        from modul.models import Bot
+        from modul.models import Bot, AdminInfo
 
         if current_bot_token:
             bot = await sync_to_async(Bot.objects.filter(token=current_bot_token).first)()
@@ -807,8 +812,14 @@ async def process_referral(inviter_id: int, new_user_id: int, current_bot_token:
             logger.warning(f"Inviter {actual_inviter_id} not found in bot {bot.username}")
             return False
 
-        # Referral balansini to'g'ri yangilash
-        reward_amount = 3.0
+        # ИСПРАВЛЕНО: Получаем reward_amount для конкретного бота
+        try:
+            admin_info = await sync_to_async(AdminInfo.objects.filter(bot_token=bot.token).first)()
+            reward_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
+        except:
+            reward_amount = 3.0
+
+        logger.info(f"Using reward amount {reward_amount} for bot {bot.token}")
 
         inviter.balance += reward_amount
         inviter.referral_count += 1
