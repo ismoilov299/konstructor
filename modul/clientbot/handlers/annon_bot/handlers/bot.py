@@ -436,8 +436,17 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         # Referral notification
         if result.get('inviter') and result['user_created']:
             try:
+                # ИСПРАВЛЕНО: Получаем bonus_amount из настроек бота
+                from asgiref.sync import sync_to_async
+                from modul.models import AdminInfo
+
+                try:
+                    admin_info = await sync_to_async(AdminInfo.objects.filter(bot_token=bot.token).first)()
+                    bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
+                except:
+                    bonus_amount = 3.0
+
                 user_link = f'<a href="tg://user?id={user_id}">новый друг</a>'
-                bonus_amount = 3.0
                 await bot.send_message(
                     chat_id=result['inviter'].uid,
                     text=f"У вас {user_link}! Баланс пополнен на {bonus_amount}₽",
