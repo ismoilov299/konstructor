@@ -38,7 +38,7 @@ async def start(message: types.Message, state: FSMContext):
     await state.clear()
     await state.update_data(me=user_id)
     await message.delete()
-    await message.answer("🔍 Начинаем поиск...", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("🔍 Начинаем поиск...")
 
     # Qidiruv
     leos = await get_leos_id_simple(user_id)
@@ -355,7 +355,7 @@ async def handle_cancel_message_text(message: types.Message, state: FSMContext):
     leos: list = data.get("leos")
     leos.insert(0, data.get("selected_id"))
     await state.update_data(selected_id=None, leos=leos)
-    await message.answer("❌ Отменено", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("❌ Отменено")
     await next_l(message, state)
 
 
@@ -385,14 +385,14 @@ async def process_message(message: types.Message, state: FSMContext):
 @client_bot_router.message(F.text == ("Да"), LeomatchProfiles.MANAGE_LIKES)
 async def handle_manage_likes_yes_text(message: types.Message, state: FSMContext):
     """Layklar bilan ishlashni boshlash (matn orqali)"""
-    await message.answer("💕 Вот аккаунты, кому Вы понравились:", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("💕 Вот аккаунты, кому Вы понравились:")
     await next_like(message, state)
 
 
 @client_bot_router.message(F.text == ("Нет"), LeomatchProfiles.MANAGE_LIKES)
 async def handle_manage_likes_no_text(message: types.Message):
     """Barcha layklarni o'chirish (matn orqali)"""
-    await message.answer("🗑️ Все лайки удалены", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("🗑️ Все лайки удалены")
     await clear_all_likes(message.from_user.id)
 
 
