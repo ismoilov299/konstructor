@@ -591,17 +591,17 @@ async def bot_show_profile(to_uid: int, from_uid: int, full_name: str, age: int,
                                     ("Извините, Вы не сможете начать общение так как у пользователя приватный аккаунт"))
 
 
-async def show_profile_db(message: types.Message, uid: int, keyboard=ReplyKeyboardMarkup, comment: str = None):
+async def show_profile_db(message: types.Message, uid: int, keyboard=None, comment: str = None):
     leo = await get_leo(uid)
-    await show_profile(message, uid,  f'{leo.full_name}', leo.age, leo.city,  leo.about_me, leo.photo, leo.media_type,
-                       keyboard=keyboard, comment=comment)
+    await show_profile(message, uid, f'{leo.full_name}', leo.age, leo.city, leo.about_me,
+                      leo.photo, leo.media_type, keyboard=keyboard, comment=comment)
 
 
-async def bot_show_profile_db(to_uid: int, uid: int, keyboard=types.ReplyKeyboardMarkup):
+async def bot_show_profile_db(to_uid: int, uid: int, keyboard=None):
     leo = await get_leo(uid)
     user = await leo.user
-    await bot_show_profile(to_uid, uid, f'{leo.full_name}', leo.age, leo.city, leo.about_me, leo.photo, leo.media_type,
-                           user.username, keyboard=keyboard)
+    await bot_show_profile(to_uid, uid, f'{leo.full_name}', leo.age, leo.city, leo.about_me,
+                          leo.photo, leo.media_type, user.username, keyboard=keyboard)
 
 
 def _update_profile_sync(leo, kwargs: dict):
