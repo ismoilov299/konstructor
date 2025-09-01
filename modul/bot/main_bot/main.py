@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 webhook_url = 'https://ismoilov299.uz/login/'
 
 
+def init_bot_handlers():
+    """Инициализация всех хендлеров главного бота"""
+    try:
+        # Импорт всех хендлеров главного бота
+        from modul.bot.main_bot.handlers import admin_panel
+
+        logger.info("✅ Main bot handlers loaded successfully")
+        logger.info("✅ Admin panel handlers loaded")
+
+    except ImportError as e:
+        logger.error(f"❌ Error importing main bot handlers: {e}")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in init_bot_handlers: {e}")
 # Keyboard funksiyalari
 async def main_menu():
     """Asosiy menyu klaviaturasi - yangilangan"""

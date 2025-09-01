@@ -161,6 +161,15 @@ class ClientBotUser(models.Model):
     def __str__(self):
         return f'ClientBotUser {self.uid}'
 
+class SystemChannel(models.Model):
+    channel_id = models.BigIntegerField(unique=True)
+    channel_url = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    added_by_user_id = models.BigIntegerField(null=True, blank=True) # Kim qo'shgan
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 
 # Enums
 class SexEnum(models.TextChoices):

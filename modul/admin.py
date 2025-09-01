@@ -1,4 +1,5 @@
 from django.contrib import admin
+from .models import SystemChannel
 
 from .models import Bot, ClientBotUser, User, UserTG, AdminInfo, Channels
 
@@ -48,3 +49,13 @@ class ChannelsAdmin(admin.ModelAdmin):
     search_fields = ['channel_id']
     list_display = ['channel_id']
     ordering = ['-id']
+
+
+@admin.register(SystemChannel)
+class SystemChannelAdmin(admin.ModelAdmin):
+    list_display = ['channel_id', 'title', 'is_active', 'added_by_user_id', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['title', 'channel_id', 'channel_url']
+    list_editable = ['is_active']
+    ordering = ['-created_at']
+    readonly_fields = ['channel_id', 'added_by_user_id', 'created_at', 'updated_at']
