@@ -842,125 +842,79 @@ async def back_to_main_menu(message: Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext):
-    print(f"DEBUG: admin_add_channel_msg called")  # Buni qo'shing
+    print(f"DEBUG: admin_add_channel_msg called")
     print(f"DEBUG: Forward from: {message.forward_from_chat}")
+
     try:
-        # Проверяем, что это forwarded сообщение
+        # Forward message tekshirish
         if not message.forward_from_chat:
             await message.answer(
-                "❌ Пожалуйста, перешлите сообщение из канала\n\n"
-                "Чтобы переслать:\n"
-                "1. Откройте канал\n"
-                "2. Нажмите на сообщение\n"
-                "3. Нажмите 'Переслать'\n"
-                "4. Выберите этот чат",
+                "❌ Пожалуйста, перешлите сообщение из канала",
                 reply_markup=cancel_kb
             )
             return
 
-        # Получаем ID канала из forwarded сообщения
         channel_id = message.forward_from_chat.id
 
-        # Проверяем, что это именно канал
+        # Kanal type tekshirish
         if message.forward_from_chat.type != 'channel':
             await message.answer(
-                "❌ Это не канал!\n\n"
-                "Перешлите сообщение именно из канала, не из группы или личного чата",
+                "❌ Это не канал! Перешлите сообщение из канала.",
                 reply_markup=cancel_kb
             )
             return
 
-        # Получаем объект Bot
+        print(f"DEBUG: Channel ID: {channel_id}")
+
+        # Bot obyekti
         bot = message.bot
 
-        # Получаем информацию о канале
-        chat_info = await bot(GetChat(chat_id=channel_id))
+        # ✅ TO'G'RI aiogram metodi
+        chat_info = await bot.get_chat(channel_id)
+        print(f"DEBUG: Chat info: {chat_info.title}")
 
-        # Проверяем, что бот — администратор в этом канале
-        bot_member = await bot(GetChatMember(chat_id=channel_id, user_id=bot.id))
+        # ✅ TO'G'RI aiogram metodi
+        bot_member = await bot.get_chat_member(channel_id, bot.id)
+        print(f"DEBUG: Bot status: {bot_member.status}")
+
         if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
-                f"❌ Бот не является администратором канала '{chat_info.title}'\n\n"
-                f"Добавьте бота как администратора канала и попробуйте снова.",
+                f"❌ Бот не администратор в '{chat_info.title}'",
                 reply_markup=cancel_kb
             )
             return
 
-        # Проверяем, не добавлен ли уже канал
-        channel_exists = await check_channel_exists(channel_id)
-        if channel_exists:
-            await message.answer(
-                f"⚠️ Канал '{chat_info.title}' уже добавлен в базу данных",
-                reply_markup=cancel_kb
-            )
-            return
-
-        # Получаем или создаем invite link
+        # Invite link olish
         invite_link = chat_info.invite_link
         if not invite_link:
             try:
-                link_data = await bot(CreateChatInviteLink(chat_id=channel_id))
+                # ✅ TO'G'RI aiogram metodi
+                link_data = await bot.create_chat_invite_link(channel_id)
                 invite_link = link_data.invite_link
             except Exception as e:
-                logger.warning(f"Failed to create invite link: {e}")
-                # Если не можем создать ссылку, используем username или ID
-                invite_link = f"https://t.me/{chat_info.username}" if chat_info.username else f"Channel ID: {channel_id}"
+                print(f"DEBUG: Invite link error: {e}")
+                invite_link = f"Channel ID: {channel_id}"
 
-        # Добавляем в базу
-        success = await create_channel_sponsor(channel_id)
-        if not success:
-            await message.answer(
-                "❌ Ошибка при сохранении канала в базу данных",
-                reply_markup=cancel_kb
-            )
-            return
-
+        # Bazaga saqlash
+        await create_channel_sponsor(channel_id)
         await state.clear()
 
-        # Формируем итоговый ответ
-        channel_info = [
-            "✅ Канал успешно добавлен!",
-            f"📣 Название: {chat_info.title}",
-            f"🆔 ID: {channel_id}",
-            f"🔗 Ссылка: {invite_link}"
-        ]
-
-        # Добавляем информацию о реакциях если доступно
-        if hasattr(chat_info, 'available_reactions') and chat_info.available_reactions:
-            try:
-                reactions = chat_info.available_reactions
-                if reactions:
-                    reaction_types = [
-                        r.get("type", "unknown") if isinstance(r, dict) else str(r)
-                        for r in reactions
-                    ]
-                    channel_info.append(
-                        f"💫 Доступные реакции: {', '.join(reaction_types)}"
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to process reactions: {e}")
-
-        # Отправляем результат
         await message.answer(
-            "\n\n".join(channel_info),
-            disable_web_page_preview=True
+            f"✅ Канал добавлен!\n\n"
+            f"📣 {chat_info.title}\n"
+            f"🆔 {channel_id}\n"
+            f"🔗 {invite_link}"
         )
 
-    except TelegramBadRequest as e:
-        logger.error(f"Telegram API error: {e}")
-        await message.answer(
-            f"❌ Ошибка Telegram API: {str(e)}\n\n"
-            f"Убедитесь что:\n"
-            f"• Бот добавлен в канал\n"
-            f"• Бот имеет права администратора",
-            reply_markup=cancel_kb
-        )
+        print("DEBUG: Channel added successfully")
+
     except Exception as e:
-        logger.error(
-            f"Channel add error: channel_id={getattr(message.forward_from_chat, 'id', 'unknown')}, error={str(e)}")
-        logger.exception("Detailed error:")
+        print(f"DEBUG: Error in admin_add_channel_msg: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+
         await message.answer(
-            "❌ Произошла ошибка. Пожалуйста, попробуйте еще раз.",
+            f"❌ Ошибка: {str(e)}",
             reply_markup=cancel_kb
         )
 
