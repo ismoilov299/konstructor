@@ -22,19 +22,19 @@ logger = logging.getLogger(__name__)
 webhook_url = 'https://ismoilov299.uz/login/'
 
 
-def init_bot_handlers():
-    """Инициализация всех хендлеров главного бота"""
-    try:
-        # Импорт всех хендлеров главного бота
-        from modul.bot.main_bot.handlers import admin_panel
-
-        logger.info("✅ Main bot handlers loaded successfully")
-        logger.info("✅ Admin panel handlers loaded")
-
-    except ImportError as e:
-        logger.error(f"❌ Error importing main bot handlers: {e}")
-    except Exception as e:
-        logger.error(f"❌ Unexpected error in init_bot_handlers: {e}")
+# def init_bot_handlers():
+#     """Инициализация всех хендлеров главного бота"""
+#     try:
+#         # Импорт всех хендлеров главного бота
+#         from modul.bot.main_bot.handlers import admin_panel
+#
+#         logger.info("✅ Main bot handlers loaded successfully")
+#         logger.info("✅ Admin panel handlers loaded")
+#
+#     except ImportError as e:
+#         logger.error(f"❌ Error importing main bot handlers: {e}")
+#     except Exception as e:
+#         logger.error(f"❌ Unexpected error in init_bot_handlers: {e}")
 # Keyboard funksiyalari
 async def main_menu():
     """Asosiy menyu klaviaturasi - yangilangan"""
@@ -60,6 +60,11 @@ async def registration_keyboard(registration_url):
 def init_bot_handlers():
     @main_bot_router.message(CommandStart())
     async def cmd_start(message: Message, state: FSMContext):
+        from modul.bot.main_bot.handlers import admin_panel
+
+        logger.info("✅ Main bot handlers loaded successfully")
+        logger.info("✅ Admin panel handlers loaded")
+
         """Start komandasi handleri"""
         logger.info(f"Start command from user {message.from_user.id}")
         user = message.from_user
