@@ -775,10 +775,14 @@ async def remove_channel(call: CallbackQuery, bot: Bot):
 @client_bot_router.callback_query(F.data == 'admin_add_channel', AdminFilter(), StateFilter('*'))
 async def admin_add_channel(call: CallbackQuery, state: FSMContext):
     await state.set_state(AddChannelSponsorForm.channel)
-    await call.message.edit_text('Отправьте id канала\n\n'
-                                 'Убедитесь в том, что бот является администратором в канале\n\n'
-                                 '@username_to_id_bot id канала можно получить у этого бота',
-                                 reply_markup=cancel_kb)
+    await call.message.edit_text(
+        '📢 Для добавления канала:\n\n'
+        '1️⃣ Перейдите в канал\n'
+        '2️⃣ Найдите любое сообщение в канале\n'
+        '3️⃣ Переслать это сообщение мне\n\n'
+        '⚠️ Важно: Бот должен быть администратором канала!',
+        reply_markup=cancel_kb
+    )
 
 
 from enum import Enum
@@ -839,43 +843,79 @@ async def back_to_main_menu(message: Message, state: FSMContext, bot: Bot):
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext):
     try:
-        channel_id = int(message.text)
-        # 1) Получаем объект Bot напрямую из message:
-        bot = message.bot
-
-        # 2) Узнаём информацию о чате (метод GetChat)
-        chat_data = await bot(GetChat(chat_id=channel_id, flags={"raw": True}))
-        print(chat_data)
-        chat_info = await bot(GetChat(chat_id=channel_id))
-
-        # 3) Проверяем, что это именно канал
-        if chat_info.type != "channel":
+        # Проверяем, что это forwarded сообщение
+        if not message.forward_from_chat:
             await message.answer(
-                "Указанный ID не является каналом. Пожалуйста, введите ID канала.",
+                "❌ Пожалуйста, перешлите сообщение из канала\n\n"
+                "Чтобы переслать:\n"
+                "1. Откройте канал\n"
+                "2. Нажмите на сообщение\n"
+                "3. Нажмите 'Переслать'\n"
+                "4. Выберите этот чат",
                 reply_markup=cancel_kb
             )
             return
 
-        # 4) Проверяем, что бот — администратор в этом канале (GetChatMember)
+        # Получаем ID канала из forwarded сообщения
+        channel_id = message.forward_from_chat.id
+
+        # Проверяем, что это именно канал
+        if message.forward_from_chat.type != 'channel':
+            await message.answer(
+                "❌ Это не канал!\n\n"
+                "Перешлите сообщение именно из канала, не из группы или личного чата",
+                reply_markup=cancel_kb
+            )
+            return
+
+        # Получаем объект Bot
+        bot = message.bot
+
+        # Получаем информацию о канале
+        chat_info = await bot(GetChat(chat_id=channel_id))
+
+        # Проверяем, что бот — администратор в этом канале
         bot_member = await bot(GetChatMember(chat_id=channel_id, user_id=bot.id))
         if bot_member.status not in ["administrator", "creator"]:
             await message.answer(
-                "Бот не является администратором канала. Пожалуйста, добавьте бота в администраторы канала.",
+                f"❌ Бот не является администратором канала '{chat_info.title}'\n\n"
+                f"Добавьте бота как администратора канала и попробуйте снова.",
                 reply_markup=cancel_kb
             )
             return
 
-        # 5) Проверяем / создаём invite link (CreateChatInviteLink)
+        # Проверяем, не добавлен ли уже канал
+        channel_exists = await check_channel_exists(channel_id)
+        if channel_exists:
+            await message.answer(
+                f"⚠️ Канал '{chat_info.title}' уже добавлен в базу данных",
+                reply_markup=cancel_kb
+            )
+            return
+
+        # Получаем или создаем invite link
         invite_link = chat_info.invite_link
         if not invite_link:
-            link_data = await bot(CreateChatInviteLink(chat_id=channel_id))
-            invite_link = link_data.invite_link
+            try:
+                link_data = await bot(CreateChatInviteLink(chat_id=channel_id))
+                invite_link = link_data.invite_link
+            except Exception as e:
+                logger.warning(f"Failed to create invite link: {e}")
+                # Если не можем создать ссылку, используем username или ID
+                invite_link = f"https://t.me/{chat_info.username}" if chat_info.username else f"Channel ID: {channel_id}"
 
-        # 6) Добавляем в базу (ваша функция)
-        await create_channel_sponsor(channel_id)
+        # Добавляем в базу
+        success = await create_channel_sponsor(channel_id)
+        if not success:
+            await message.answer(
+                "❌ Ошибка при сохранении канала в базу данных",
+                reply_markup=cancel_kb
+            )
+            return
+
         await state.clear()
 
-        # 7) Формируем итоговый список строк для ответа
+        # Формируем итоговый ответ
         channel_info = [
             "✅ Канал успешно добавлен!",
             f"📣 Название: {chat_info.title}",
@@ -883,15 +923,14 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             f"🔗 Ссылка: {invite_link}"
         ]
 
-        # 8) Если доступны реакции, добавляем информацию
-        if chat_info.available_reactions:
+        # Добавляем информацию о реакциях если доступно
+        if hasattr(chat_info, 'available_reactions') and chat_info.available_reactions:
             try:
-                # chat_info.available_reactions может быть списком объектов-реакций
-                # Тут зависит от вашей сериализации. Предположим, это список dict
                 reactions = chat_info.available_reactions
                 if reactions:
                     reaction_types = [
-                        r.get("type", "unknown") for r in reactions
+                        r.get("type", "unknown") if isinstance(r, dict) else str(r)
+                        for r in reactions
                     ]
                     channel_info.append(
                         f"💫 Доступные реакции: {', '.join(reaction_types)}"
@@ -899,31 +938,40 @@ async def admin_add_channel_msg(message: Message, state: FSMContext):
             except Exception as e:
                 logger.warning(f"Failed to process reactions: {e}")
 
-        # 9) Отправляем готовый текст
+        # Отправляем результат
         await message.answer(
             "\n\n".join(channel_info),
             disable_web_page_preview=True
         )
 
-    except ValueError:
-        # int(...) не смог преобразовать текст → сообщаем об ошибке формата
-        await message.answer(
-            "Неверный формат. Пожалуйста, введите числовой ID канала.",
-            reply_markup=cancel_kb
-        )
     except TelegramBadRequest as e:
         logger.error(f"Telegram API error: {e}")
         await message.answer(
-            "Бот не смог найти канал. Пожалуйста, проверьте ID канала.",
+            f"❌ Ошибка Telegram API: {str(e)}\n\n"
+            f"Убедитесь что:\n"
+            f"• Бот добавлен в канал\n"
+            f"• Бот имеет права администратора",
             reply_markup=cancel_kb
         )
     except Exception as e:
-        logger.error(f"Channel add error: channel_id={channel_id}, error={str(e)}")
+        logger.error(
+            f"Channel add error: channel_id={getattr(message.forward_from_chat, 'id', 'unknown')}, error={str(e)}")
         logger.exception("Detailed error:")
         await message.answer(
-            "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
+            "❌ Произошла ошибка. Пожалуйста, попробуйте еще раз.",
             reply_markup=cancel_kb
         )
+
+@sync_to_async
+def check_channel_exists(channel_id):
+    """Проверка существования канала в базе"""
+    try:
+        # Замените на вашу модель каналов
+        from modul.models import Channels  # или ваша модель
+        return Channels.objects.filter(channel_id=channel_id).exists()
+    except Exception as e:
+        logger.error(f"Error checking channel exists: {e}")
+        return False
 
 class KinoBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
