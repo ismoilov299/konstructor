@@ -58,4 +58,4 @@ class SystemChannelAdmin(admin.ModelAdmin):
     search_fields = ['title', 'channel_id', 'channel_url']
     list_editable = ['is_active']
     ordering = ['-created_at']
-    readonly_fields = ['channel_id', 'added_by_user_id', 'created_at', 'updated_at']
+    readonly_fields = ['channel_id', 'added_by_user_id', 'created_at']
