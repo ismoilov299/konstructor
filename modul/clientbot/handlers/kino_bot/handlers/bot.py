@@ -842,6 +842,8 @@ async def back_to_main_menu(message: Message, state: FSMContext, bot: Bot):
 
 @client_bot_router.message(AddChannelSponsorForm.channel)
 async def admin_add_channel_msg(message: Message, state: FSMContext):
+    print(f"DEBUG: admin_add_channel_msg called")  # Buni qo'shing
+    print(f"DEBUG: Forward from: {message.forward_from_chat}")
     try:
         # Проверяем, что это forwarded сообщение
         if not message.forward_from_chat:
