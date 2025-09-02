@@ -870,20 +870,16 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
         state_data = await state.get_data()
         referrer_id = state_data.get('referrer_id')
 
-        # Kanallarni tekshiramiz
         checking = await check_channels(query)
 
         if checking:
-            # Foydalanuvchi mavjudligini tekshiramiz
             is_registered = await check_user(query.from_user.id)
 
-            # Xabarni o'chiramiz (agar mavjud bo'lsa)
             try:
                 await query.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
             except Exception as e:
                 logger.error(f"Error deleting message: {e}")
 
-            # Foydalanuvchiga salomlashamiz
             await query.bot.send_message(
                 query.from_user.id,
                 f"🎉Привет, {query.from_user.first_name}",

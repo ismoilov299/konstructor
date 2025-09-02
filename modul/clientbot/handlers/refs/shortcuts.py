@@ -370,8 +370,45 @@ def change_price(new_price, bot_token):
 
 
 @sync_to_async
-def change_min_amount(new_amount):
-    AdminInfo.objects.filter(id=2).update(min_amount=new_amount)
+def change_min_amount(new_amount: float, bot_token: str = None):
+    try:
+        logger.info(f"change_min_amount chaqirildi: new_amount={new_amount}, bot_token={bot_token}")
+
+        if bot_token:
+            admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
+            if not admin_info:
+                admin_info = AdminInfo.objects.create(
+                    bot_token=bot_token,
+                    admin_channel='@default_channel',
+                    min_amount=new_amount,
+                    price=3.0
+                )
+                logger.info(f"Yangi AdminInfo yaratildi: ID={admin_info.id}")
+                return True
+            else:
+                admin_info.min_amount = new_amount
+                admin_info.save()
+                logger.info(f"AdminInfo yangilandi: ID={admin_info.id}, min_amount={admin_info.min_amount}")
+                return True
+        else:
+            admin_info = AdminInfo.objects.first()
+            if admin_info:
+                admin_info.min_amount = new_amount
+                admin_info.save()
+                logger.info(f"AdminInfo yangilandi: ID={admin_info.id}, min_amount={admin_info.min_amount}")
+                return True
+            else:
+                admin_info = AdminInfo.objects.create(
+                    admin_channel='@default_channel',
+                    min_amount=new_amount,
+                    price=3.0
+                )
+                logger.info(f"Yangi AdminInfo yaratildi: ID={admin_info.id}")
+                return True
+
+    except Exception as e:
+        logger.error(f"change_min_amount da xatolik: {e}")
+        return False
 
 
 @sync_to_async

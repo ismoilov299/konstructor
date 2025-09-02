@@ -586,25 +586,54 @@ async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
 
     try:
         new_min_payout = float(message.text)
-        print(new_min_payout)
 
-        await change_min_amount(new_min_payout)
+        if new_min_payout <= 0:
+            await message.answer("❗ Минимальная сумма должна быть больше 0.")
+            return
+
+        logger.info(f"Yangi min_amount: {new_min_payout}")
+
+        # VARIANT 1: Bot token bilan (tavsiya etiladi)
+        success = await change_min_amount(new_min_payout, bot_token=bot.token)
+
+        # VARIANT 2: Sizning ID usulingingiz (agar ID=2 mavjud bo'lsa)
+        # success = await change_min_amount_by_id(new_min_payout, admin_id=2)
 
         await message.delete()
         if edit_msg:
             await edit_msg.delete()
 
-        await message.answer(
-            f"Минимальная выплата успешно изменена на {new_min_payout:.1f} руб."
-        )
+        if success:
+            # Natijani ko'rsatish uchun yangilangan qiymatni olish
+            @sync_to_async
+            def get_updated_amount():
+                try:
+                    admin_info = AdminInfo.objects.filter(bot_token=bot.token).first()
+                    if not admin_info:
+                        admin_info = AdminInfo.objects.first()
+                    return admin_info.min_amount if admin_info else new_min_payout
+                except:
+                    return new_min_payout
+
+            current_amount = await get_updated_amount()
+
+            await message.answer(
+                f"✅ Минимальная сумма вывода успешно изменена на {current_amount:.1f} руб."
+            )
+        else:
+            await message.answer(
+                "🚫 Не удалось изменить минимальную сумму вывода.\n"
+                "Проверьте логи или обратитесь к разработчику."
+            )
+
         await state.clear()
         await start(message, state, bot)
 
     except ValueError:
         await message.answer("❗ Введите корректное числовое значение.")
     except Exception as e:
-        logger.error(f"Ошибка при обновлении минимальной выплаты: {e}")
-        await message.answer("🚫 Не удалось изменить минимальную выплату.")
+        logger.error(f"Handler error: {e}")
+        await message.answer("🚫 Произошла ошибка.")
         await state.clear()
         await start(message, state, bot)
 
@@ -1252,7 +1281,6 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
             hello=html.quote(callback.from_user.full_name))
         await callback.message.answer(text,
                                       reply_markup=await reply_kb.main_menu(user_id, bot))
-# Kino_bot/bot.py faylidagi start funksiyasining referral jarayonini boshqaradigan qismi
 import html
 async def start(message: Message, state: FSMContext, bot: Bot):
     print(f"Start function called for user {message.from_user.id}")
