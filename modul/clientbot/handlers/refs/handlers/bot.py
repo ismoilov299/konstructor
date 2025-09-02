@@ -851,9 +851,13 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
     if query.data == "payment":
         balance_q = await get_user_info_db(query.from_user.id)
         balance = balance_q[2]
-        min_amount_q = await get_actual_min_amount()
+
+        # BU QATOR TO'G'IRLANDI:
+        min_amount_q = await get_actual_min_amount(query.bot.token)  # bot.token qo'shildi
         min_amount = min_amount_q if min_amount_q else 60
+
         check_wa = await check_for_wa(query.from_user.id)
+
         if balance < min_amount:
             await query.message.bot.answer_callback_query(query.id, text=f"🚫Минимальная сумма вывода: {min_amount}",
                                                           show_alert=True)
@@ -864,6 +868,7 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
             await query.bot.send_message(query.from_user.id, "💳Введите номер вашей карты",
                                          reply_markup=await cancel_bt())
             await state.set_state(PaymentState.get_card)
+
     elif query.data == "check_chan":
         print('525 refs')
         # State'dan referrer_id ni olishga harakat qilamiz

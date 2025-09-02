@@ -499,10 +499,24 @@ def get_actual_price(bot_token=None):
         logger.exception("Detailed error stack trace:")
         return 3.0
 
+
 @sync_to_async
-def get_actual_min_amount():
-    admin_info = AdminInfo.objects.first()
-    return admin_info.min_amount if admin_info else None
+def get_actual_min_amount(bot_token: str = None):
+
+    try:
+        if bot_token:
+            admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
+        else:
+            admin_info = AdminInfo.objects.first()
+
+        if admin_info:
+            return float(admin_info.min_amount)
+        else:
+            return 60.0  # default qiymat
+
+    except Exception as e:
+        logger.error(f"get_actual_min_amount error: {e}")
+        return 60.0
 
 
 @sync_to_async
