@@ -189,21 +189,21 @@ def remove_sponsor_channel(channel_id):
         logger.error(f"Error removing sponsor channel {channel_id}: {e}")
 
 
-@sync_to_async
-def remove_invalid_channel(channel_id):
-    try:
-        sponsor_deleted = ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
-        if sponsor_deleted[0] > 0:
-            logger.info(f"Removed invalid sponsor channel {channel_id} from database")
-            return
-        system_updated = SystemChannel.objects.filter(channel_id=channel_id).update(is_active=False)
-        if system_updated > 0:
-            logger.warning(f"Deactivated invalid system channel {channel_id}")
-        else:
-            logger.warning(f"Channel {channel_id} not found in database")
-
-    except Exception as e:
-        logger.error(f"Error handling invalid channel {channel_id}: {e}")
+# @sync_to_async
+# def remove_invalid_channel(channel_id):
+#     try:
+#         sponsor_deleted = ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+#         if sponsor_deleted[0] > 0:
+#             logger.info(f"Removed invalid sponsor channel {channel_id} from database")
+#             return
+#         system_updated = SystemChannel.objects.filter(channel_id=channel_id).update(is_active=False)
+#         if system_updated > 0:
+#             logger.warning(f"Deactivated invalid system channel {channel_id}")
+#         else:
+#             logger.warning(f"Channel {channel_id} not found in database")
+#
+#     except Exception as e:
+#         logger.error(f"Error handling invalid channel {channel_id}: {e}")
 
 async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     channels = await get_all_channels_sponsors()
@@ -232,7 +232,6 @@ async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
 
 @sync_to_async
 def remove_invalid_sponsor_channels(channel_ids):
-    """Faqat sponsor kanallarni o'chirish"""
     try:
         ChannelSponsor.objects.filter(chanel_id__in=channel_ids).delete()
     except Exception as e:
@@ -1229,7 +1228,6 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
                         })
             except Exception as e:
                 logger.error(f"Error checking channel {channel_id}: {e}")
-                await remove_invalid_channel(channel_id)
                 continue
 
     if not subscribed:
@@ -1654,24 +1652,40 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             await state.update_data(referral=referral, referrer_id=referral)
             print(f"Saved referral to state with both keys: {referral}")
 
-        channels = await get_channels_for_check()
+        # O'ZGARISH: get_channels_with_type_for_check() ishlatish
+        channels = await get_channels_with_type_for_check()
         print(f"📡 Found channels: {channels}")
 
         if channels:
             print(f"🔒 Channels exist, checking user subscription for {message.from_user.id}")
             not_subscribed_channels = []
 
-            for channel_id, channel_url in channels:
+            # O'ZGARISH: channel_type ham olish
+            for channel_id, channel_url, channel_type in channels:
                 try:
-                    member = await message.bot.get_chat_member(
-                        chat_id=channel_id,
-                        user_id=message.from_user.id
-                    )
-                    print(f"Channel {channel_id} status: {member.status}")
+                    # O'ZGARISH: channel type ga qarab bot tanlash
+                    if channel_type == 'system':
+                        from modul.loader import main_bot
+                        member = await main_bot.get_chat_member(
+                            chat_id=int(channel_id),
+                            user_id=message.from_user.id
+                        )
+                        print(f"System channel {channel_id} checked via main_bot: {member.status}")
+                    else:
+                        member = await message.bot.get_chat_member(
+                            chat_id=int(channel_id),
+                            user_id=message.from_user.id
+                        )
+                        print(f"Sponsor channel {channel_id} checked via current_bot: {member.status}")
 
                     if member.status == "left":
                         try:
-                            chat_info = await message.bot.get_chat(chat_id=channel_id)
+                            # Chat info ni ham to'g'ri bot orqali olish
+                            if channel_type == 'system':
+                                chat_info = await main_bot.get_chat(chat_id=int(channel_id))
+                            else:
+                                chat_info = await message.bot.get_chat(chat_id=int(channel_id))
+
                             not_subscribed_channels.append({
                                 'id': channel_id,
                                 'title': chat_info.title,
@@ -1685,8 +1699,15 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
                                 'invite_link': channel_url or f"https://t.me/{channel_id.strip('-')}"
                             })
                 except Exception as e:
-                    logger.error(f"Error checking channel {channel_id}: {e}")
-                    await remove_invalid_channel(channel_id)
+                    logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+                    # O'ZGARISH: faqat sponsor kanallarni o'chirish
+                    if channel_type == 'sponsor':
+                        await remove_sponsor_channel(channel_id)
+                        logger.info(f"Removed invalid sponsor channel {channel_id}")
+                    else:
+                        # System kanallar uchun faqat log
+                        logger.warning(f"System channel {channel_id} error (ignoring): {e}")
                     continue
 
             if not not_subscribed_channels:
@@ -1757,6 +1778,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
             print(f"🚫 NOT adding user to database - waiting for check_chan callback")
             return  # FAQAT OBUNA BO'LMAGAN KANALLARNI KO'RSATISH
 
+        # Qolgan kod o'zgarmaydi...
         print(f"ℹ️ No channels found, proceeding with normal registration for {message.from_user.id}")
 
         current_user_id = message.from_user.id
