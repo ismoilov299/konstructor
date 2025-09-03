@@ -126,7 +126,6 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         if user_id == admin_id:
             return True
 
-        # Kanallar va ularning turini olish
         channels_with_type = await get_channels_with_type_for_check()
         if not channels_with_type:
             return True
@@ -180,13 +179,22 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         logger.error(f"General error in check_subs: {e}")
         return False
 
+
 @sync_to_async
-def remove_invalid_channel(channel_id: int):
+def remove_invalid_channel(channel_id):
     try:
-        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
-        logger.info(f"Removed invalid channel {channel_id} from database")
+        sponsor_deleted = ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+        if sponsor_deleted[0] > 0:
+            logger.info(f"Removed invalid sponsor channel {channel_id} from database")
+            return
+        system_updated = SystemChannel.objects.filter(channel_id=channel_id).update(is_active=False)
+        if system_updated > 0:
+            logger.warning(f"Deactivated invalid system channel {channel_id}")
+        else:
+            logger.warning(f"Channel {channel_id} not found in database")
+
     except Exception as e:
-        logger.error(f"Error removing channel {channel_id}: {e}")
+        logger.error(f"Error handling invalid channel {channel_id}: {e}")
 
 async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     channels = await get_all_channels_sponsors()
