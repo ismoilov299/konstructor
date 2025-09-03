@@ -494,7 +494,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
 
 # CALLBACK HANDLER - Kanal tekshiruvidan keyin
-@client_bot_router.callback_query(F.data == "check_chan")
+@client_bot_router.callback_query(F.data == "check_chan", AnonBotFilter)
 async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Kanal obunasini qayta tekshirish"""
     user_id = callback.from_user.id
