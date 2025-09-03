@@ -119,6 +119,7 @@ def remove_invalid_sponsor_channel(channel_id):
     except Exception as e:
         logger.error(f"Error removing invalid sponsor channel {channel_id}: {e}")
 
+
 async def check_subs(user_id: int, bot: Bot) -> bool:
     try:
         bot_db = await shortcuts.get_bot(bot)
@@ -126,6 +127,7 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         if user_id == admin_id:
             return True
 
+        # Kanallar va ularning turini olish
         channels_with_type = await get_channels_with_type_for_check()
         if not channels_with_type:
             return True
@@ -133,12 +135,12 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         for channel_id, channel_url, channel_type in channels_with_type:
             print(f"Checking channel: {channel_id}, type: {channel_type}")
             try:
-                # SystemChannel bo'lsa main bot orqali tekshirish
+                # System kanallarni main bot orqali tekshirish
                 if channel_type == 'system':
                     from modul.loader import main_bot
                     member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
                 else:
-                    # Sponsor channel bo'lsa joriy bot orqali tekshirish
+                    # Sponsor kanallarni joriy bot orqali tekshirish
                     member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
 
                 if member.status == 'left':
@@ -156,21 +158,10 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
 
                 # Faqat sponsor kanallarni o'chirish
                 if channel_type == 'sponsor':
-                    await remove_invalid_channel(channel_id)
-                else:
-                    # System kanal xatoligi haqida admin ga xabar berish
-                    try:
-                        from modul.loader import main_bot
-                        await main_bot.send_message(
-                            chat_id=admin_id,
-                            text=f"⚠️ System kanal xatoligi:\n"
-                                 f"Kanal ID: {channel_id}\n"
-                                 f"URL: {channel_url}\n"
-                                 f"Xato: {str(e)}\n\n"
-                                 f"Iltimos, tekshirib ko'ring!"
-                        )
-                    except:
-                        pass
+                    await remove_sponsor_channel(channel_id)
+                    logger.info(f"Removed invalid sponsor channel {channel_id}")
+                # System kanallar uchun hech narsa qilmaslik
+
                 continue
 
         return True
