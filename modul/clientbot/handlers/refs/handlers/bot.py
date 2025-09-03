@@ -579,27 +579,18 @@ async def info(message: Message):
             reply_markup=await admin_in(admin_user)
         )
 
-# 1. Check_chan callback'ni to'g'irlash - STATE'DAN REFERRAL OLISH QISMINI
 @client_bot_router.callback_query(F.data == "check_chan")
 async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
         bot = query.bot
         user_id = query.from_user.id
         print(f"🔍 NEW check_chan callback triggered for user {user_id}")
-
-        # State'dan ma'lumotlarni olish
         state_data = await state.get_data()
         print(f"📊 State data for user {user_id}: {state_data}")
-
-        # Referrer ID ni olish
         referrer_id = state_data.get('referrer_id') or state_data.get('referral')
         print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
-
-        # Kanallarni tekshirish
         channels = await get_channels_for_check()
         print(f"📡 Channels for user {user_id}: {channels}")
-
-        # Obuna bo'lmagan kanallar ro'yxati
         not_subscribed_channels = []
 
         if not channels:
