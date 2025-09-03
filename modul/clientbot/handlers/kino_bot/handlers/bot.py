@@ -94,6 +94,31 @@ class FormatCallback(CallbackData, prefix="format"):
     type: str
 
 
+@sync_to_async
+def get_channels_with_type_for_check():
+    try:
+        sponsor_channels = ChannelSponsor.objects.all()
+        sponsor_list = [(str(c.chanel_id), '', 'sponsor') for c in sponsor_channels]
+        system_channels = SystemChannel.objects.filter(is_active=True)
+        system_list = [(str(c.channel_id), c.channel_url, 'system') for c in system_channels]
+
+        all_channels = sponsor_list + system_list
+
+        logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
+        return all_channels
+    except Exception as e:
+        logger.error(f"Error getting channels with type: {e}")
+        return []
+
+
+@sync_to_async
+def remove_invalid_sponsor_channel(channel_id):
+    try:
+        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+        logger.info(f"Removed invalid sponsor channel {channel_id} from database")
+    except Exception as e:
+        logger.error(f"Error removing invalid sponsor channel {channel_id}: {e}")
+
 async def check_subs(user_id: int, bot: Bot) -> bool:
     try:
         bot_db = await shortcuts.get_bot(bot)
@@ -101,14 +126,22 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         if user_id == admin_id:
             return True
 
-        channels = await get_all_channels_sponsors()
-        if not channels:
+        # Kanallar va ularning turini olish
+        channels_with_type = await get_channels_with_type_for_check()
+        if not channels_with_type:
             return True
 
-        for channel in channels:
-            print(channel)
+        for channel_id, channel_url, channel_type in channels_with_type:
+            print(f"Checking channel: {channel_id}, type: {channel_type}")
             try:
-                member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+                # SystemChannel bo'lsa main bot orqali tekshirish
+                if channel_type == 'system':
+                    from modul.loader import main_bot
+                    member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                else:
+                    # Sponsor channel bo'lsa joriy bot orqali tekshirish
+                    member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+
                 if member.status == 'left':
                     kb = await get_subs_kb(bot)
                     await bot.send_message(
@@ -118,9 +151,27 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
                         parse_mode="HTML"
                     )
                     return False
+
             except TelegramBadRequest as e:
-                logger.error(f"Error checking channel {channel}: {e}")
-                await remove_invalid_channel(channel)
+                logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+                # Faqat sponsor kanallarni o'chirish
+                if channel_type == 'sponsor':
+                    await remove_invalid_channel(channel_id)
+                else:
+                    # System kanal xatoligi haqida admin ga xabar berish
+                    try:
+                        from modul.loader import main_bot
+                        await main_bot.send_message(
+                            chat_id=admin_id,
+                            text=f"⚠️ System kanal xatoligi:\n"
+                                 f"Kanal ID: {channel_id}\n"
+                                 f"URL: {channel_url}\n"
+                                 f"Xato: {str(e)}\n\n"
+                                 f"Iltimos, tekshirib ko'ring!"
+                        )
+                    except:
+                        pass
                 continue
 
         return True
@@ -128,7 +179,6 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
     except Exception as e:
         logger.error(f"General error in check_subs: {e}")
         return False
-
 
 @sync_to_async
 def remove_invalid_channel(channel_id: int):
