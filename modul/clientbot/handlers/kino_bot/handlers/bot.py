@@ -162,18 +162,66 @@ async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     kb.adjust(1)
     return kb.as_markup()
 
-async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
-    channels = await get_all_channels_sponsors()
-    for channel in channels:
-        try:
-            member = await bot.get_chat_member(channel.chanel_id, user_id)
-            if member.status in ['left', 'kicked', 'banned']:
-                return False
-        except Exception as e:
-            print(f"Error checking subscription for channel {channel.chanel_id}: {e}")
-            return False
 
-    return True
+@sync_to_async
+def remove_invalid_sponsor_channels(channel_ids):
+    """Faqat sponsor kanallarni o'chirish"""
+    try:
+        ChannelSponsor.objects.filter(chanel_id__in=channel_ids).delete()
+    except Exception as e:
+        logger.error(f"Error removing invalid sponsor channels: {e}")
+
+
+async def notify_system_channel_errors(bot, user_id: int, errors: list):
+    try:
+        error_message = "⚠️ <b>Errors:</b>\n\n"
+        for channel_id, channel_title, error in errors:
+            channel_name = channel_title or f"channel {channel_id}"
+            error_message += f"• <b>{channel_name}</b>\n"
+            error_message += f"  <i>error: {error}</i>\n\n"
+        error_message += "📞 <b>Произошла ошибка, обратитесь к администратору.</b>"
+        # await bot.send_message(
+        #     chat_id=user_id,
+        #     text=error_message,
+        #     parse_mode="HTML"
+        # )
+        logger.info(f"Notified user {user_id} about system channel errors")
+    except Exception as e:
+        logger.error(f"Error notifying user about system channel errors: {e}")
+
+
+async def check_user_subscription(user_id: int, bot) -> tuple[bool, list]:
+    channels = await get_channels_for_check()
+    if not channels:
+        return True, []
+    not_subscribed = []
+    invalid_channels_to_remove = []
+    system_channel_errors = []
+    for channel_id, channel_title, channel_type in channels:
+        try:
+            member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+            if member.status in ['left', 'kicked']:
+                not_subscribed.append((channel_id, channel_title))
+        except Exception as e:
+            logger.error(f"Error checking channel {channel_id}: {e}")
+
+            if channel_type == 'sponsor':
+                # Sponsor kanallarni o'chirish
+                invalid_channels_to_remove.append(channel_id)
+                logger.info(f"Removed invalid sponsor channel {channel_id} from database")
+            elif channel_type == 'system':
+                # System kanallar uchun foydalanuvchiga ko'rsatish
+                system_channel_errors.append((channel_id, channel_title, str(e)))
+                logger.error(f"System channel {channel_id} error: {e}")
+
+    if invalid_channels_to_remove:
+        await remove_invalid_sponsor_channels(invalid_channels_to_remove)
+
+    if system_channel_errors:
+        await notify_system_channel_errors(bot, user_id, system_channel_errors)
+
+    return len(not_subscribed) == 0, not_subscribed
+
 @client_bot_router.callback_query(lambda c: c.data == 'check_subs')
 async def check_subs_callback(callback: types.CallbackQuery, state: FSMContext):
     try:
@@ -1619,7 +1667,7 @@ async def start_on(message: Message, state: FSMContext, bot: Bot, command: Comma
 
             print(f"🚫 User {message.from_user.id} not subscribed to all channels")
 
-            channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
+            channels_text = "📢 <b>Для использования бота необходимо подписаться на каналы:</b>\n\n"
             kb = InlineKeyboardBuilder()
 
             for index, channel in enumerate(not_subscribed_channels):

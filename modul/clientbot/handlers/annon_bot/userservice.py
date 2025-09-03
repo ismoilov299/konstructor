@@ -20,16 +20,11 @@ logger = logging.getLogger(__name__)
 def get_channels_for_check():
     try:
         sponsor_channels = ChannelSponsor.objects.all()
-        sponsor_list = [(str(c.chanel_id), '') for c in sponsor_channels]
-
+        sponsor_list = [(str(c.chanel_id), '', 'sponsor') for c in sponsor_channels]
         system_channels = SystemChannel.objects.filter(is_active=True)
-        system_list = [(str(c.channel_id), c.title or '') for c in system_channels]
-
+        system_list = [(str(c.channel_id), c.title or c.channel_url or '', 'system') for c in system_channels]
         all_channels = sponsor_list + system_list
-
         logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
-        logger.info(f"Total channels in DB: {all_channels}")
-
         return all_channels
     except Exception as e:
         logger.error(f"Error getting channels: {e}")
@@ -43,13 +38,9 @@ def check_user(uid):
 
 async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None, invited: str = "Никто",
                    invited_id: int = None, user_link: str = None, bot_token: str = None, **kwargs):
-    # tg_id va user_id ikkalasi ham qabul qilish uchun
     actual_user_id = tg_id or user_id
-
     logger.info(f"🔧 DEBUG: annon_bot/userservice add_user called for user {actual_user_id}")
     logger.info(f"Parameters: user_name={user_name}, invited={invited}, invited_id={invited_id}, user_link={user_link}")
-
-    # UserTG yaratish yoki olish
     user_tg, created = await sync_to_async(UserTG.objects.get_or_create)(
         uid=actual_user_id,
         defaults={
@@ -61,15 +52,10 @@ async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None
             'user_link': user_link or str(actual_user_id)
         }
     )
-
-    # Bot olish
     from modul.models import Bot
-
     bot = await sync_to_async(Bot.objects.filter(enable_anon=True).first)()
     if not bot:
         return None
-
-    # Inviter ni topish
     inviter_client = None
     if invited_id:
         try:
@@ -79,14 +65,10 @@ async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None
                 bot=bot
             ).first)()
             logger.info(f"Found inviter client: {inviter_client}")
-
             if not inviter_client:
-                # Agar ClientBotUser mavjud bo'lmasa, UserTG ni tekshiramiz
                 inviter_usertg = await sync_to_async(UserTG.objects.filter(uid=invited_id).first)()
                 logger.info(f"Found inviter UserTG: {inviter_usertg}")
-
                 if inviter_usertg:
-                    # ClientBotUser yaratamiz
                     inviter_client = await sync_to_async(ClientBotUser.objects.create)(
                         uid=invited_id,
                         user=inviter_usertg,
@@ -96,8 +78,6 @@ async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None
                     logger.info(f"Created inviter ClientBotUser: {inviter_client}")
         except Exception as e:
             logger.error(f"Error finding inviter: {e}")
-
-    # ClientBotUser yaratishda inviter ni to'g'ri o'rnatish
     client_user, created = await sync_to_async(ClientBotUser.objects.get_or_create)(
         uid=actual_user_id,
         bot=bot,
@@ -107,13 +87,10 @@ async def add_user(tg_id: int = None, user_id: int = None, user_name: str = None
             'current_ai_limit': 12
         }
     )
-
     if created:
         logger.info(f"✅ DEBUG: annon_bot created ClientBotUser for {actual_user_id} WITH INVITER={inviter_client}")
     else:
         logger.info(f"🔄 DEBUG: annon_bot found existing ClientBotUser for {actual_user_id}")
-
-    # user_link ni yangilash
     if not user_tg.user_link:
         user_tg.user_link = str(actual_user_id)
         await sync_to_async(user_tg.save)()
