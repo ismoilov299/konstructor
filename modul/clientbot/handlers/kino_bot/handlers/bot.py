@@ -120,6 +120,14 @@ def remove_invalid_sponsor_channel(channel_id):
         logger.error(f"Error removing invalid sponsor channel {channel_id}: {e}")
 
 
+@sync_to_async
+def remove_sponsor_channel(channel_id):
+    try:
+        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+    except Exception as e:
+        logger.error(f"Error removing sponsor channel {channel_id}: {e}")
+
+
 async def check_subs(user_id: int, bot: Bot) -> bool:
     try:
         bot_db = await shortcuts.get_bot(bot)
@@ -133,17 +141,15 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
             return True
 
         for channel_id, channel_url, channel_type in channels_with_type:
-            print(f"Checking channel: {channel_id}, type: {channel_type}")
             try:
-                # System kanallarni main bot orqali tekshirish
+                # System kanallarni FAQAT main bot orqali tekshirish
                 if channel_type == 'system':
-                    from modul.loader import main_bot
                     member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
                 else:
                     # Sponsor kanallarni joriy bot orqali tekshirish
                     member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
 
-                if member.status == 'left':
+                if member.status in ['left', 'kicked']:
                     kb = await get_subs_kb(bot)
                     await bot.send_message(
                         chat_id=user_id,
@@ -160,7 +166,9 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
                 if channel_type == 'sponsor':
                     await remove_sponsor_channel(channel_id)
                     logger.info(f"Removed invalid sponsor channel {channel_id}")
-                # System kanallar uchun hech narsa qilmaslik
+                else:
+                    # System kanallar uchun faqat log yozish, HECH NARSA QILMASLIK
+                    logger.warning(f"System channel {channel_id} error (keeping in database): {e}")
 
                 continue
 
