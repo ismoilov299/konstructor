@@ -58,7 +58,7 @@ from modul.clientbot.handlers.refs.shortcuts import plus_ref, plus_money, get_ac
 from modul.clientbot.keyboards import reply_kb
 from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bot_by_token, get_users, users_count, \
     executor
-from modul.loader import client_bot_router
+from modul.loader import client_bot_router, main_bot
 from modul.models import UserTG, AdminInfo, User, ClientBotUser
 from typing import Union, List, Dict
 import yt_dlp
@@ -135,7 +135,6 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         if user_id == admin_id:
             return True
 
-        # Kanallar va ularning turini olish
         channels_with_type = await get_channels_with_type_for_check()
         if not channels_with_type:
             return True
@@ -145,6 +144,7 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
                 # System kanallarni FAQAT main bot orqali tekshirish
                 if channel_type == 'system':
                     member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                    logger.info(f"System channel {channel_id} checked via main_bot: {member.status}")
                 else:
                     # Sponsor kanallarni joriy bot orqali tekshirish
                     member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
@@ -159,7 +159,7 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
                     )
                     return False
 
-            except TelegramBadRequest as e:
+            except Exception as e:
                 logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
 
                 # Faqat sponsor kanallarni o'chirish
@@ -167,8 +167,9 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
                     await remove_sponsor_channel(channel_id)
                     logger.info(f"Removed invalid sponsor channel {channel_id}")
                 else:
-                    # System kanallar uchun faqat log yozish, HECH NARSA QILMASLIK
-                    logger.warning(f"System channel {channel_id} error (keeping in database): {e}")
+                    # System kanallar uchun HECH NARSA QILMASLIK - faqat log
+                    logger.warning(f"System channel {channel_id} access error (ignoring): {e}")
+                    # Continue - bu kanalni e'tiborsiz qoldirib davom etamiz
 
                 continue
 
@@ -176,7 +177,16 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
 
     except Exception as e:
         logger.error(f"General error in check_subs: {e}")
-        return False
+        return True  # Xato bo'lsa ham davom etishga ruxsat berish
+
+
+@sync_to_async
+def remove_sponsor_channel(channel_id):
+    """Faqat sponsor kanallarni o'chirish"""
+    try:
+        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+    except Exception as e:
+        logger.error(f"Error removing sponsor channel {channel_id}: {e}")
 
 
 @sync_to_async
