@@ -1353,15 +1353,12 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         if not is_registered and referral and isinstance(referral, str) and referral.isdigit():
             ref_id = int(referral)
 
-            # O'zini o'zi referral qilishni tekshirish
             if ref_id == uid:
                 print(f"Self-referral blocked: user {uid} tried to refer themselves")
                 logger.warning(f"SELF-REFERRAL BLOCKED: User {uid}")
-                # O'zini referral qilganda log chiqaradi, lekin ishlashni to'xtatmaydi
             else:
                 print(f"Processing referral for new user {uid} from {ref_id}")
                 try:
-                    # Allaqachon referral qilinganligini tekshirish
                     already_referred = await check_if_already_referred(uid, ref_id, message.bot.token)
                     if already_referred:
                         print(f"User {uid} is already referred by {ref_id}, skipping referral process")

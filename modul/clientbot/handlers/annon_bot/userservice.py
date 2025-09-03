@@ -9,22 +9,31 @@ from psycopg2 import IntegrityError
 
 from modul.clientbot.shortcuts import get_bot
 from modul.models import UserTG, Channels, Messages, Link_statistic, Answer_statistic, Rating_overall, Rating_today, \
-    ChannelSponsor, ClientBotUser, Bot
+    ChannelSponsor, ClientBotUser, Bot, SystemChannel
 import pytz
 
 moscow_timezone = pytz.timezone('Europe/Moscow')
 logger = logging.getLogger(__name__)
 
+
 @sync_to_async
 def get_channels_for_check():
     try:
-        channels = ChannelSponsor.objects.all()
-        logger.info(f"Found channels in DB: {list(channels)}")
-        return [(str(c.chanel_id), '') for c in channels]
+        sponsor_channels = ChannelSponsor.objects.all()
+        sponsor_list = [(str(c.chanel_id), '') for c in sponsor_channels]
+
+        system_channels = SystemChannel.objects.filter(is_active=True)
+        system_list = [(str(c.channel_id), c.title or '') for c in system_channels]
+
+        all_channels = sponsor_list + system_list
+
+        logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
+        logger.info(f"Total channels in DB: {all_channels}")
+
+        return all_channels
     except Exception as e:
         logger.error(f"Error getting channels: {e}")
         return []
-
 
 
 @sync_to_async
