@@ -20,10 +20,12 @@ logger = logging.getLogger(__name__)
 def get_channels_for_check():
     try:
         sponsor_channels = ChannelSponsor.objects.all()
-        sponsor_list = [(str(c.chanel_id), '', 'sponsor') for c in sponsor_channels]
+        sponsor_list = [(str(c.chanel_id), '') for c in sponsor_channels]
         system_channels = SystemChannel.objects.filter(is_active=True)
-        system_list = [(str(c.channel_id), c.title or c.channel_url or '', 'system') for c in system_channels]
+        system_list = [(str(c.channel_id), c.channel_url) for c in system_channels]
+
         all_channels = sponsor_list + system_list
+
         logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
         return all_channels
     except Exception as e:
