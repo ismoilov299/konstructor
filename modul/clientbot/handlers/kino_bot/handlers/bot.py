@@ -1118,8 +1118,10 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
                 continue
 
     if not subscribed:
+
         await callback.answer("⚠️ Вы не подписались на все каналы! Пожалуйста, подпишитесь на все указанные каналы.",
                               show_alert=True)
+
 
         channels_text = f"📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
 
@@ -1136,16 +1138,19 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         markup.adjust(1)  # Har bir qatorda 1 ta tugma
 
         try:
+
             await callback.message.edit_text(
                 channels_text + f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
                 reply_markup=markup.as_markup(),
                 parse_mode="HTML"
             )
         except Exception as e:
+
             try:
                 await callback.message.delete()
             except:
                 pass  # Agar o'chirishda xatolik bo'lsa, e'tiborsiz qoldiramiz
+
 
             await callback.message.answer(
                 channels_text + f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
@@ -1155,24 +1160,25 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
 
         return
 
-    # Если пользователь подписался на все каналы
-    await callback.answer("✅ Вы успешно подписались на все каналы!")
+    await callback.answer("Вы успешно подписались на все каналы!")
 
-    # Проверяем существование пользователя
+
     user_exists = await check_user(user_id)
+
+
     referral_id = None
 
-    # Получаем referral из state
+
     data = await state.get_data()
     referral = data.get('referral')
     if referral and str(referral).isdigit():
         referral_id = int(referral)
         logger.info(f"Got referral ID from state: {referral_id}")
 
-    # Если пользователь новый
+
     if not user_exists:
         try:
-            # Создаем start link для нового пользователя
+
             new_link = await create_start_link(bot, str(callback.from_user.id))
             link_for_db = new_link[new_link.index("=") + 1:]
 
@@ -1216,35 +1222,303 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         else:
             logger.info(f"User {user_id} already exists, skipping referral")
 
-    # ==========================================
-    # ГЛАВНОЕ ИЗМЕНЕНИЕ: Перенаправляем на start функцию
-    # ==========================================
+    # Bot moduliga qarab o'tish
+    if shortcuts.have_one_module(bot_db, "leo"):
+        # await callback.message.delete()
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🫰 Знакомства")
+        builder.button(text="💸Заработать")
+        builder.adjust(2)
+        await callback.message.answer(
+            "Добро пожаловать в бот знакомств!",
+            reply_markup=builder.as_markup(resize_keyboard=True)
+        )
 
-    # Удаляем сообщение с кнопками подписки
-    try:
+    elif shortcuts.have_one_module(bot_db, "download"):
+        builder = ReplyKeyboardBuilder()
+        builder.button(text='💸Заработать')
+        text = ("🤖 Привет, {full_name}! Я бот-загрузчик.\r\n\r\n"
+                "Я могу скачать фото/видео/аудио/файлы/архивы с *Youtube, Instagram, TikTok, Facebook, SoundCloud, Vimeo, Вконтакте, Twitter и 1000+ аудио/видео/файловых хостингов*. Просто пришли мне URL на публикацию с медиа или прямую ссылку на файл.").format(
+            full_name=callback.from_user.full_name)
+        await state.set_state(Download.download)
+        await callback.message.answer(text, parse_mode="Markdown",
+                                      reply_markup=builder.as_markup(resize_keyboard=True))
+
+    elif shortcuts.have_one_module(bot_db, "kino"):
         await callback.message.delete()
-    except Exception as e:
-        logger.error(f"Error deleting callback message: {e}")
+        await start_kino_bot(callback.message, state, bot)
 
-    # Создаем фиктивное сообщение для передачи в start функцию
-    # Это нужно потому что start ожидает Message, а у нас есть CallbackQuery
-    class FakeMessage:
-        def __init__(self, callback_query: CallbackQuery):
-            self.from_user = callback_query.from_user
-            self.chat = callback_query.message.chat
-            self.bot = callback_query.bot
-            self.text = "/start"  # Имитируем команду /start
-            self.message_id = callback_query.message.message_id
+    elif shortcuts.have_one_module(bot_db, "chatgpt"):
+        builder = InlineKeyboardBuilder()
+        builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
+        builder.button(text='☁ Чат с GPT-3.5', callback_data='chat_3')
+        builder.button(text='💸Заработать', callback_data='ref')
+        builder.adjust(2, 1, 1, 1, 1, 1, 2)
+        result = await get_info_db(user_id)
+        text = f'Привет {callback.from_user.username}\nВаш баланс - {result[0][2]}'
+        await callback.message.edit_text(text, reply_markup=builder.as_markup())
 
-        async def answer(self, text: str, **kwargs):
-            """Перенаправляем answer на callback.message.answer"""
-            return await callback.message.answer(text, **kwargs)
+    else:
+        await callback.message.delete()
 
-    # Создаем фиктивное сообщение и вызываем start функцию
-    fake_message = FakeMessage(callback)
+        # Qo'shimcha referral operatsiyalari - Dobro pojalovatdan oldin
+        data = await state.get_data()
+        referral = data.get('referral')
+        if referral and referral.isdigit():
+            try:
+                referral_id = int(referral)
+                if str(referral_id) != str(user_id):
+                    await process_referral(callback.message, referral_id)
+            except ValueError:
+                logger.error(f"Invalid referral ID at final check: {referral}")
+            except Exception as e:
+                logger.error(f"Error processing referral at final check: {e}")
 
-    # Вызываем start функцию, которая обработает все модули
-    await start_on(fake_message, state, bot)
+        text = "Добро пожаловать, {hello}".format(
+            hello=html.quote(callback.from_user.full_name))
+        await callback.message.answer(text,
+                                      reply_markup=await reply_kb.main_menu(user_id, bot))
+import html
+async def start(message: Message, state: FSMContext, bot: Bot):
+    print(f"Start function called for user {message.from_user.id}")
+    bot_db = await shortcuts.get_bot(bot)
+    uid = message.from_user.id
+    print(uid, 'kino start')
+
+    # Bot modullarini tekshirish
+    print(f"DEBUG: Bot modules:")
+    print(f"  - enable_leo: {getattr(bot_db, 'enable_leo', 'NOT_FOUND')}")
+    print(f"  - enable_download: {getattr(bot_db, 'enable_download', 'NOT_FOUND')}")
+    print(f"  - enable_kino: {getattr(bot_db, 'enable_kino', 'NOT_FOUND')}")
+    print(f"  - enable_refs: {getattr(bot_db, 'enable_refs', 'NOT_FOUND')}")
+    print(f"  - enable_chatgpt: {getattr(bot_db, 'enable_chatgpt', 'NOT_FOUND')}")
+
+    # have_one_module funksiyasini tekshirish
+    print(f"DEBUG: have_one_module checks:")
+    print(f"  - have_one_module(bot_db, 'leo'): {shortcuts.have_one_module(bot_db, 'leo')}")
+    print(f"  - have_one_module(bot_db, 'refs'): {shortcuts.have_one_module(bot_db, 'refs')}")
+    print(f"  - have_one_module(bot_db, 'download'): {shortcuts.have_one_module(bot_db, 'download')}")
+    print(f"  - have_one_module(bot_db, 'kino'): {shortcuts.have_one_module(bot_db, 'kino')}")
+    print(f"  - have_one_module(bot_db, 'chatgpt'): {shortcuts.have_one_module(bot_db, 'chatgpt')}")
+    print(f"DEBUG: User {uid} started the bot with message: {message.text}")
+
+
+    referral = message.text[7:] if message.text and len(message.text) > 7 else None
+    print(f"Referral from command for user {uid}: {referral}")
+
+    state_data = await state.get_data()
+    state_referral = state_data.get('referrer_id') or state_data.get('referral')
+    if not referral and state_referral:
+        referral = state_referral
+        print(f"Using referral from state for user {uid}: {referral}")
+
+    if referral and isinstance(referral, str) and referral.isdigit():
+        referrer_id = int(referral)
+        await state.update_data(referrer_id=referrer_id, referral=referral)
+        print(f"SAVED referrer_id {referrer_id} to state for user {uid}")
+        logger.info(f"Processing start command with referral: {referral}")
+
+        state_data = await state.get_data()
+        print(f"State after saving for user {uid}: {state_data}")
+
+    text = "Добро пожаловать, {hello}".format(hello=html.escape(message.from_user.full_name))
+    kwargs = {}
+
+    if shortcuts.have_one_module(bot_db, "leo"):
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🫰 Знакомства")
+        builder.button(text="💸Заработать")
+        builder.adjust(2)
+        kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
+
+    if shortcuts.have_one_module(bot_db, "download"):
+        builder = ReplyKeyboardBuilder()
+        builder.button(text='💸Заработать')
+        text = ("🤖 Привет, {full_name}! Я бот-загрузчик.\r\n\r\n"
+                "Я могу скачать фото/видео/аудио/файлы/архивы с *Youtube, Instagram, TikTok, Facebook, SoundCloud, Vimeo, Вконтакте, Twitter и 1000+ аудио/видео/файловых хостингов*. Просто пришли мне URL на публикацию с медиа или прямую ссылку на файл.").format(
+            full_name=message.from_user.full_name)
+        await state.set_state(Download.download)
+        kwargs['parse_mode'] = "Markdown"
+        kwargs['reply_markup'] = builder.as_markup(resize_keyboard=True)
+
+    if shortcuts.have_one_module(bot_db, "refs"):
+        is_registered = await check_user(uid)
+        is_banned = await check_ban(uid)
+
+        if is_banned:
+            logger.info(f"User {uid} is banned, exiting")
+            await message.answer("Вы были заблокированы")
+            return
+
+        if not is_registered and referral and isinstance(referral, str) and referral.isdigit():
+            ref_id = int(referral)
+
+            # O'zini o'zi referral qilishni tekshirish
+            if ref_id == uid:
+                print(f"Self-referral blocked: user {uid} tried to refer themselves")
+                logger.warning(f"SELF-REFERRAL BLOCKED: User {uid}")
+                # O'zini referral qilganda log chiqaradi, lekin ishlashni to'xtatmaydi
+            else:
+                print(f"Processing referral for new user {uid} from {ref_id}")
+                try:
+                    # Allaqachon referral qilinganligini tekshirish
+                    already_referred = await check_if_already_referred(uid, ref_id, message.bot.token)
+                    if already_referred:
+                        print(f"User {uid} is already referred by {ref_id}, skipping referral process")
+                        logger.warning(f"ALREADY REFERRED: User {uid} is already referred by {ref_id}")
+                    else:
+                        @sync_to_async
+                        def get_referrer_direct():
+                            try:
+                                referrer = UserTG.objects.filter(uid=ref_id).first()
+                                return referrer
+                            except Exception as e:
+                                print(f"Error getting referrer from database: {e}")
+                                logger.error(f"Error getting referrer from database: {e}")
+                                return None
+
+                        referrer = await get_referrer_direct()
+
+                        if not referrer:
+                            print(f"Referrer {ref_id} not found in database directly")
+                            logger.warning(f"Referrer {ref_id} not found in database")
+                        else:
+                            print(f"Found referrer {ref_id} in database")
+                            new_user = await add_user(
+                                tg_id=uid,
+                                user_name=message.from_user.first_name,
+                                invited=referrer.first_name or "Unknown",
+                                invited_id=ref_id,
+                                bot_token=message.bot.token
+                            )
+                            print(f"Added new user {uid} with referrer {ref_id}")
+
+                            @sync_to_async
+                            @transaction.atomic
+                            def update_referrer_balance(ref_id, bot_token):
+                                try:
+                                    # Получаем бота по токену
+                                    bot = Bot.objects.get(token=bot_token)
+
+                                    # Получаем пользователя
+                                    user_tg = UserTG.objects.select_for_update().get(uid=ref_id)
+
+                                    # Получаем или создаем запись ClientBotUser для этого бота
+                                    client_bot_user, created = ClientBotUser.objects.get_or_create(
+                                        uid=ref_id,
+                                        bot=bot,
+                                        defaults={
+                                            'user': user_tg,
+                                            'balance': 0,
+                                            'referral_count': 0,
+                                            'referral_balance': 0
+                                        }
+                                    )
+
+                                    # Получаем цену из настроек для этого бота
+                                    admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
+
+                                    if not admin_info:
+                                        admin_info = AdminInfo.objects.first()
+
+                                    # Определяем награду
+                                    if admin_info and hasattr(admin_info, 'price') and admin_info.price:
+                                        price = float(admin_info.price)
+                                    else:
+                                        price = 3.0  # По умолчанию 3 рубля
+
+                                    # Обновляем поля для конкретного бота
+                                    client_bot_user.referral_count += 1
+                                    client_bot_user.referral_balance += price
+                                    client_bot_user.save()
+
+                                    # Также обновляем общие поля в UserTG
+                                    user_tg.refs += 1
+                                    user_tg.balance += price
+                                    user_tg.save()
+
+                                    print(
+                                        f"Updated referrer {ref_id} for bot: refs={client_bot_user.referral_count}, balance={client_bot_user.referral_balance}")
+                                    return True
+                                except Exception as e:
+                                    print(f"Error updating referrer balance: {e}")
+                                    traceback.print_exc()
+                                    return False
+
+                            success = await update_referrer_balance(ref_id, message.bot.token)
+                            print(f"Referrer balance update success: {success}")
+
+                            # HTML formatlash uchun to'g'irlang
+                            if success:
+                                try:
+                                    print(f"Preparing to send referral notification to {ref_id}")
+                                    user_name = message.from_user.first_name
+                                    user_profile_link = f'tg://user?id={uid}'
+
+                                    await asyncio.sleep(1)
+
+                                    await bot.send_message(
+                                        chat_id=ref_id,
+                                        text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>",
+                                        parse_mode="HTML"
+                                    )
+                                    print(f"Sent referral notification to {ref_id} about user {uid}")
+                                    logger.info(f"Sent referral notification to {ref_id} about user {uid}")
+                                except Exception as e:
+                                    print(f"Error sending notification to referrer: {e}")
+                                    logger.error(f"Error sending notification to referrer: {e}")
+                                    traceback.print_exc()
+                except Exception as e:
+                    print(f"Error in referral process: {e}")
+                    logger.error(f"Error in referral process: {e}")
+                    traceback.print_exc()
+
+        channels = await get_channels_for_check()
+
+        if not channels:
+            print(f"No channels found for user {uid}, considering as subscribed")
+            channels_checker = True
+        else:
+            try:
+                channels_checker = await check_channels(uid, bot)
+
+            except Exception as e:
+                print(f"Error checking channels: {e}")
+                logger.error(f"Error checking channels: {e}")
+                channels_checker = False
+
+            if not channels_checker:
+                print(f"Channel check failed for user {uid}, but referrer_id saved in state")
+                return
+
+        print(f"Channels check result for user {uid}: {channels_checker}")
+
+        await message.answer(
+            f"🎉 Привет, {message.from_user.first_name}",
+            reply_markup=await main_menu_bt()
+        )
+        return
+
+    elif shortcuts.have_one_module(bot_db, "kino"):
+        print("kino")
+        await start_kino_bot(message, state, bot)
+        return
+    elif shortcuts.have_one_module(bot_db, "chatgpt"):
+        builder = InlineKeyboardBuilder()
+        builder.button(text='☁ Чат с GPT-4', callback_data='chat_4')
+        builder.button(text='☁ Чат с GPT-3.5', callback_data='chat_3')
+
+        builder.button(text='💸Заработать', callback_data='ref')
+        builder.adjust(2, 1, 1, 1, 1, 1, 2)
+        result = await get_info_db(uid)
+        print(result)
+        text = f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}'
+        kwargs['reply_markup'] = builder.as_markup()
+    else:
+        print("DEBUG: No specific module, using default")
+        kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
+
+    await message.answer(text, **kwargs)
 
 import html
 
