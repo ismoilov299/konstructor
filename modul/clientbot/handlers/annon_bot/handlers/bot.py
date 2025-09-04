@@ -22,6 +22,7 @@ from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
+from modul.clientbot.handlers.kino_bot.handlers.bot import get_channels_with_type_for_check, remove_sponsor_channel
 from modul.clientbot.handlers.kino_bot.shortcuts import get_all_channels_sponsors
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt2
 from modul.clientbot.handlers.refs.shortcuts import get_actual_price, get_actual_min_amount
@@ -394,34 +395,55 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
     logger.info(f"Anon bot start: user {user_id}, args: {args}")
 
-    # Kanal tekshirish
-    channels = await get_channels_for_check()
+    # O'ZGARISH: get_channels_with_type_for_check() ishlatish
+    channels = await get_channels_with_type_for_check()
 
     if channels:
         subscribed_all = True
-        for channel_info in channels:
-            try:
-                if isinstance(channel_info, tuple):
-                    channel_id = int(channel_info[0]) if channel_info[0] else int(channel_info[1])
-                else:
-                    channel_id = int(channel_info)
+        invalid_channels_to_remove = []
 
-                member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+        # O'ZGARISH: channel_type ham olish
+        for channel_id, channel_url, channel_type in channels:
+            try:
+                # O'ZGARISH: channel type ga qarab bot tanlash
+                if channel_type == 'system':
+                    from modul.loader import main_bot
+                    member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                    logger.info(f"System channel {channel_id} checked via main_bot: {member.status}")
+                else:
+                    member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                    logger.info(f"Sponsor channel {channel_id} checked via current_bot: {member.status}")
 
                 if member.status in ['left', 'kicked']:
                     subscribed_all = False
                     break
 
             except Exception as e:
-                logger.error(f"Error checking channel: {e}")
+                logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+                # O'ZGARISH: faqat sponsor kanallarni o'chirish
+                if channel_type == 'sponsor':
+                    invalid_channels_to_remove.append(channel_id)
+                    logger.info(f"Added invalid sponsor channel {channel_id} to removal list")
+                else:
+                    # System kanallar uchun faqat log
+                    logger.warning(f"System channel {channel_id} error (ignoring): {e}")
+
                 subscribed_all = False
                 break
+
+        # O'ZGARISH: invalid sponsor kanallarni o'chirish
+        if invalid_channels_to_remove:
+            for channel_id in invalid_channels_to_remove:
+                await remove_sponsor_channel(channel_id)
 
         if not subscribed_all:
             if args and args.isdigit() and int(args) != user_id:
                 await state.update_data(referral_uid=args)
 
-            markup = await create_channels_keyboard(channels, bot)
+            # O'ZGARISH: channels listini yangi formatga o'zgartirish
+            channels_for_keyboard = [(channel_id, channel_url) for channel_id, channel_url, _ in channels]
+            markup = await create_channels_keyboard(channels_for_keyboard, bot)
             await message.answer("Для использования бота подпишитесь на наши каналы:", reply_markup=markup)
             return
 
@@ -491,7 +513,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         parse_mode="html",
         reply_markup=await main_menu_bt()
     )
-
 
 # CALLBACK HANDLER - Kanal tekshiruvidan keyin
 @client_bot_router.callback_query(F.data == "check_chan", AnonBotFilter())
