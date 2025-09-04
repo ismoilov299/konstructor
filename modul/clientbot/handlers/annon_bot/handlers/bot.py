@@ -22,13 +22,12 @@ from modul.clientbot.handlers.annon_bot.states import Links, AnonBotFilter
 from modul.clientbot.handlers.annon_bot.userservice import get_greeting, get_user_link, get_user_by_link, \
     get_all_statistic, get_channels_for_check, change_greeting_user, change_link_db, add_user, add_link_statistic, \
     add_answer_statistic, add_messages_info, check_user, check_link, check_reply, update_user_link, get_user_by_id
-from modul.clientbot.handlers.kino_bot.handlers.bot import get_channels_with_type_for_check, remove_sponsor_channel
 from modul.clientbot.handlers.kino_bot.shortcuts import get_all_channels_sponsors
 from modul.clientbot.handlers.refs.keyboards.buttons import main_menu_bt2
 from modul.clientbot.handlers.refs.shortcuts import get_actual_price, get_actual_min_amount
 from modul.loader import client_bot_router
 from modul.clientbot.shortcuts import get_bot_by_token, get_bot
-from modul.models import UserTG, AdminInfo, ClientBotUser, Channels
+from modul.models import UserTG, AdminInfo, ClientBotUser, Channels, ChannelSponsor, SystemChannel
 
 logger = logging.getLogger(__name__)
 
@@ -386,7 +385,32 @@ async def show_main_menu(message: types.Message, bot: Bot):
     )
     logger.info(f"Main menu sent to user {message.from_user.id}")
 
+@sync_to_async
+def remove_sponsor_channel(channel_id):
+    """Faqat sponsor kanallarni o'chirish"""
+    try:
+        from modul.models import ChannelSponsor
+        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+        logger.info(f"Removed invalid sponsor channel {channel_id}")
+    except Exception as e:
+        logger.error(f"Error removing sponsor channel {channel_id}: {e}")
 
+
+@sync_to_async
+def get_channels_with_type_for_check():
+    try:
+        sponsor_channels = ChannelSponsor.objects.all()
+        sponsor_list = [(str(c.chanel_id), '', 'sponsor') for c in sponsor_channels]
+        system_channels = SystemChannel.objects.filter(is_active=True)
+        system_list = [(str(c.channel_id), c.channel_url, 'system') for c in system_channels]
+
+        all_channels = sponsor_list + system_list
+
+        logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
+        return all_channels
+    except Exception as e:
+        logger.error(f"Error getting channels with type: {e}")
+        return []
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     await state.clear()
