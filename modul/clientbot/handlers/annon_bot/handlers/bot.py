@@ -630,20 +630,39 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
 # YORDAMCHI FUNKSIYALAR
 
 
-
-
 async def create_channels_keyboard(channels, bot):
     keyboard = []
 
     for channel_info in channels:
         try:
-            if isinstance(channel_info, tuple):
+            # Yangi format: (channel_id, channel_url, channel_type)
+            if isinstance(channel_info, tuple) and len(channel_info) == 3:
+                channel_id, channel_url, channel_type = channel_info
+                channel_id = int(channel_id)
+
+                # Channel type ga qarab bot tanlash
+                if channel_type == 'system':
+                    from modul.loader import main_bot
+                    chat = await main_bot.get_chat(channel_id)
+                    logger.info(f"System channel {channel_id} info retrieved via main_bot")
+                else:
+                    chat = await bot.get_chat(channel_id)
+                    logger.info(f"Sponsor channel {channel_id} info retrieved via current_bot")
+
+            # Eski format: (channel_id, channel_url)
+            elif isinstance(channel_info, tuple) and len(channel_info) == 2:
                 channel_id = int(channel_info[0]) if channel_info[0] else int(channel_info[1])
+                chat = await bot.get_chat(channel_id)
+
             else:
                 channel_id = int(channel_info)
+                chat = await bot.get_chat(channel_id)
 
-            chat = await bot.get_chat(channel_id)
-            invite_link = chat.invite_link or f"https://t.me/{chat.username}"
+            # URL ni aniqlash
+            if isinstance(channel_info, tuple) and len(channel_info) >= 2 and channel_info[1]:
+                invite_link = channel_info[1]  # channel_url
+            else:
+                invite_link = chat.invite_link or f"https://t.me/{chat.username}"
 
             keyboard.append([
                 InlineKeyboardButton(
@@ -653,13 +672,14 @@ async def create_channels_keyboard(channels, bot):
             ])
         except Exception as e:
             logger.error(f"Error creating button for channel {channel_info}: {e}")
+            # System kanal xatoliklari uchun continue qilish
+            continue
 
     keyboard.append([
         InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_chan")
     ])
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
-
 
 async def check_user_exists(user_id):
     """
