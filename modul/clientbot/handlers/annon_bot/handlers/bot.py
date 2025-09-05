@@ -411,6 +411,8 @@ def get_channels_with_type_for_check():
     except Exception as e:
         logger.error(f"Error getting channels with type: {e}")
         return []
+
+
 @client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     await state.clear()
@@ -419,17 +421,16 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
     logger.info(f"Anon bot start: user {user_id}, args: {args}")
 
-    # O'ZGARISH: get_channels_with_type_for_check() ishlatish
+    # Kanallarni tekshirish
     channels = await get_channels_with_type_for_check()
 
     if channels:
         subscribed_all = True
         invalid_channels_to_remove = []
 
-        # O'ZGARISH: channel_type ham olish
         for channel_id, channel_url, channel_type in channels:
             try:
-                # O'ZGARISH: channel type ga qarab bot tanlash
+                # Channel type ga qarab bot tanlash
                 if channel_type == 'system':
                     from modul.loader import main_bot
                     member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
@@ -445,18 +446,16 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             except Exception as e:
                 logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
 
-                # O'ZGARISH: faqat sponsor kanallarni o'chirish
                 if channel_type == 'sponsor':
                     invalid_channels_to_remove.append(channel_id)
                     logger.info(f"Added invalid sponsor channel {channel_id} to removal list")
                 else:
-                    # System kanallar uchun faqat log
                     logger.warning(f"System channel {channel_id} error (ignoring): {e}")
 
                 subscribed_all = False
                 break
 
-        # O'ZGARISH: invalid sponsor kanallarni o'chirish
+        # Invalid sponsor kanallarni o'chirish
         if invalid_channels_to_remove:
             for channel_id in invalid_channels_to_remove:
                 await remove_sponsor_channel(channel_id)
@@ -465,9 +464,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             if args and args.isdigit() and int(args) != user_id:
                 await state.update_data(referral_uid=args)
 
-            # O'ZGARISH: channels listini yangi formatga o'zgartirish
-            channels_for_keyboard = [(channel_id, channel_url) for channel_id, channel_url, _ in channels]
-            markup = await create_channels_keyboard(channels_for_keyboard, bot)
+            markup = await create_channels_keyboard(channels, bot)
             await message.answer("Для использования бота подпишитесь на наши каналы:", reply_markup=markup)
             return
 
@@ -482,7 +479,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         # Referral notification
         if result.get('inviter') and result['user_created']:
             try:
-                # ИСПРАВЛЕНО: Получаем bonus_amount из настроек бота
+                # Bonus amount ni bot sozlamalaridan olish
                 from asgiref.sync import sync_to_async
                 from modul.models import AdminInfo
 
