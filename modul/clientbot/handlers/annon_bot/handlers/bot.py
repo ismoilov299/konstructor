@@ -535,7 +535,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         reply_markup=await main_menu_bt()
     )
 
-# CALLBACK HANDLER - Kanal tekshiruvidan keyin
+
 @client_bot_router.callback_query(F.data == "check_chan", AnonBotFilter())
 async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Kanal obunasini qayta tekshirish"""
@@ -549,29 +549,47 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     referrer_id = state_data.get('referrer_id')
     print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
 
-    # Kanallarni qayta tekshirish
-    channels = await get_channels_for_check()
+    # O'ZGARISH: get_channels_with_type_for_check() ishlatish
+    channels = await get_channels_with_type_for_check()
     print(f"📡 Channels for user {user_id}: {channels}")
 
     subscribed_all = True
-    for channel_info in channels:
-        try:
-            if isinstance(channel_info, tuple):
-                channel_id = int(channel_info[0]) if channel_info[0] else int(channel_info[1])
-            else:
-                channel_id = int(channel_info)
+    invalid_channels_to_remove = []
 
-            member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
-            print(f"📢 Channel {channel_id} status for user {user_id}: {member.status}")
+    # O'ZGARISH: channel_type ham olish
+    for channel_id, channel_url, channel_type in channels:
+        try:
+            # O'ZGARISH: channel type ga qarab bot tanlash
+            if channel_type == 'system':
+                from modul.loader import main_bot
+                member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                print(f"📢 System channel {channel_id} status for user {user_id}: {member.status}")
+            else:
+                member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                print(f"📢 Sponsor channel {channel_id} status for user {user_id}: {member.status}")
 
             if member.status in ['left', 'kicked']:
                 subscribed_all = False
                 break
 
         except Exception as e:
-            logger.error(f"Error checking channel {channel_info}: {e}")
+            logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+            # O'ZGARISH: faqat sponsor kanallarni o'chirish
+            if channel_type == 'sponsor':
+                invalid_channels_to_remove.append(channel_id)
+                print(f"Added invalid sponsor channel {channel_id} to removal list")
+            else:
+                # System kanallar uchun faqat log
+                print(f"System channel {channel_id} error (ignoring): {e}")
+
             subscribed_all = False
             break
+
+    # O'ZGARISH: invalid sponsor kanallarni o'chirish
+    if invalid_channels_to_remove:
+        for channel_id in invalid_channels_to_remove:
+            await remove_sponsor_channel(channel_id)
 
     if not subscribed_all:
         await callback.answer("❌ Вы еще не подписались на все каналы!", show_alert=True)
@@ -622,7 +640,6 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     await state.clear()
     print(f"🧹 Cleared state for user {user_id}")
     await callback.answer()
-
 
 
 

@@ -618,7 +618,6 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         referrer_id = state_data.get('referrer_id') or state_data.get('referral')
         print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
 
-        # O'ZGARISH: get_channels_with_type_for_check() ishlatish
         channels = await get_channels_with_type_for_check()
         print(f"📡 Channels for user {user_id}: {channels}")
         not_subscribed_channels = []
@@ -630,10 +629,8 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             is_subscribed = True
             invalid_channels_to_remove = []
 
-            # O'ZGARISH: channel_type ham olish
             for channel_id, channel_url, channel_type in channels:
                 try:
-                    # O'ZGARISH: channel type ga qarab bot tanlash
                     if channel_type == 'system':
                         from modul.loader import main_bot
                         member = await main_bot.get_chat_member(
@@ -652,9 +649,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                         is_subscribed = False
                         print(f"❌ User {user_id} not subscribed to channel {channel_id}")
 
-                        # Obuna bo'lmagan kanal ma'lumotlarini olish
                         try:
-                            # O'ZGARISH: chat info ni ham to'g'ri bot orqali olish
                             if channel_type == 'system':
                                 chat_info = await main_bot.get_chat(chat_id=int(channel_id))
                             else:
@@ -675,29 +670,23 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                 except Exception as e:
                     print(f"⚠️ Error checking channel {channel_id} (type: {channel_type}): {e}")
 
-                    # O'ZGARISH: faqat sponsor kanallarni o'chirish
                     if channel_type == 'sponsor':
                         invalid_channels_to_remove.append(channel_id)
                         print(f"Added invalid sponsor channel {channel_id} to removal list")
                     else:
-                        # System kanallar uchun faqat log
                         print(f"System channel {channel_id} error (ignoring): {e}")
                     continue
 
-            # O'ZGARISH: invalid sponsor kanallarni o'chirish
             if invalid_channels_to_remove:
                 for channel_id in invalid_channels_to_remove:
                     await remove_sponsor_channel(channel_id)
 
-        # Agar barcha kanallarga obuna bo'lmagan bo'lsa
         if not is_subscribed:
             print(f"🚫 User {user_id} not subscribed to all channels")
 
-            # Foydalanuvchiga ogohlantirish berish
             await query.answer("⚠️ Вы не подписались на все каналы! Пожалуйста, подпишитесь и нажмите кнопку снова.",
                                show_alert=True)
 
-            # Obuna bo'lmagan kanallarni ko'rsatish
             channels_text = "📢 <b>Для использования бота необходимо подписаться на каналы:</b>\n\n"
 
             kb = InlineKeyboardBuilder()
@@ -712,25 +701,22 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             kb.button(text="✅ Проверить подписку", callback_data="check_chan")
             kb.adjust(1)  # Har bir qatorda 1 ta tugma
 
-            # "message is not modified" xatoligini oldini olish
             try:
                 import time
                 now = int(time.time())
                 await query.message.edit_text(
-                    channels_text + f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку». (ID: {now})",
+                    channels_text + f"\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
                     reply_markup=kb.as_markup(),
                     parse_mode="HTML"
                 )
             except aiogram.exceptions.TelegramBadRequest as e:
                 if "message is not modified" in str(e):
-                    # Xabar o'zgarmagan - bu holda yangi dialog oynasi ochilgan
                     pass
                 else:
-                    # Boshqa xatolik bo'lsa, yangi xabar yuborish
                     try:
                         await query.message.delete()
                     except:
-                        pass  # O'chirishda xatolik bo'lsa, e'tiborsiz qoldiramiz
+                        pass
 
                     await query.bot.send_message(
                         chat_id=user_id,
