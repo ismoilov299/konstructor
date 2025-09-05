@@ -23,7 +23,7 @@ from modul.clientbot.handlers.refs.shortcuts import (
 )
 from aiogram import F, Bot
 
-from modul.models import User
+from modul.models import User, SystemChannel
 
 logger = logging.getLogger(__name__)
 
@@ -579,6 +579,34 @@ async def info(message: Message):
             reply_markup=await admin_in(admin_user)
         )
 
+
+@sync_to_async
+def remove_sponsor_channel(channel_id):
+    """Faqat sponsor kanallarni o'chirish"""
+    try:
+        from modul.models import ChannelSponsor
+        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+        print(f"Removed invalid sponsor channel {channel_id}")
+    except Exception as e:
+        print(f"Error removing sponsor channel {channel_id}: {e}")
+
+
+@sync_to_async
+def get_channels_with_type_for_check():
+    try:
+        sponsor_channels = ChannelSponsor.objects.all()
+        sponsor_list = [(str(c.chanel_id), '', 'sponsor') for c in sponsor_channels]
+        system_channels = SystemChannel.objects.filter(is_active=True)
+        system_list = [(str(c.channel_id), c.channel_url, 'system') for c in system_channels]
+
+        all_channels = sponsor_list + system_list
+
+        logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
+        return all_channels
+    except Exception as e:
+        logger.error(f"Error getting channels with type: {e}")
+        return []
+
 @client_bot_router.callback_query(F.data == "check_chan")
 async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
@@ -589,7 +617,9 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
         print(f"📊 State data for user {user_id}: {state_data}")
         referrer_id = state_data.get('referrer_id') or state_data.get('referral')
         print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
-        channels = await get_channels_for_check()
+
+        # O'ZGARISH: get_channels_with_type_for_check() ishlatish
+        channels = await get_channels_with_type_for_check()
         print(f"📡 Channels for user {user_id}: {channels}")
         not_subscribed_channels = []
 
@@ -598,13 +628,25 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             is_subscribed = True
         else:
             is_subscribed = True
-            for channel_id, channel_url in channels:
+            invalid_channels_to_remove = []
+
+            # O'ZGARISH: channel_type ham olish
+            for channel_id, channel_url, channel_type in channels:
                 try:
-                    member = await query.bot.get_chat_member(
-                        chat_id=channel_id,
-                        user_id=user_id
-                    )
-                    print(f"📢 Channel {channel_id} status for user {user_id}: {member.status}")
+                    # O'ZGARISH: channel type ga qarab bot tanlash
+                    if channel_type == 'system':
+                        from modul.loader import main_bot
+                        member = await main_bot.get_chat_member(
+                            chat_id=int(channel_id),
+                            user_id=user_id
+                        )
+                        print(f"📢 System channel {channel_id} status for user {user_id}: {member.status}")
+                    else:
+                        member = await query.bot.get_chat_member(
+                            chat_id=int(channel_id),
+                            user_id=user_id
+                        )
+                        print(f"📢 Sponsor channel {channel_id} status for user {user_id}: {member.status}")
 
                     if member.status == 'left':
                         is_subscribed = False
@@ -612,7 +654,12 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
 
                         # Obuna bo'lmagan kanal ma'lumotlarini olish
                         try:
-                            chat_info = await query.bot.get_chat(chat_id=channel_id)
+                            # O'ZGARISH: chat info ni ham to'g'ri bot orqali olish
+                            if channel_type == 'system':
+                                chat_info = await main_bot.get_chat(chat_id=int(channel_id))
+                            else:
+                                chat_info = await query.bot.get_chat(chat_id=int(channel_id))
+
                             not_subscribed_channels.append({
                                 'id': channel_id,
                                 'title': chat_info.title,
@@ -626,8 +673,21 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                                 'invite_link': channel_url or f"https://t.me/{channel_id.strip('-')}"
                             })
                 except Exception as e:
-                    print(f"⚠️ Error checking channel {channel_id}: {e}")
+                    print(f"⚠️ Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+                    # O'ZGARISH: faqat sponsor kanallarni o'chirish
+                    if channel_type == 'sponsor':
+                        invalid_channels_to_remove.append(channel_id)
+                        print(f"Added invalid sponsor channel {channel_id} to removal list")
+                    else:
+                        # System kanallar uchun faqat log
+                        print(f"System channel {channel_id} error (ignoring): {e}")
                     continue
+
+            # O'ZGARISH: invalid sponsor kanallarni o'chirish
+            if invalid_channels_to_remove:
+                for channel_id in invalid_channels_to_remove:
+                    await remove_sponsor_channel(channel_id)
 
         # Agar barcha kanallarga obuna bo'lmagan bo'lsa
         if not is_subscribed:
@@ -638,7 +698,7 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
                                show_alert=True)
 
             # Obuna bo'lmagan kanallarni ko'rsatish
-            channels_text = "📢 **Для использования бота необходимо подписаться на каналы:**\n\n"
+            channels_text = "📢 <b>Для использования бота необходимо подписаться на каналы:</b>\n\n"
 
             kb = InlineKeyboardBuilder()
 
@@ -759,7 +819,6 @@ async def check_chan_callback(query: CallbackQuery, state: FSMContext):
             await state.clear()
         except:
             pass
-
 
 @sync_to_async
 def check_user_in_specific_bot(user_id, bot_token):
