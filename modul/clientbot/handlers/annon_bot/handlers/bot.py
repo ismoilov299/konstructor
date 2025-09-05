@@ -546,7 +546,7 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     state_data = await state.get_data()
     print(f"📊 State data for user {user_id}: {state_data}")
 
-    referrer_id = state_data.get('referrer_id')
+    referrer_id = state_data.get('referral_uid')  # O'ZGARISH: referral_uid ishlatish
     print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
 
     # O'ZGARISH: get_channels_with_type_for_check() ishlatish
@@ -600,6 +600,50 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     user_exists = await check_user_exists(user_id)
     print(f"📝 User {user_id} registration status: {user_exists}")
 
+    # O'ZGARISH: Referral link bilan kelgan bo'lsa
+    if referrer_id and referrer_id.isdigit():
+        target_id = int(referrer_id)
+
+        # Foydalanuvchini bazaga qo'shish (agar yangi bo'lsa)
+        if not user_exists:
+            result = await add_user_to_anon_bot(
+                user_id=user_id,
+                username=callback.from_user.username,
+                first_name=callback.from_user.first_name,
+                last_name=callback.from_user.last_name,
+                bot=bot
+            )
+            print(f"➕ Added user {user_id} to database, result: {result}")
+
+            # Referral bonusini ishlatish (faqat yangi foydalanuvchi uchun)
+            if target_id != user_id:
+                print(f"🔄 Processing referral for NEW user {user_id} from {target_id}")
+                await process_anon_referral_bonus(user_id, target_id, bot)
+
+        # Target foydalanuvchi mavjudligini tekshirish
+        target_exists = await check_user_exists(target_id)
+
+        if target_exists and target_id != user_id:
+            # Anon xabar boshlash
+            await callback.message.delete()
+            await callback.message.answer(
+                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+                "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+                "получит ваше сообщение, но не будет знать от кого.\n\n"
+                "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+                "(кружки), а также стикеры.\n\n"
+                "⚠️ Это полностью анонимно!",
+                reply_markup=await cancel_in()
+            )
+            await state.set_state(Links.send_st)
+            await state.update_data({"link_user": target_id})
+
+            print(f"🎯 Started anon message session: {user_id} -> {target_id}")
+            await state.clear()  # Referral ma'lumotlarini tozalash
+            await callback.answer()
+            return
+
+    # O'ZGARISH: Oddiy ro'yxatdan o'tish (referral link bo'lmasa)
     if not user_exists:
         result = await add_user_to_anon_bot(
             user_id=user_id,
@@ -610,10 +654,7 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
         )
         print(f"➕ Added user {user_id} to database, result: {result}")
 
-        if referrer_id:
-            print(f"🔄 Processing referral for NEW user {user_id} from {referrer_id}")
-            await process_anon_referral_bonus(user_id, int(referrer_id), bot)
-
+    # Oddiy welcome message
     try:
         await callback.message.delete()
         print(f"🗑️ Deleted channel check message for user {user_id}")
