@@ -627,7 +627,6 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     await callback.answer()
 
 
-# YORDAMCHI FUNKSIYALAR
 
 
 async def create_channels_keyboard(channels, bot):
@@ -644,35 +643,35 @@ async def create_channels_keyboard(channels, bot):
                 if channel_type == 'system':
                     from modul.loader import main_bot
                     chat = await main_bot.get_chat(channel_id)
-                    logger.info(f"System channel {channel_id} info retrieved via main_bot")
                 else:
                     chat = await bot.get_chat(channel_id)
-                    logger.info(f"Sponsor channel {channel_id} info retrieved via current_bot")
 
-            # Eski format: (channel_id, channel_url)
-            elif isinstance(channel_info, tuple) and len(channel_info) == 2:
-                channel_id = int(channel_info[0]) if channel_info[0] else int(channel_info[1])
-                chat = await bot.get_chat(channel_id)
+                # URL va title aniqlash
+                invite_link = channel_url or chat.invite_link or f"https://t.me/{chat.username}"
+                title = chat.title or 'Канал'
 
+            # Eski format uchun fallback
             else:
-                channel_id = int(channel_info)
-                chat = await bot.get_chat(channel_id)
+                if isinstance(channel_info, tuple):
+                    channel_id = int(channel_info[0])
+                    channel_url = channel_info[1] if len(channel_info) > 1 else ""
+                else:
+                    channel_id = int(channel_info)
+                    channel_url = ""
 
-            # URL ni aniqlash
-            if isinstance(channel_info, tuple) and len(channel_info) >= 2 and channel_info[1]:
-                invite_link = channel_info[1]  # channel_url
-            else:
-                invite_link = chat.invite_link or f"https://t.me/{chat.username}"
+                chat = await bot.get_chat(channel_id)
+                invite_link = channel_url or chat.invite_link or f"https://t.me/{chat.username}"
+                title = chat.title or 'Канал'
 
             keyboard.append([
                 InlineKeyboardButton(
-                    text=f"📢 {chat.title or 'Канал'}",
+                    text=f"📢 {title}",
                     url=invite_link
                 )
             ])
+
         except Exception as e:
             logger.error(f"Error creating button for channel {channel_info}: {e}")
-            # System kanal xatoliklari uchun continue qilish
             continue
 
     keyboard.append([
@@ -682,9 +681,6 @@ async def create_channels_keyboard(channels, bot):
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 async def check_user_exists(user_id):
-    """
-    Foydalanuvchi umumiy bazada mavjudligini tekshirish (UserTG jadvalidan)
-    """
     from asgiref.sync import sync_to_async
     from modul.models import UserTG
 
