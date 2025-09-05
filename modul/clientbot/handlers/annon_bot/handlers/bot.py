@@ -597,7 +597,6 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
 
     print(f"✅ User {user_id} subscribed to all channels")
 
-    # Foydalanuvchini bazaga qo'shish
     user_exists = await check_user_exists(user_id)
     print(f"📝 User {user_id} registration status: {user_exists}")
 
@@ -611,19 +610,16 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
         )
         print(f"➕ Added user {user_id} to database, result: {result}")
 
-        # Referal bonusini ishlatish
         if referrer_id:
             print(f"🔄 Processing referral for NEW user {user_id} from {referrer_id}")
             await process_anon_referral_bonus(user_id, int(referrer_id), bot)
 
-    # Xabarni o'chirish va welcome yuborish
     try:
         await callback.message.delete()
         print(f"🗑️ Deleted channel check message for user {user_id}")
     except:
         pass
 
-    # Welcome message
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={user_id}"
 

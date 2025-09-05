@@ -607,7 +607,7 @@ def get_channels_with_type_for_check():
         logger.error(f"Error getting channels with type: {e}")
         return []
 
-@client_bot_router.callback_query(F.data == "check_chan")
+@client_bot_router.callback_query(F.data == "check_chan",RefsBotFilter())
 async def check_chan_callback(query: CallbackQuery, state: FSMContext):
     try:
         bot = query.bot
