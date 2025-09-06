@@ -886,16 +886,17 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
     if query.data == "payment":
         balance_q = await get_user_info_db(query.from_user.id)
         balance = balance_q[2]
-
-        # BU QATOR TO'G'IRLANDI:
-        min_amount_q = await get_actual_min_amount(query.bot.token)  # bot.token qo'shildi
-        min_amount = min_amount_q if min_amount_q else 60
-
+        min_amount = await get_actual_min_amount(query.bot.token)
+        if min_amount is None:
+            min_amount = 0
         check_wa = await check_for_wa(query.from_user.id)
 
-        if balance < min_amount:
-            await query.message.bot.answer_callback_query(query.id, text=f"🚫Минимальная сумма вывода: {min_amount}",
-                                                          show_alert=True)
+        if min_amount > 0 and balance < min_amount:
+            await query.message.bot.answer_callback_query(
+                query.id,
+                text=f"🚫Минимальная сумма вывода: {min_amount}",
+                show_alert=True
+            )
         elif check_wa:
             await query.message.bot.answer_callback_query(query.id, text="⏳Вы уже оставили заявку. Ожидайте",
                                                           show_alert=True)
