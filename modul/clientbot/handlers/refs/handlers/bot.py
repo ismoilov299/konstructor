@@ -585,8 +585,8 @@ def remove_sponsor_channel(channel_id):
     """Faqat sponsor kanallarni o'chirish"""
     try:
         from modul.models import ChannelSponsor
-        ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
-        print(f"Removed invalid sponsor channel {channel_id}")
+        deleted_count = ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
+        print(f"Removed invalid sponsor channel {channel_id}, deleted: {deleted_count[0]}")
     except Exception as e:
         print(f"Error removing sponsor channel {channel_id}: {e}")
 
@@ -594,17 +594,16 @@ def remove_sponsor_channel(channel_id):
 @sync_to_async
 def get_channels_with_type_for_check():
     try:
+        from modul.models import ChannelSponsor, SystemChannel
         sponsor_channels = ChannelSponsor.objects.all()
         sponsor_list = [(str(c.chanel_id), '', 'sponsor') for c in sponsor_channels]
         system_channels = SystemChannel.objects.filter(is_active=True)
         system_list = [(str(c.channel_id), c.channel_url, 'system') for c in system_channels]
-
         all_channels = sponsor_list + system_list
-
-        logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
+        print(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
         return all_channels
     except Exception as e:
-        logger.error(f"Error getting channels with type: {e}")
+        print(f"Error getting channels with type: {e}")
         return []
 
 @client_bot_router.callback_query(F.data == "check_chan",RefsBotFilter())
@@ -911,7 +910,8 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
         state_data = await state.get_data()
         referrer_id = state_data.get('referrer_id')
 
-        checking = await check_channels(query)
+        # O'ZGARISH: check_channels o'rniga to'g'ri channel check
+        checking = await check_channels_properly(query)
 
         if checking:
             is_registered = await check_user(query.from_user.id)
@@ -993,6 +993,65 @@ async def call_backs(query: CallbackQuery, state: FSMContext):
 
             # State ni tozalash
             await state.clear()
+
+
+# YANGI FUNKSIYA: To'g'ri channel check
+async def check_channels_properly(query):
+    """Kanallarni to'g'ri tekshirish - system kanallar main bot orqali"""
+    try:
+        user_id = query.from_user.id
+
+        # Kanallarni olish
+        channels = await get_channels_with_type_for_check()
+
+        if not channels:
+            return True  # Kanal yo'q bo'lsa, o'tkazib yuborish
+
+        invalid_channels_to_remove = []
+
+        for channel_id, channel_url, channel_type in channels:
+            try:
+                # Channel type ga qarab bot tanlash
+                if channel_type == 'system':
+                    from modul.loader import main_bot
+                    member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                    print(f"System channel {channel_id} checked via main_bot: {member.status}")
+                else:
+                    member = await query.bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                    print(f"Sponsor channel {channel_id} checked via current_bot: {member.status}")
+
+                if member.status in ['left', 'kicked']:
+                    # Obuna bo'lmagan
+                    await query.answer("❌ Вы еще не подписались на все каналы!", show_alert=True)
+                    return False
+
+            except Exception as e:
+                print(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+                # Faqat sponsor kanallarni o'chirish
+                if channel_type == 'sponsor':
+                    invalid_channels_to_remove.append(channel_id)
+                    print(f"Added invalid sponsor channel {channel_id} to removal list")
+                else:
+                    # System kanallar uchun faqat log
+                    print(f"System channel {channel_id} error (ignoring): {e}")
+
+                # Xatolik bo'lsa ham obuna bo'lmagan deb hisoblaymiz
+                await query.answer("❌ Ошибка проверки каналов!", show_alert=True)
+                return False
+
+        # Invalid sponsor kanallarni o'chirish
+        if invalid_channels_to_remove:
+            for channel_id in invalid_channels_to_remove:
+                await remove_sponsor_channel(channel_id)
+
+        # Barcha kanallarni tekshirib bo'ldik, hamma joyga obuna bo'lgan
+        return True
+
+    except Exception as e:
+        print(f"Error in check_channels_properly: {e}")
+        await query.answer("❌ Ошибка проверки!", show_alert=True)
+        return False
 
 
 async def process_new_user_referral(query, referrer_id):
