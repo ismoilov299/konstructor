@@ -2275,10 +2275,18 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
         logger.info(f"📁 Temp file path: {filepath}")
         print(format_data)
 
+        # Format description yaratish
+        format_desc = format_data.get('desc', format_data.get('quality', 'Unknown'))
+        if format_desc == format_data.get('quality', 'Unknown') and 'quality' in format_data:
+            # Agar 'desc' yo'q bo'lsa, quality va type dan yaratish
+            quality = format_data.get('quality', 'Unknown')
+            format_type = format_data.get('type', 'video')
+            format_desc = f"{quality} {format_type}"
+
         await callback.message.edit_text(
             f"⏬ <b>Загружаю...</b>\n\n"
             f"🆔 <b>ID видео:</b> {video_id}\n"
-            f"📋 <b>Формат:</b> {format_data['desc']}\n"
+            f"📋 <b>Формат:</b> {format_desc}\n"
             f"📦 <b>Размер:</b> {size_mb:.1f} МБ",
             parse_mode="HTML"
         )
@@ -2321,7 +2329,7 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
                                     await callback.message.edit_text(
                                         f"⏬ <b>Загружаю: {progress:.0f}%</b>\n\n"
                                         f"🆔 <b>ID видео:</b> {video_id}\n"
-                                        f"📋 <b>Формат:</b> {format_data['desc']}\n"
+                                        f"📋 <b>Формат:</b> {format_desc}\n"
                                         f"📊 <b>Скорость:</b> {speed:.1f} МБ/с\n"
                                         f"📦 <b>Загружено:</b> {downloaded / (1024 * 1024):.1f} МБ",
                                         parse_mode="HTML"
@@ -2356,14 +2364,17 @@ async def download_and_send_youtube_fast(callback, download_url, format_data, vi
         caption = (
             f"🎥 YouTube Видео\n"
             f"🆔 {video_id}\n"
-            f"📋 {format_data['desc']}\n"
+            f"📋 {format_desc}\n"
             f"📦 {file_size_mb:.1f} МБ\n"
             f"🚀 Загружено через Fast API"
         )
 
         logger.info("📤 Sending to Telegram...")
         try:
-            if format_data['type'] == 'progressive':
+            # format_data['type'] ni ham xavfsiz olish
+            format_type = format_data.get('type', 'progressive')
+
+            if format_type == 'progressive':
                 await callback.bot.send_video(
                     chat_id=callback.message.chat.id,
                     video=FSInputFile(filepath),
