@@ -701,9 +701,9 @@ async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
     try:
         new_min_payout = float(message.text)
 
-        if new_min_payout <= 0:
-            await message.answer("❗ Минимальная сумма должна быть больше 0.")
-            return
+        # if new_min_payout <= 0:
+        #     await message.answer("❗ Минимальная сумма должна быть больше 0.")
+        #     return
 
         logger.info(f"Yangi min_amount: {new_min_payout}")
 
