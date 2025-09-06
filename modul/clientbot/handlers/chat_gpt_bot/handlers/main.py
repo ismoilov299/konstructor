@@ -1,10 +1,12 @@
+import html
+import logging
 import random
 import os
 import time
 from aiogram import Bot, Dispatcher, types
 from aiogram import F
 from aiogram.filters import Command, CommandStart, StateFilter
-from aiogram.types import FSInputFile, Message
+from aiogram.types import FSInputFile, Message, CallbackQuery
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
@@ -16,11 +18,13 @@ from modul.loader import client_bot_router
 from modul.clientbot.handlers.chat_gpt_bot.states import AiState, AiAdminState, ChatGptFilter
 from modul.clientbot.handlers.chat_gpt_bot.shortcuts import (get_all_names, get_all_ids,
                                                              get_info_db, get_user_balance_db,
-                                                              default_checker, update_bc,
-                                                             update_bc_name)
+                                                             default_checker, update_bc,
+                                                             update_bc_name, get_channels_with_type_for_check,
+                                                             remove_sponsor_channel, process_chatgpt_referral_bonus)
 
 robot = ChatGPT()
 
+logger = logging.getLogger(__name__)
 
 def chat_gpt_bot_handlers():
     @client_bot_router.message(lambda message: message.text == "/adminpayamount")
@@ -211,25 +215,254 @@ async def tp_to_start(message: types.Message, bot: Bot, state: FSMContext):
 @client_bot_router.message(ChatGptFilter())
 async def start_message(message: types.Message, state: FSMContext, bot: Bot):
     user_id = message.from_user.id
+
+    # Admin buyruq
     if message.text == "/adminpayamount":
         await message.answer('Пришли токен')
         await state.set_state(AiAdminState.check_token_and_update)
         print(await state.get_state())
         return
+
     print(await state.get_state())
+
+    # Referral linkni tekshirish
+    referral = None
+    if message.text and message.text.startswith('/start '):
+        args = message.text[7:]  # "/start " dan keyingi qism
+        if args and args.isdigit():
+            referral = args
+            await state.update_data(referral=referral)
+            print(f"Extracted referral: {referral}")
+
+    # Kanallarni tekshirish
+    channels = await get_channels_with_type_for_check()
+    print(f"📡 Found channels: {channels}")
+
+    if channels:
+        print(f"🔒 Channels exist, checking user subscription for {user_id}")
+        not_subscribed_channels = []
+        invalid_channels_to_remove = []
+
+        for channel_id, channel_url, channel_type in channels:
+            try:
+                # Channel type ga qarab bot tanlash
+                if channel_type == 'system':
+                    from modul.loader import main_bot
+                    member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                    print(f"System channel {channel_id} checked via main_bot: {member.status}")
+                else:
+                    member = await message.bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+                    print(f"Sponsor channel {channel_id} checked via current_bot: {member.status}")
+
+                if member.status == "left":
+                    try:
+                        # Chat info ni ham to'g'ri bot orqali olish
+                        if channel_type == 'system':
+                            chat_info = await main_bot.get_chat(chat_id=int(channel_id))
+                        else:
+                            chat_info = await message.bot.get_chat(chat_id=int(channel_id))
+
+                        not_subscribed_channels.append({
+                            'id': channel_id,
+                            'title': chat_info.title,
+                            'invite_link': channel_url or chat_info.invite_link or f"https://t.me/{channel_id.strip('-')}"
+                        })
+                    except Exception as e:
+                        print(f"⚠️ Error getting chat info for channel {channel_id}: {e}")
+                        not_subscribed_channels.append({
+                            'id': channel_id,
+                            'title': f"Канал {channel_id}",
+                            'invite_link': channel_url or f"https://t.me/{channel_id.strip('-')}"
+                        })
+            except Exception as e:
+                logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+                # Faqat sponsor kanallarni o'chirish
+                if channel_type == 'sponsor':
+                    invalid_channels_to_remove.append(channel_id)
+                    logger.info(f"Added invalid sponsor channel {channel_id} to removal list")
+                else:
+                    logger.warning(f"System channel {channel_id} error (ignoring): {e}")
+                continue
+
+        # Invalid sponsor kanallarni o'chirish
+        if invalid_channels_to_remove:
+            for channel_id in invalid_channels_to_remove:
+                await remove_sponsor_channel(channel_id)
+
+        if not_subscribed_channels:
+            print(f"🚫 User {user_id} not subscribed to all channels")
+
+            channels_text = "📢 <b>Для использования бота необходимо подписаться на каналы:</b>\n\n"
+            kb = InlineKeyboardBuilder()
+
+            for index, channel in enumerate(not_subscribed_channels):
+                title = channel['title']
+                invite_link = channel['invite_link']
+
+                channels_text += f"{index + 1}. {title}\n"
+                kb.button(text=f"📢 {title}", url=invite_link)
+
+            kb.button(text="✅ Проверить подписку", callback_data="check_chan_chatgpt")
+            kb.adjust(1)
+
+            await message.answer(
+                channels_text + "\n\nПосле подписки на все каналы нажмите кнопку «Проверить подписку».",
+                reply_markup=kb.as_markup(),
+                parse_mode="HTML"
+            )
+
+            print(f"📝 State saved for user {user_id}: referral data will be processed after channel check")
+            return
+
+    print(f"✅ User {user_id} subscribed to all channels or no channels found")
+
+    # Foydalanuvchi mavjudligini tekshirish va ro'yxatdan o'tkazish
     try:
         result = await get_info_db(user_id)
-        print(result)
+        print(f"User {user_id} found in database: {result}")
+
         await message.answer(f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}',
                              reply_markup=bt.first_buttons())
     except:
+        print(f"User {user_id} not found, creating new user")
+
+        # Yangi foydalanuvchini yaratish
         new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
         link_for_db = new_link[new_link.index("=") + 1:]
-        await save_user(u=message.from_user, bot=bot, link=link_for_db)
+
+        # Referral bilan save qilish
+        await save_user(u=message.from_user, bot=bot, link=link_for_db, referrer_id=referral)
+
+        # Referral bonusini ishlatish
+        if referral and referral.isdigit():
+            ref_id = int(referral)
+            if ref_id != user_id:
+                print(f"🔄 Processing referral for NEW user {user_id} from {ref_id}")
+                success, reward = await process_chatgpt_referral_bonus(user_id, ref_id, bot.token)
+
+                if success:
+                    try:
+                        user_name = html.escape(message.from_user.first_name)
+                        user_profile_link = f'tg://user?id={user_id}'
+
+                        await asyncio.sleep(1)
+
+                        await bot.send_message(
+                            chat_id=ref_id,
+                            text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>\n"
+                                 f"💰 Получено: {reward}₽",
+                            parse_mode="HTML"
+                        )
+                        print(f"📨 Sent referral notification to {ref_id} about user {user_id}")
+                    except Exception as e:
+                        print(f"⚠️ Error sending notification to referrer {ref_id}: {e}")
+
         result = await get_info_db(user_id)
-        print(result)
+        print(f"New user {user_id} created: {result}")
+
         await message.answer(f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}',
                              reply_markup=bt.first_buttons())
+
+    # State ni tozalash
+    await state.clear()
+
+
+@client_bot_router.callback_query(F.data == "check_chan_chatgpt", ChatGptFilter())
+async def check_channels_chatgpt_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """ChatGPT bot uchun kanal obunasini tekshirish"""
+    user_id = callback.from_user.id
+    print(f"🔍 ChatGPT check_chan callback triggered for user {user_id}")
+
+    # State dan referral ma'lumotni olish
+    state_data = await state.get_data()
+    referral = state_data.get('referral')
+    print(f"👤 Referral from state for user {user_id}: {referral}")
+
+    # Kanallarni qayta tekshirish
+    channels = await get_channels_with_type_for_check()
+
+    subscribed_all = True
+    invalid_channels_to_remove = []
+
+    for channel_id, channel_url, channel_type in channels:
+        try:
+            if channel_type == 'system':
+                from modul.loader import main_bot
+                member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+            else:
+                member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
+
+            if member.status in ['left', 'kicked']:
+                subscribed_all = False
+                break
+
+        except Exception as e:
+            logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
+
+            if channel_type == 'sponsor':
+                invalid_channels_to_remove.append(channel_id)
+
+            subscribed_all = False
+            break
+
+    if invalid_channels_to_remove:
+        for channel_id in invalid_channels_to_remove:
+            await remove_sponsor_channel(channel_id)
+
+    if not subscribed_all:
+        await callback.answer("❌ Вы еще не подписались на все каналы!", show_alert=True)
+        return
+
+    print(f"✅ User {user_id} subscribed to all channels")
+
+    # Foydalanuvchini ro'yxatdan o'tkazish
+    try:
+        result = await get_info_db(user_id)
+        print(f"User {user_id} already exists")
+    except:
+        print(f"Creating new user {user_id}")
+
+        new_link = await create_start_link(bot, str(user_id), encode=True)
+        link_for_db = new_link[new_link.index("=") + 1:]
+
+        await save_user(u=callback.from_user, bot=bot, link=link_for_db, referrer_id=referral)
+
+        # Referral bonusini ishlatish
+        if referral and referral.isdigit():
+            ref_id = int(referral)
+            if ref_id != user_id:
+                success, reward = await process_chatgpt_referral_bonus(user_id, ref_id, bot.token)
+
+                if success:
+                    try:
+                        user_name = html.escape(callback.from_user.first_name)
+                        user_profile_link = f'tg://user?id={user_id}'
+
+                        await bot.send_message(
+                            chat_id=ref_id,
+                            text=f"У вас новый реферал! <a href='{user_profile_link}'>{user_name}</a>\n"
+                                 f"💰 Получено: {reward}₽",
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        print(f"Error sending referral notification: {e}")
+
+    # Xabarni o'chirish va asosiy menyuni ko'rsatish
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    result = await get_info_db(user_id)
+    await callback.message.answer(
+        f'Привет {callback.from_user.username}\nВаш баланс - {result[0][2]}',
+        reply_markup=bt.first_buttons()
+    )
+
+    await state.clear()
+    await callback.answer()
+
 
 
 @client_bot_router.message(StateFilter('waiting_for_gpt4'), ChatGptFilter())
