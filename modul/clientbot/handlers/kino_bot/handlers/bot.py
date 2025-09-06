@@ -701,9 +701,7 @@ async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
     try:
         new_min_payout = float(message.text)
 
-        # if new_min_payout <= 0:
-        #     await message.answer("❗ Минимальная сумма должна быть больше 0.")
-        #     return
+        # Hech qanday cheklov yo'q - 0 va barcha musbat qiymatlar qabul qilinadi
 
         logger.info(f"Yangi min_amount: {new_min_payout}")
 
@@ -731,9 +729,16 @@ async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
 
             current_amount = await get_updated_amount()
 
-            await message.answer(
-                f"✅ Минимальная сумма вывода успешно изменена на {current_amount:.1f} руб."
-            )
+            # 0 bo'lganda maxsus xabar
+            if current_amount == 0:
+                await message.answer(
+                    f"✅ Минимальная сумма вывода установлена на {current_amount:.1f} руб.\n"
+                    f"💡 Теперь пользователи могут выводить любую сумму."
+                )
+            else:
+                await message.answer(
+                    f"✅ Минимальная сумма вывода успешно изменена на {current_amount:.1f} руб."
+                )
         else:
             await message.answer(
                 "🚫 Не удалось изменить минимальную сумму вывода.\n"
