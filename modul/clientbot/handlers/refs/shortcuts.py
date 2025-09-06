@@ -485,8 +485,9 @@ def get_actual_price(bot_token=None):
         if bot_token:
             admin_info = AdminInfo.objects.filter(bot_token=bot_token).first()
             if admin_info and admin_info.price is not None:
-                logger.info(f"Found price {admin_info.price} for bot token {bot_token}")
-                return float(admin_info.price)
+                price_value = float(admin_info.price)
+                logger.info(f"Found price {price_value} for bot token {bot_token}")
+                return price_value  # 0 bo'lsa ham 0 qaytaradi
             else:
                 logger.info(f"No AdminInfo found for bot token {bot_token}, using default price")
         else:
@@ -498,7 +499,6 @@ def get_actual_price(bot_token=None):
         logger.error(f"Error getting actual price: {e}")
         logger.exception("Detailed error stack trace:")
         return 3.0
-
 
 @sync_to_async
 def get_actual_min_amount(bot_token: str = None):
