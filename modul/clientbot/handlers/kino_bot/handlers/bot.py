@@ -288,7 +288,7 @@ async def check_user_subscription(user_id: int, bot) -> tuple[bool, list]:
 
     return len(not_subscribed) == 0, not_subscribed
 
-@client_bot_router.callback_query(lambda c: c.data == 'check_subs')
+@client_bot_router.callback_query(lambda c: c.data == 'check_subs',KinoBotFilter())
 async def check_subs_callback(callback: types.CallbackQuery, state: FSMContext):
     try:
         is_subscribed = await check_subs(callback.from_user.id, callback.bot)
@@ -705,11 +705,9 @@ async def get_new_min_handler(message: Message, state: FSMContext, bot: Bot):
 
         logger.info(f"Yangi min_amount: {new_min_payout}")
 
-        # VARIANT 1: Bot token bilan (tavsiya etiladi)
         success = await change_min_amount(new_min_payout, bot_token=bot.token)
 
-        # VARIANT 2: Sizning ID usulingingiz (agar ID=2 mavjud bo'lsa)
-        # success = await change_min_amount_by_id(new_min_payout, admin_id=2)
+
 
         await message.delete()
         if edit_msg:
@@ -1091,16 +1089,6 @@ class DavinchiBotFilter(Filter):
 @client_bot_router.message(F.text == "💸Заработать")
 async def kinogain(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
-
-    sub_status = await check_subs(message.from_user.id, bot)
-    if not sub_status:
-        kb = await get_subs_kb(bot)
-        await message.answer(
-            '<b>Чтобы воспользоваться ботом, необходимо подписаться на каналы</b>',
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-        return
 
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={message.from_user.id}"
