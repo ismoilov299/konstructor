@@ -31,17 +31,6 @@ from modul.models import UserTG, AdminInfo, ClientBotUser, Channels, ChannelSpon
 
 logger = logging.getLogger(__name__)
 
-# async def get_channels_for_check():
-#     from asgiref.sync import sync_to_async
-#
-#     try:
-#         channels = await sync_to_async(list)(
-#             Channels.objects.values_list('channel_id', 'channel_url')
-#         )
-#         return channels
-#     except Exception as e:
-#         logger.error(f"Error getting channels: {e}")
-#         return []
 async def check_channels(user_id: int, bot: Bot) -> bool:
     try:
         channels = await get_channels_for_check()
@@ -63,9 +52,6 @@ async def check_channels(user_id: int, bot: Bot) -> bool:
 @sync_to_async
 @transaction.atomic
 def save_user(telegram_user, bot: Bot, inviter_uid=None):
-    """
-    Anon bot uchun user yaratish
-    """
     try:
         bot_instance = models.Bot.objects.select_related("owner").filter(token=bot.token).first()
         if not bot_instance:
@@ -103,8 +89,6 @@ def save_user(telegram_user, bot: Bot, inviter_uid=None):
                 "current_ai_limit": 12 if user_created else 0,
             }
         )
-
-        # AnonClientModel yaratish/topish
         anon_client, anon_created = models.AnonClientModel.objects.get_or_create(
             user=user_tg,
             bot_username=bot_instance.username,
@@ -115,25 +99,20 @@ def save_user(telegram_user, bot: Bot, inviter_uid=None):
             }
         )
 
-        # Referral bonus berish
         if client_created and inviter_client:
             try:
                 admin_info = models.AdminInfo.objects.filter(bot_token=bot.token).first()
                 bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
             except:
                 bonus_amount = 3.0
-
             inviter_client.balance += bonus_amount
             inviter_client.referral_count += 1
             inviter_client.referral_balance += bonus_amount
             inviter_client.save(update_fields=['balance', 'referral_count', 'referral_balance'])
-
             inviter_user_tg = inviter_client.user
             inviter_user_tg.refs += 1
             inviter_user_tg.save(update_fields=['refs'])
-
             logger.info(f"Referral bonus {bonus_amount} given to {inviter_uid} for {telegram_user.id}")
-
         return {
             'client_user': client_user,
             'anon_client': anon_client,
@@ -141,26 +120,19 @@ def save_user(telegram_user, bot: Bot, inviter_uid=None):
             'client_created': client_created,
             'inviter': inviter_client
         }
-
     except Exception as e:
         logger.error(f"Error in save_user: {e}")
         raise
 
-
 @sync_to_async
 def check_if_already_referred(uid, ref_id, bot_token):
     try:
-        # Получаем бота по токену
         bot = Bot.objects.get(token=bot_token)
-
-        # Проверяем, есть ли пользователь с этим ботом в ClientBotUser
         client_bot_user = ClientBotUser.objects.filter(
             uid=uid,
             bot=bot
         ).first()
-
         if client_bot_user:
-            # Проверяем, указан ли реферал
             if client_bot_user.inviter and client_bot_user.inviter.uid == ref_id:
                 print(f"User {uid} is already referred by {ref_id} in bot {bot.username}")
                 return True
@@ -170,66 +142,19 @@ def check_if_already_referred(uid, ref_id, bot_token):
         print(f"Error checking referral status: {e}")
         return False
 
-
-# async def process_referral(message: Message, referral_id: int):
-#     try:
-#         logger.info(f"Processing referral: user {message.from_user.id}, referrer {referral_id}")
-#
-#         # O'zini o'zi referral qilishni tekshirish
-#         if str(referral_id) == str(message.from_user.id):
-#             logger.warning(f"SELF-REFERRAL BLOCKED in process_referral: User {message.from_user.id}")
-#             return False
-#
-#         # Referral beruvchini tekshirish
-#         inviter = await get_user_by_id(referral_id)
-#         if not inviter:
-#             logger.warning(f"Inviter {referral_id} not found")
-#             return False
-#
-#         try:
-#             # Referral statistikasini yangilash
-#             stats_updated = await update_referral_stats(referral_id)
-#
-#             if stats_updated:
-#                 # Referral beruvchiga xabar yuborish
-#                 user_link = html.link('реферал', f'tg://user?id={message.from_user.id}')
-#                 await message.bot.send_message(
-#                     chat_id=referral_id,
-#                     text=f"У вас новый {user_link}!"
-#                 )
-#                 print("115 annon")
-#                 logger.info(f"Referral notification sent to user {referral_id}")
-#                 logger.info(f"Referral processed for user {referral_id}")
-#                 return True
-#             else:
-#                 logger.warning(f"Failed to update referral stats for {referral_id}")
-#                 return False
-#         except Exception as e:
-#             logger.error(f"Error in referral process: {e}")
-#             return False
-#
-#     except Exception as e:
-#         logger.error(f"Error processing referral: {e}")
-#         return False
-
-
 @sync_to_async
 def update_referral_stats(referral_id: int):
     try:
         with transaction.atomic():
             user_tg = UserTG.objects.select_for_update().get(uid=referral_id)
-
-            # AdminInfo jadvalidan mukofat miqdorini olish
             admin_info = AdminInfo.objects.first()
             if admin_info and admin_info.price is not None:
                 reward = float(admin_info.price)
             else:
-                reward = 10.0  # Default qiymat
-
+                reward = 10.0
             user_tg.refs += 1
             user_tg.balance += reward
             user_tg.save()
-
             logger.info(f"Referral stats updated for user {referral_id}, reward amount: {reward}")
             return True
     except UserTG.DoesNotExist:
@@ -239,27 +164,19 @@ def update_referral_stats(referral_id: int):
         logger.error(f"Error updating referral stats: {e}")
         return False
 
-
 async def check_subs(user_id: int, bot: Bot) -> bool:
     bot_db = await shortcuts.get_bot(bot)
     admin_id = bot_db.owner.uid
-
     if user_id == admin_id:
         return True
-
     channels = await get_all_channels_sponsors()
     print(channels, " ch")
-
     if not channels:
         return True
-
     check_results = []
     for channel in channels:
         try:
-            # Agar channel tuple bo'lsa, faqat birinchi elementi (ID) ni olish
             chat_id = channel[0] if isinstance(channel, tuple) else channel
-
-            # Agar chat_id string bo'lsa va raqam bilan boshlansa, integer ga aylantirish mumkin
             if isinstance(chat_id, str) and chat_id.strip('-').isdigit():
                 chat_id = int(chat_id)
 
@@ -271,33 +188,26 @@ async def check_subs(user_id: int, bot: Bot) -> bool:
         except Exception as e:
             print(f"Error checking subscription for channel {channel}: {e}")
             check_results.append(False)
-
     print(check_results)
     return all(check_results)
-
-
 
 async def get_subs_kb(bot: Bot) -> types.InlineKeyboardMarkup:
     channels = await get_all_channels_sponsors()
     kb = InlineKeyboardBuilder()
-
     for channel_id in channels:
         try:
             chat_info = await bot.get_chat(channel_id)
             invite_link = chat_info.invite_link
             if not invite_link:
                 invite_link = (await bot.create_chat_invite_link(channel_id)).invite_link
-
             kb.button(text=f'{chat_info.title}', url=invite_link)
         except Exception as e:
             print(f"Error with channel {channel_id}: {e}")
             continue
-
     kb.button(
         text='✅ Проверить подписку',
         callback_data='check_subs'
     )
-
     kb.adjust(1)
     return kb.as_markup()
 
@@ -316,9 +226,8 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
 
 
 @client_bot_router.message(F.text == "💸Заработать", AnonBotFilter())
-async def anon(message: Message, bot: Bot, state: FSMContext):
+async def anon_referral(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
-
     sub_status = await check_subs(message.from_user.id, bot)
     if not sub_status:
         kb = await get_subs_kb(bot)
@@ -329,28 +238,23 @@ async def anon(message: Message, bot: Bot, state: FSMContext):
         )
         return
 
-    me = await bot.get_me()
-    ref_link = f"https://t.me/{me.username}?start={message.from_user.id}"
-
+    # Referral link yaratish (ref_ prefixi bilan)
+    ref_link = await generate_referral_link(bot, message.from_user.id)
     price = await get_actual_price(bot.token)
-    print(price)
+
     await message.bot.send_message(
         message.from_user.id,
         f"👥 Приглашай друзей и зарабатывай! За \nкаждого друга ты получишь {price:.2f}₽.\n\n"
         f"🔗 Ваша ссылка для приглашений:\n{ref_link}\n\n",
-        # f"💰 Минимальная сумма для вывода: {min_withdraw}₽",
         reply_markup=await main_menu_bt2()
-
     )
 
 async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
     logger.info(f"Processing new user {message.from_user.id}")
     data = await state.get_data()
     referral = data.get('referral')
-
     new_link = await create_start_link(bot, str(message.from_user.id), encode=True)
     link_for_db = new_link[new_link.index("=") + 1:]
-
     user_exists = await check_user(message.from_user.id)
     if not user_exists:
         await add_user(
@@ -361,15 +265,12 @@ async def process_new_user(message: types.Message, state: FSMContext, bot: Bot):
             bot_token=bot.token,
             user_link=link_for_db  # user_link qo'shildi
         )
-
     if referral:
         await process_referral(message, int(referral))
-
     await show_main_menu(message, bot)
 async def process_existing_user(message: types.Message, bot: Bot):
     logger.info(f"Processing existing user {message.from_user.id}")
     await show_main_menu(message, bot)
-
 
 async def show_main_menu(message: types.Message, bot: Bot):
     me = await bot.get_me()
@@ -387,7 +288,6 @@ async def show_main_menu(message: types.Message, bot: Bot):
 
 @sync_to_async
 def remove_sponsor_channel(channel_id):
-    """Faqat sponsor kanallarni o'chirish"""
     try:
         from modul.models import ChannelSponsor
         ChannelSponsor.objects.filter(chanel_id=channel_id).delete()
@@ -403,9 +303,7 @@ def get_channels_with_type_for_check():
         sponsor_list = [(str(c.chanel_id), '', 'sponsor') for c in sponsor_channels]
         system_channels = SystemChannel.objects.filter(is_active=True)
         system_list = [(str(c.channel_id), c.channel_url, 'system') for c in system_channels]
-
         all_channels = sponsor_list + system_list
-
         logger.info(f"Found sponsor channels: {len(sponsor_list)}, system channels: {len(system_list)}")
         return all_channels
     except Exception as e:
@@ -413,24 +311,33 @@ def get_channels_with_type_for_check():
         return []
 
 
-@client_bot_router.message(CommandStart(), AnonBotFilter())
+async def generate_referral_link(bot, user_id):
+    """Referral link yaratish"""
+    me = await bot.get_me()
+    return f"https://t.me/{me.username}?start=ref_{user_id}"
+
+async def generate_anonymous_link(bot, user_id):
+    """Anonim xabar link yaratish"""
+    me = await bot.get_me()
+    return f"https://t.me/{me.username}?start=anon_{user_id}"
+
+
+client_bot_router.message(CommandStart(), AnonBotFilter())
+
+
 async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     await state.clear()
     user_id = message.from_user.id
     args = command.args
-
     logger.info(f"Anon bot start: user {user_id}, args: {args}")
 
     # Kanallarni tekshirish
     channels = await get_channels_with_type_for_check()
-
     if channels:
         subscribed_all = True
         invalid_channels_to_remove = []
-
         for channel_id, channel_url, channel_type in channels:
             try:
-                # Channel type ga qarab bot tanlash
                 if channel_type == 'system':
                     from modul.loader import main_bot
                     member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
@@ -438,57 +345,64 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                 else:
                     member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
                     logger.info(f"Sponsor channel {channel_id} checked via current_bot: {member.status}")
-
                 if member.status in ['left', 'kicked']:
                     subscribed_all = False
                     break
-
             except Exception as e:
                 logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
-
                 if channel_type == 'sponsor':
                     invalid_channels_to_remove.append(channel_id)
                     logger.info(f"Added invalid sponsor channel {channel_id} to removal list")
                 else:
                     logger.warning(f"System channel {channel_id} error (ignoring): {e}")
-
                 subscribed_all = False
                 break
 
-        # Invalid sponsor kanallarni o'chirish
         if invalid_channels_to_remove:
             for channel_id in invalid_channels_to_remove:
                 await remove_sponsor_channel(channel_id)
 
         if not subscribed_all:
-            if args and args.isdigit() and int(args) != user_id:
+            # Args ni saqlash (har qanday format bo'lsa ham)
+            if args:
                 await state.update_data(referral_uid=args)
 
             markup = await create_channels_keyboard(channels, bot)
             await message.answer("Для использования бота подпишитесь на наши каналы:", reply_markup=markup)
             return
 
-    # User registration
+    # Argumentlarni tahlil qilish
     referrer_uid = None
-    if args and args.isdigit() and int(args) != user_id:
-        referrer_uid = int(args)
+    target_id = None
 
+    if args:
+        if args.startswith('ref_'):
+            # Referral link
+            ref_id = args.replace('ref_', '')
+            if ref_id.isdigit() and int(ref_id) != user_id:
+                referrer_uid = int(ref_id)
+        elif args.startswith('anon_'):
+            # Anonim xabar link
+            anon_id = args.replace('anon_', '')
+            if anon_id.isdigit() and int(anon_id) != user_id:
+                target_id = int(anon_id)
+        elif args.isdigit():
+            # Eski format (default anonim link)
+            if int(args) != user_id:
+                target_id = int(args)
+
+    # Foydalanuvchini saqlash
     try:
         result = await save_user(message.from_user, bot, referrer_uid)
-
-        # Referral notification
         if result.get('inviter') and result['user_created']:
             try:
-                # Bonus amount ni bot sozlamalaridan olish
                 from asgiref.sync import sync_to_async
                 from modul.models import AdminInfo
-
                 try:
                     admin_info = await sync_to_async(AdminInfo.objects.filter(bot_token=bot.token).first)()
                     bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
                 except:
                     bonus_amount = 3.0
-
                 user_link = f'<a href="tg://user?id={user_id}">новый друг</a>'
                 await bot.send_message(
                     chat_id=result['inviter'].uid,
@@ -497,40 +411,35 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                 )
             except Exception as e:
                 logger.error(f"Error sending referral notification: {e}")
-
     except Exception as e:
         logger.error(f"Error in registration: {e}")
         await message.answer("Произошла ошибка. Попробуйте позже.")
         return
 
-    # Anonim xabar logikasi
-    if args and args.isdigit():
-        target_id = int(args)
+    # Anonim xabar uchun yo'naltirish
+    if target_id:
         target_exists = await check_user_exists(target_id)
-
-        if target_exists and target_id != user_id:
+        if target_exists:
             await state.set_state(Links.send_st)
             await state.update_data({"link_user": target_id})
-
             await message.answer(
-                "Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
-                "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-                "получит ваше сообщение, но не будет знать от кого.\n\n"
-                "Отправить можно фото, видео, текст, голосовые, видеосообщения.\n\n"
-                "Это полностью анонимно!",
+                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+            "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+            "получит ваше сообщение, но не будет знать от кого.\n\n"
+            "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+            "(кружки), а также стикеры.\n\n"
+            "⚠️ Это полностью анонимно!",
                 reply_markup=await cancel_in()
             )
             return
 
-    # Asosiy menyu
-    me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start={user_id}"
-
+    # Asosiy menyu - anonim link bilan
+    anonymous_link = await generate_anonymous_link(bot, user_id)
     await message.answer(
-        f"<b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-        f"Твоя личная ссылка:\n{link}\n\n"
-        f"Размести эту ссылку в своём профиле Telegram/Instagram/TikTok или "
-        f"других соц сетях, чтобы начать получать сообщения",
+        f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+            f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
+            f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+            f"других соц сетях, чтобы начать получать сообщения 💬",
         parse_mode="html",
         reply_markup=await main_menu_bt()
     )
@@ -538,112 +447,63 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 
 @client_bot_router.callback_query(F.data == "check_chan", AnonBotFilter())
 async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """Kanal obunasini qayta tekshirish"""
     user_id = callback.from_user.id
-    print(f"🔍 NEW check_chan callback triggered for user {user_id}")
-
-    # State dan ma'lumotlarni olish
     state_data = await state.get_data()
-    print(f"📊 State data for user {user_id}: {state_data}")
+    referrer_args = state_data.get('referral_uid')
 
-    referrer_id = state_data.get('referral_uid')  # O'ZGARISH: referral_uid ishlatish
-    print(f"👤 Referrer_id from state for user {user_id}: {referrer_id}")
-
-    # O'ZGARISH: get_channels_with_type_for_check() ishlatish
     channels = await get_channels_with_type_for_check()
-    print(f"📡 Channels for user {user_id}: {channels}")
-
     subscribed_all = True
     invalid_channels_to_remove = []
 
-    # O'ZGARISH: channel_type ham olish
     for channel_id, channel_url, channel_type in channels:
         try:
-            # O'ZGARISH: channel type ga qarab bot tanlash
             if channel_type == 'system':
                 from modul.loader import main_bot
                 member = await main_bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
-                print(f"📢 System channel {channel_id} status for user {user_id}: {member.status}")
             else:
                 member = await bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
-                print(f"📢 Sponsor channel {channel_id} status for user {user_id}: {member.status}")
 
             if member.status in ['left', 'kicked']:
                 subscribed_all = False
                 break
-
         except Exception as e:
             logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
-
-            # O'ZGARISH: faqat sponsor kanallarni o'chirish
             if channel_type == 'sponsor':
                 invalid_channels_to_remove.append(channel_id)
-                print(f"Added invalid sponsor channel {channel_id} to removal list")
-            else:
-                # System kanallar uchun faqat log
-                print(f"System channel {channel_id} error (ignoring): {e}")
-
             subscribed_all = False
             break
 
-    # O'ZGARISH: invalid sponsor kanallarni o'chirish
     if invalid_channels_to_remove:
         for channel_id in invalid_channels_to_remove:
             await remove_sponsor_channel(channel_id)
 
     if not subscribed_all:
-        await callback.answer("❌ Вы еще не подписались на все каналы!", show_alert=True)
+        await callback.answer("Вы еще не подписались на все каналы!", show_alert=True)
         return
 
-    print(f"✅ User {user_id} subscribed to all channels")
-
     user_exists = await check_user_exists(user_id)
-    print(f"📝 User {user_id} registration status: {user_exists}")
 
-    # O'ZGARISH: Referral link bilan kelgan bo'lsa
-    if referrer_id and referrer_id.isdigit():
-        target_id = int(referrer_id)
+    # Argumentlarni qayta ishlash
+    target_user_id = None
+    referrer_id = None
 
-        # Foydalanuvchini bazaga qo'shish (agar yangi bo'lsa)
-        if not user_exists:
-            result = await add_user_to_anon_bot(
-                user_id=user_id,
-                username=callback.from_user.username,
-                first_name=callback.from_user.first_name,
-                last_name=callback.from_user.last_name,
-                bot=bot
-            )
-            print(f"➕ Added user {user_id} to database, result: {result}")
+    if referrer_args:
+        if referrer_args.startswith('ref_'):
+            # Referral
+            ref_id = referrer_args.replace('ref_', '')
+            if ref_id.isdigit() and int(ref_id) != user_id:
+                referrer_id = int(ref_id)
+        elif referrer_args.startswith('anon_'):
+            # Anonim xabar
+            anon_id = referrer_args.replace('anon_', '')
+            if anon_id.isdigit() and int(anon_id) != user_id:
+                target_user_id = int(anon_id)
+        elif referrer_args.isdigit():
+            # Eski format (default anonim)
+            if int(referrer_args) != user_id:
+                target_user_id = int(referrer_args)
 
-            # Referral bonusini ishlatish (faqat yangi foydalanuvchi uchun)
-            if target_id != user_id:
-                print(f"🔄 Processing referral for NEW user {user_id} from {target_id}")
-                await process_anon_referral_bonus(user_id, target_id, bot)
-
-        # Target foydalanuvchi mavjudligini tekshirish
-        target_exists = await check_user_exists(target_id)
-
-        if target_exists and target_id != user_id:
-            # Anon xabar boshlash
-            await callback.message.delete()
-            await callback.message.answer(
-                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
-                "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-                "получит ваше сообщение, но не будет знать от кого.\n\n"
-                "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-                "(кружки), а также стикеры.\n\n"
-                "⚠️ Это полностью анонимно!",
-                reply_markup=await cancel_in()
-            )
-            await state.set_state(Links.send_st)
-            await state.update_data({"link_user": target_id})
-
-            print(f"🎯 Started anon message session: {user_id} -> {target_id}")
-            await state.clear()  # Referral ma'lumotlarini tozalash
-            await callback.answer()
-            return
-
-    # O'ZGARISH: Oddiy ro'yxatdan o'tish (referral link bo'lmasa)
+    # Foydalanuvchini qo'shish
     if not user_exists:
         result = await add_user_to_anon_bot(
             user_id=user_id,
@@ -652,56 +512,62 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
             last_name=callback.from_user.last_name,
             bot=bot
         )
-        print(f"➕ Added user {user_id} to database, result: {result}")
 
-    # Oddiy welcome message
+        # Referral bonus berish
+        if referrer_id:
+            await process_anon_referral_bonus(user_id, referrer_id, bot)
+
+    # Anonim xabar uchun yo'naltirish
+    if target_user_id:
+        target_exists = await check_user_exists(target_user_id)
+        if target_exists:
+            await callback.message.delete()
+            await callback.message.answer(
+                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+            "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+            "получит ваше сообщение, но не будет знать от кого.\n\n"
+            "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
+            "(кружки), а также стикеры.\n\n"
+            "⚠️ Это полностью анонимно!",
+                reply_markup=await cancel_in()
+            )
+            await state.set_state(Links.send_st)
+            await state.update_data({"link_user": target_user_id})
+            await callback.answer()
+            return
+
+    # Asosiy menyuni ko'rsatish
     try:
         await callback.message.delete()
-        print(f"🗑️ Deleted channel check message for user {user_id}")
     except:
         pass
 
-    me = await bot.get_me()
-    link = f"https://t.me/{me.username}?start={user_id}"
-
+    anonymous_link = await generate_anonymous_link(bot, user_id)
     await callback.message.answer(
         f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-        f"Твоя личная ссылка:\n👉{link}\n\n"
-        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-        f"других соц сетях, чтобы начать получать сообщения 💬",
-        parse_mode="html",
+            f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
+            f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+            f"других соц сетях, чтобы начать получать сообщения 💬",
+            parse_mode="html",
         reply_markup=await main_menu_bt()
     )
-    print(f"💬 Sent welcome message to user {user_id}")
-
     await state.clear()
-    print(f"🧹 Cleared state for user {user_id}")
     await callback.answer()
-
-
 
 async def create_channels_keyboard(channels, bot):
     keyboard = []
-
     for channel_info in channels:
         try:
-            # Yangi format: (channel_id, channel_url, channel_type)
             if isinstance(channel_info, tuple) and len(channel_info) == 3:
                 channel_id, channel_url, channel_type = channel_info
                 channel_id = int(channel_id)
-
-                # Channel type ga qarab bot tanlash
                 if channel_type == 'system':
                     from modul.loader import main_bot
                     chat = await main_bot.get_chat(channel_id)
                 else:
                     chat = await bot.get_chat(channel_id)
-
-                # URL va title aniqlash
                 invite_link = channel_url or chat.invite_link or f"https://t.me/{chat.username}"
                 title = chat.title or 'Канал'
-
-            # Eski format uchun fallback
             else:
                 if isinstance(channel_info, tuple):
                     channel_id = int(channel_info[0])
@@ -709,50 +575,38 @@ async def create_channels_keyboard(channels, bot):
                 else:
                     channel_id = int(channel_info)
                     channel_url = ""
-
                 chat = await bot.get_chat(channel_id)
                 invite_link = channel_url or chat.invite_link or f"https://t.me/{chat.username}"
                 title = chat.title or 'Канал'
-
             keyboard.append([
                 InlineKeyboardButton(
                     text=f"📢 {title}",
                     url=invite_link
                 )
             ])
-
         except Exception as e:
             logger.error(f"Error creating button for channel {channel_info}: {e}")
             continue
-
     keyboard.append([
         InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_chan")
     ])
-
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 async def check_user_exists(user_id):
     from asgiref.sync import sync_to_async
     from modul.models import UserTG
-
     try:
-        # UserTG da mavjudligini tekshirish - bot-specific emas, umumiy baza
         user = await sync_to_async(UserTG.objects.filter(uid=user_id).first)()
         return user is not None
-
     except Exception as e:
         logger.error(f"Error checking user existence: {e}")
         return False
 
 async def add_user_to_anon_bot(user_id, username, first_name, last_name, bot):
-    """Foydalanuvchini anon botga qo'shish"""
     from asgiref.sync import sync_to_async
     from modul.models import UserTG, ClientBotUser, Bot as BotModel
-
     try:
         print(f"🔧 DEBUG: anon bot add_user called for user {user_id}")
-
-        # UserTG yaratish yoki olish
         user_tg, created = await sync_to_async(UserTG.objects.get_or_create)(
             uid=user_id,
             defaults={
@@ -762,19 +616,14 @@ async def add_user_to_anon_bot(user_id, username, first_name, last_name, bot):
                 'user_link': str(user_id)
             }
         )
-
         if created:
             print(f"✅ DEBUG: Created new UserTG for {user_id}")
         else:
             print(f"🔄 DEBUG: Found existing UserTG for {user_id}")
-
-        # Joriy anon botni topish
         current_bot = await sync_to_async(BotModel.objects.filter(enable_anon=True).first)()
         if not current_bot:
             print(f"❌ DEBUG: Anon bot not found")
             return False
-
-        # ClientBotUser yaratish
         client_user, created = await sync_to_async(ClientBotUser.objects.get_or_create)(
             uid=user_id,
             bot=current_bot,
@@ -797,70 +646,48 @@ async def add_user_to_anon_bot(user_id, username, first_name, last_name, bot):
 
 
 async def process_anon_referral_bonus(new_user_id, referrer_id, bot):
-    """Anon bot uchun referal bonus berish"""
     from asgiref.sync import sync_to_async
     from modul.models import ClientBotUser, Bot as BotModel, AdminInfo
-
     try:
         print(f"🔧 DEBUG: process_anon_referral_bonus called - new_user: {new_user_id}, referrer: {referrer_id}")
-
-        # Joriy anon botni topish
         current_bot = await sync_to_async(BotModel.objects.filter(enable_anon=True).first)()
         if not current_bot:
             print(f"❌ DEBUG: Anon bot not found for referral")
             return False
-
         print(f"🔧 DEBUG: Found bot: {current_bot.username}")
-
-        # Referrer ni topish
         referrer = await sync_to_async(ClientBotUser.objects.filter(
             uid=referrer_id,
             bot=current_bot
         ).first)()
-
         if not referrer:
             print(f"❌ DEBUG: Referrer {referrer_id} not found in anon bot")
             return False
-
         print(f"🔧 DEBUG: Found referrer ClientBotUser: {referrer_id}, current balance: {referrer.balance}")
-
         new_user = await sync_to_async(ClientBotUser.objects.filter(
             uid=new_user_id,
             bot=current_bot
         ).first)()
-
         if not new_user:
             print(f"❌ DEBUG: New user {new_user_id} not found in anon bot")
             return False
-
         print(f"🔧 DEBUG: Found new user ClientBotUser: {new_user_id}, current inviter: {new_user.inviter}")
-
-        # ИСПРАВЛЕНО: Получаем бонус для конкретного бота
         try:
             admin_info = await sync_to_async(AdminInfo.objects.filter(bot_token=current_bot.token).first)()
             bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
         except:
             bonus_amount = 3.0
-
         print(f"🔧 DEBUG: Bonus amount from AdminInfo: {bonus_amount} for bot {current_bot.token}")
-
         print(f"🔧 DEBUG: BEFORE UPDATE - Referrer bot balance: {referrer.balance}, refs: {referrer.referral_count}")
-
         referrer.balance += bonus_amount
         referrer.referral_count += 1
         referrer.referral_balance += bonus_amount
         await sync_to_async(referrer.save)()
-
         print(f"🔧 DEBUG: AFTER UPDATE - Referrer bot balance: {referrer.balance}, refs: {referrer.referral_count}")
         print(
             f"✅ Referral bonus processed for bot {current_bot.username}: {referrer_id} got {bonus_amount} for referring {new_user_id}")
-
-        # Inviter ni o'rnatish
         new_user.inviter = referrer
         await sync_to_async(new_user.save)()
         print(f"🔗 Set inviter {referrer_id} for user {new_user_id} in bot {current_bot.username}")
-
-        # Bildirishnoma yuborish
         try:
             user_link = f'<a href="tg://user?id={new_user_id}">новый друг</a>'
             notification_text = f"🎉 У вас {user_link}!\n💰 Баланс пополнен на {bonus_amount}₽"
@@ -1311,7 +1138,6 @@ async def change_link(message: Message, state: FSMContext):
 def anon_bot_handlers():
     @client_bot_router.message(AnonBotFilter())
     async def any_or_answer(message: Message, state: FSMContext, bot: Bot):
-        # channels_checker = await check_channels(message.from_user.id,bot)
         checker = await check_user(message.from_user.id)
         check = None
 
