@@ -1608,6 +1608,9 @@ async def start(message: Message, state: FSMContext, bot: Bot):
         print(result)
         text = f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}'
         kwargs['reply_markup'] = builder.as_markup()
+
+    elif shortcuts.have_one_module(bot_db,"anon"):
+        await message.answer('anon')
     else:
         print("DEBUG: No specific module, using default")
         kwargs['reply_markup'] = await reply_kb.main_menu(uid, bot)
