@@ -93,6 +93,10 @@ class FormatCallback(CallbackData, prefix="format"):
     quality: str
     type: str
 
+class KinoBotFilter(Filter):
+    async def __call__(self, message: types.Message, bot: Bot) -> bool:
+        bot_db = await shortcuts.get_bot(bot)
+        return shortcuts.have_one_module(bot_db, "kino")
 
 @sync_to_async
 def get_channels_with_type_for_check():
@@ -1075,10 +1079,7 @@ def check_channel_exists(channel_id):
         logger.error(f"Error checking channel exists: {e}")
         return False
 
-class KinoBotFilter(Filter):
-    async def __call__(self, message: types.Message, bot: Bot) -> bool:
-        bot_db = await shortcuts.get_bot(bot)
-        return shortcuts.have_one_module(bot_db, "kino")
+
 
 class DavinchiBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
