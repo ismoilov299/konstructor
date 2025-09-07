@@ -228,15 +228,15 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
 @client_bot_router.message(F.text == "💸Заработать", AnonBotFilter())
 async def anon_referral(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
-    sub_status = await check_subs(message.from_user.id, bot)
-    if not sub_status:
-        kb = await get_subs_kb(bot)
-        await message.answer(
-            '**Чтобы воспользоваться ботом, необходимо подписаться на каналы**',
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
-        return
+    # sub_status = await check_subs(message.from_user.id, bot)
+    # if not sub_status:
+    #     kb = await get_subs_kb(bot)
+    #     await message.answer(
+    #         '**Чтобы воспользоваться ботом, необходимо подписаться на каналы**',
+    #         reply_markup=kb,
+    #         parse_mode="HTML"
+    #     )
+    #     return
 
     # Referral link yaratish (ref_ prefixi bilan)
     ref_link = await generate_referral_link(bot, message.from_user.id)
