@@ -505,10 +505,31 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
                 target_user_id = int(referrer_args)
 
     # Foydalanuvchini qo'shish
+    # Foydalanuvchini qo'shish
     if not user_exists:
         if referrer_id:
             result = await save_user(callback.from_user, bot, referrer_id)
             print(f"Created user {user_id} with referrer {referrer_id}")
+
+            # Referral notification yuborish
+            if result.get('inviter') and result.get('client_created'):
+                try:
+                    from asgiref.sync import sync_to_async
+                    from modul.models import AdminInfo
+                    try:
+                        admin_info = await sync_to_async(AdminInfo.objects.filter(bot_token=bot.token).first)()
+                        bonus_amount = float(admin_info.price) if admin_info and admin_info.price else 3.0
+                    except:
+                        bonus_amount = 3.0
+                    user_link = f'<a href="tg://user?id={user_id}">новый друг</a>'
+                    await bot.send_message(
+                        chat_id=result['inviter'].uid,
+                        text=f"У вас {user_link}! Баланс пополнен на {bonus_amount}₽",
+                        parse_mode="HTML"
+                    )
+                    print(f"Notification sent to {result['inviter'].uid}")
+                except Exception as e:
+                    logger.error(f"Error sending referral notification: {e}")
         else:
             result = await add_user_to_anon_bot(
                 user_id=user_id,
