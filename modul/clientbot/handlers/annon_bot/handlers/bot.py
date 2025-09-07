@@ -275,10 +275,11 @@ async def process_existing_user(message: types.Message, bot: Bot):
 async def show_main_menu(message: types.Message, bot: Bot):
     me = await bot.get_me()
     print(271)
-    link = f"https://t.me/{me.username}?start={message.from_user.id}"
+    user_id = message.from_user.id
+    anonymous_link = await generate_anonymous_link(bot, user_id)
     await message.answer(
         f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-        f"Твоя личная ссылка:\n👉{link}\n\n"
+        f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
         f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
         f"других соц сетях, чтобы начать получать сообщения 💬",
         parse_mode="html",
@@ -877,11 +878,12 @@ async def check_subscriptions(callback: CallbackQuery, state: FSMContext, bot: B
         await state.set_state(Links.send_st)
     else:
         me = await bot.get_me()
-        link = f"https://t.me/{me.username}?start={callback.from_user.id}"
         await callback.message.delete()
+        anonymous_link = await generate_anonymous_link(bot, user_id)
+
         await callback.message.answer(
             f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-            f"Твоя личная ссылка:\n👉{link}\n\n"
+            f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
             f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
             f"других соц сетях, чтобы начать получать сообщения 💬",
             parse_mode="html",
@@ -903,11 +905,12 @@ async def call_backs(query: CallbackQuery, state: FSMContext,bot: Bot):
     if query.data == "cancel":
         await query.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
         me = await bot.get_me()
-        link = f"https://t.me/{me.username}?start={query.from_user.id}"
-        print(382)
+        user_id = query.from_user.id
+        anonymous_link = await generate_anonymous_link(bot, user_id)
+
         await query.bot.send_message(chat_id=query.from_user.id,
                                      text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-                                          f"Твоя личная ссылка:\n👉{link}\n\n"
+                                          f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
                                           f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
                                           f"других соц сетях, чтобы начать получать сообщения 💬",
                                      parse_mode="html",
@@ -1220,10 +1223,12 @@ def anon_bot_handlers():
                 await state.set_state(Links.change_greeting)
             elif message.text == "📛Изменить ссылку":
                 me = await bot.get_me()
-                link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                user_id = message.from_user.id
+                anonymous_link = await generate_anonymous_link(bot, user_id)
+
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"Сейчас ваша ссылка для получения анонимных сообщений выглядит так:\n"
-                                                    f"<code>{link}</code>\n\n"
+                                                    f"<code>{anonymous_link}</code>\n\n"
                                                     f"📛Новая ссылка должна содержать только английские буквы, цифры и нижнее подчеркивание.\n\n"
                                                     f"❗ Обратите внимание, что при смене ссылки, старая ссылка перестанет быть активной!",
                                                parse_mode="html", reply_markup=await link_in())
@@ -1231,11 +1236,12 @@ def anon_bot_handlers():
             elif message.text == "🚀Начать":
                 await state.clear()
                 me = await bot.get_me()
-                link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                user_id = message.from_user.id
+                anonymous_link = await generate_anonymous_link(bot, user_id)
                 print(679)
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-                                                    f"Твоя личная ссылка:\n👉{link}\n\n"
+                                                    f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
                                                     f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
                                                     f"других соц сетях, чтобы начать получать сообщения 💬",
                                                parse_mode="html",
@@ -1264,11 +1270,13 @@ def anon_bot_handlers():
 
             else:
                 me = await bot.get_me()
-                link = f"https://t.me/{me.username}?start={message.from_user.id}"
+                user_id = message.from_user.id
+                anonymous_link = await generate_anonymous_link(bot, user_id)
+
                 print(712)
                 await message.bot.send_message(chat_id=message.from_user.id,
                                                text=f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-                                                    f"Твоя личная ссылка:\n👉{link}\n\n"
+                                                    f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
                                                     f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
                                                     f"других соц сетях, чтобы начать получать сообщения 💬",
                                                parse_mode="html",
