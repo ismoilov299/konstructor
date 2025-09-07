@@ -49,10 +49,10 @@ async def setup_routers():
 
             # Handler'larni sozlash
             anon_admin_panel()
+            anon_bot_handlers()
             admin_panel()
             chat_gpt_bot_handlers()
             init_bot_handlers()
-            anon_bot_handlers()
             # davinchi_bot_handlers()
             setup_main_bot_filter(main_bot_router, client_bot_router)
 
