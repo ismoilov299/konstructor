@@ -450,6 +450,7 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
 async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bot: Bot):
     user_id = callback.from_user.id
     state_data = await state.get_data()
+    print(state_data)
     referrer_args = state_data.get('referral_uid')
 
     print(f"DEBUG: user_id={user_id}, referrer_args='{referrer_args}'")
