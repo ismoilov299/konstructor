@@ -323,9 +323,7 @@ async def generate_anonymous_link(bot, user_id):
     return f"https://t.me/{me.username}?start=anon_{user_id}"
 
 
-client_bot_router.message(CommandStart(), AnonBotFilter())
-
-
+@client_bot_router.message(CommandStart(), AnonBotFilter())
 async def start_command(message: Message, state: FSMContext, bot: Bot, command: CommandObject):
     await state.clear()
     user_id = message.from_user.id
