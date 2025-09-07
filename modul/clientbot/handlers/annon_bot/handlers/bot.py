@@ -449,7 +449,7 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     user_id = callback.from_user.id
     state_data = await state.get_data()
     print(state_data)
-    referrer_args = state_data.get('referral')
+    referrer_args = state_data.get('referral_uid') or state_data.get('referral')
 
     print(f"DEBUG: user_id={user_id}, referrer_args='{referrer_args}'")
 
