@@ -501,15 +501,10 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
         elif referrer_args.isdigit():
             if int(referrer_args) != user_id:
                 target_user_id = int(referrer_args)
-
-    # Foydalanuvchini qo'shish
-    # Foydalanuvchini qo'shish
     if not user_exists:
         if referrer_id:
             result = await save_user(callback.from_user, bot, referrer_id)
             print(f"Created user {user_id} with referrer {referrer_id}")
-
-            # Referral notification yuborish
             if result.get('inviter') and result.get('client_created'):
                 try:
                     from asgiref.sync import sync_to_async
@@ -543,13 +538,22 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
         target_exists = await check_user_exists(target_user_id)
         if target_exists:
             await callback.message.delete()
+            anonymous_link = await generate_anonymous_link(bot, user_id)
             await callback.message.answer(
-                "Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+                f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
+                f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
+                f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+                f"других соц сетях, чтобы начать получать сообщения 💬",
+                parse_mode="html",
+                reply_markup=await main_menu_bt()
+            )
+            await callback.answer(
+                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
                 "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
                 "получит ваше сообщение, но не будет знать от кого.\n\n"
-                "Отправить можно фото, видео, текст, голосовые, видеосообщения "
+                "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
                 "(кружки), а также стикеры.\n\n"
-                "Это полностью анонимно!",
+                "⚠️ Это полностью анонимно!",
                 reply_markup=await cancel_in()
             )
             await state.set_state(Links.send_st)
