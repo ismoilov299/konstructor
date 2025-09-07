@@ -451,6 +451,8 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     state_data = await state.get_data()
     referrer_args = state_data.get('referral_uid')
 
+    print(f"DEBUG: user_id={user_id}, referrer_args='{referrer_args}'")
+
     channels = await get_channels_with_type_for_check()
     subscribed_all = True
     invalid_channels_to_remove = []
@@ -489,33 +491,31 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
 
     if referrer_args:
         if referrer_args.startswith('ref_'):
-            # Referral
             ref_id = referrer_args.replace('ref_', '')
             if ref_id.isdigit() and int(ref_id) != user_id:
                 referrer_id = int(ref_id)
         elif referrer_args.startswith('anon_'):
-            # Anonim xabar
             anon_id = referrer_args.replace('anon_', '')
             if anon_id.isdigit() and int(anon_id) != user_id:
                 target_user_id = int(anon_id)
         elif referrer_args.isdigit():
-            # Eski format (default anonim)
             if int(referrer_args) != user_id:
                 target_user_id = int(referrer_args)
 
     # Foydalanuvchini qo'shish
     if not user_exists:
-        result = await add_user_to_anon_bot(
-            user_id=user_id,
-            username=callback.from_user.username,
-            first_name=callback.from_user.first_name,
-            last_name=callback.from_user.last_name,
-            bot=bot
-        )
-
-        # Referral bonus berish
         if referrer_id:
-            await process_anon_referral_bonus(user_id, referrer_id, bot)
+            result = await save_user(callback.from_user, bot, referrer_id)
+            print(f"Created user {user_id} with referrer {referrer_id}")
+        else:
+            result = await add_user_to_anon_bot(
+                user_id=user_id,
+                username=callback.from_user.username,
+                first_name=callback.from_user.first_name,
+                last_name=callback.from_user.last_name,
+                bot=bot
+            )
+            print(f"Created user {user_id} without referrer")
 
     # Anonim xabar uchun yo'naltirish
     if target_user_id:
@@ -523,12 +523,12 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
         if target_exists:
             await callback.message.delete()
             await callback.message.answer(
-                "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
-            "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
-            "получит ваше сообщение, но не будет знать от кого.\n\n"
-            "Отправить можно фото, видео, 💬 текст, 🔊 голосовые, 📷видеосообщения "
-            "(кружки), а также стикеры.\n\n"
-            "⚠️ Это полностью анонимно!",
+                "Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+                "Напишите сюда всё, что хотите ему передать, и через несколько секунд он "
+                "получит ваше сообщение, но не будет знать от кого.\n\n"
+                "Отправить можно фото, видео, текст, голосовые, видеосообщения "
+                "(кружки), а также стикеры.\n\n"
+                "Это полностью анонимно!",
                 reply_markup=await cancel_in()
             )
             await state.set_state(Links.send_st)
@@ -545,10 +545,10 @@ async def check_channels_callback(callback: CallbackQuery, state: FSMContext, bo
     anonymous_link = await generate_anonymous_link(bot, user_id)
     await callback.message.answer(
         f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
-            f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
-            f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
-            f"других соц сетях, чтобы начать получать сообщения 💬",
-            parse_mode="html",
+        f"Твоя личная ссылка:\n👉{anonymous_link}\n\n"
+        f"Размести эту ссылку ☝️ в своём профиле Telegram/Instagram/TikTok или "
+        f"других соц сетях, чтобы начать получать сообщения 💬",
+        parse_mode="html",
         reply_markup=await main_menu_bt()
     )
     await state.clear()
