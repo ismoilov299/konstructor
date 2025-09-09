@@ -1,9 +1,10 @@
 # modul/bot/main_bot/handlers/admin_panel.py
+import json
 
 from aiogram import F, Router, types, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 from django.db.models import Count, Q
@@ -967,27 +968,141 @@ async def broadcast_stats_callback(callback: CallbackQuery):
     await callback.answer()
 
 
+def extract_keyboard_from_message(message: Message) -> InlineKeyboardMarkup | None:
+    """Habardan keyboard ni ajratib olish"""
+    try:
+        if not hasattr(message, 'reply_markup') or message.reply_markup is None:
+            logger.info("No reply_markup found in message")
+            return None
+
+        # reply_markup mavjud
+        reply_markup = message.reply_markup
+        logger.info(f"Found reply_markup: {type(reply_markup)}")
+
+        # Inline keyboard ekanligini tekshiramiz
+        if hasattr(reply_markup, 'inline_keyboard'):
+            inline_keyboard = reply_markup.inline_keyboard
+            logger.info(f"Found inline_keyboard with {len(inline_keyboard)} rows")
+
+            # Yangi keyboard builder yaratamiz
+            builder = InlineKeyboardBuilder()
+
+            for row_idx, row in enumerate(inline_keyboard):
+                row_buttons = []
+                for btn_idx, btn in enumerate(row):
+                    logger.info(f"Processing button [{row_idx}][{btn_idx}]: text='{btn.text}'")
+
+                    # Button properties
+                    button_data = {"text": btn.text}
+
+                    # Button type ni aniqlash
+                    if hasattr(btn, 'url') and btn.url:
+                        button_data["url"] = btn.url
+                        logger.info(f"  - URL button: {btn.url}")
+                        new_btn = InlineKeyboardButton(text=btn.text, url=btn.url)
+                    elif hasattr(btn, 'callback_data') and btn.callback_data:
+                        button_data["callback_data"] = btn.callback_data
+                        logger.info(f"  - Callback button: {btn.callback_data}")
+                        new_btn = InlineKeyboardButton(text=btn.text, callback_data=btn.callback_data)
+                    elif hasattr(btn, 'switch_inline_query') and btn.switch_inline_query is not None:
+                        new_btn = InlineKeyboardButton(text=btn.text, switch_inline_query=btn.switch_inline_query)
+                        logger.info(f"  - Switch inline query button")
+                    elif hasattr(btn,
+                                 'switch_inline_query_current_chat') and btn.switch_inline_query_current_chat is not None:
+                        new_btn = InlineKeyboardButton(text=btn.text,
+                                                       switch_inline_query_current_chat=btn.switch_inline_query_current_chat)
+                        logger.info(f"  - Switch inline query current chat button")
+                    else:
+                        # Default - callback button
+                        callback_data = f"broadcast_btn_{row_idx}_{btn_idx}"
+                        new_btn = InlineKeyboardButton(text=btn.text, callback_data=callback_data)
+                        logger.info(f"  - Default callback button: {callback_data}")
+
+                    row_buttons.append(new_btn)
+
+                # Row qo'shish
+                if row_buttons:
+                    builder.row(*row_buttons)
+
+            result_keyboard = builder.as_markup()
+            logger.info(f"Successfully created keyboard with {len(result_keyboard.inline_keyboard)} rows")
+            return result_keyboard
+
+        else:
+            logger.info("reply_markup does not have inline_keyboard")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error extracting keyboard: {e}")
+        return None
+
+
+# JSON debug function
+def log_message_structure(message: Message):
+    """Habar strukturasini JSON formatda log qilish"""
+    try:
+        # Message ni dict ga aylantirish
+        msg_dict = message.model_dump() if hasattr(message, 'model_dump') else message.__dict__
+
+        # Faqat kerakli qismlarni olish
+        debug_data = {
+            "message_id": message.message_id,
+            "content_type": message.content_type,
+            "text": getattr(message, 'text', None),
+            "caption": getattr(message, 'caption', None),
+            "has_reply_markup": hasattr(message, 'reply_markup') and message.reply_markup is not None
+        }
+
+        if hasattr(message, 'reply_markup') and message.reply_markup:
+            debug_data["reply_markup"] = {
+                "type": type(message.reply_markup).__name__,
+                "has_inline_keyboard": hasattr(message.reply_markup, 'inline_keyboard')
+            }
+
+            if hasattr(message.reply_markup, 'inline_keyboard'):
+                keyboard_structure = []
+                for row in message.reply_markup.inline_keyboard:
+                    row_structure = []
+                    for btn in row:
+                        btn_info = {"text": btn.text}
+                        if hasattr(btn, 'url') and btn.url:
+                            btn_info["url"] = btn.url
+                        if hasattr(btn, 'callback_data') and btn.callback_data:
+                            btn_info["callback_data"] = btn.callback_data
+                        row_structure.append(btn_info)
+                    keyboard_structure.append(row_structure)
+                debug_data["reply_markup"]["keyboard_structure"] = keyboard_structure
+
+        logger.info(f"MESSAGE STRUCTURE: {json.dumps(debug_data, indent=2, ensure_ascii=False)}")
+
+    except Exception as e:
+        logger.error(f"Error logging message structure: {e}")
+
+
 @main_bot_router.message(AdminChannelStates.waiting_for_broadcast_message)
 async def process_broadcast_message(message: Message, state: FSMContext, bot: Bot):
-    """Обработка сообщения для рассылки с поддержкой кнопок"""
+    """Обработка сообщения для рассылки с извлечением кнопок"""
     if not is_admin_user(message.from_user.id):
         await message.answer("Доступ запрещен")
         await state.clear()
         return
 
     try:
+        # Debug: habar strukturasini log qilish
+        log_message_structure(message)
+
         # Debug info
         logger.info(f"Starting broadcast from admin {message.from_user.id}")
         logger.info(f"Message ID: {message.message_id}, Chat ID: {message.chat.id}")
         logger.info(f"Message type: {message.content_type}")
 
-        # Keyboard mavjudligini tekshiramiz
-        has_keyboard = hasattr(message, 'reply_markup') and message.reply_markup is not None
-        logger.info(f"Message has keyboard: {has_keyboard}")
+        # Keyboard ni ajratib olish
+        extracted_keyboard = extract_keyboard_from_message(message)
+        has_keyboard = extracted_keyboard is not None
+
+        logger.info(f"Keyboard extraction result: {has_keyboard}")
         if has_keyboard:
-            logger.info(f"Keyboard type: {type(message.reply_markup)}")
-            if hasattr(message.reply_markup, 'inline_keyboard'):
-                logger.info(f"Keyboard buttons count: {len(message.reply_markup.inline_keyboard)}")
+            logger.info(f"Extracted keyboard with {len(extracted_keyboard.inline_keyboard)} rows")
 
         # Получаем всех активных ботов
         active_bots = await get_all_active_bots()
@@ -1014,7 +1129,7 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             return
 
         # Показываем информацию о рассылке
-        keyboard_status = "с кнопками" if has_keyboard else "без кнопок"
+        keyboard_status = f"с кнопками ✅ ({len(extracted_keyboard.inline_keyboard)} рядов)" if has_keyboard else "без кнопок ⚠️"
         stats_msg = await message.answer(
             f"🚀 НАЧИНАЮ РАССЫЛКУ...\n\n"
             f"📊 Статистика:\n"
@@ -1033,7 +1148,6 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
 
         # Счетчики ошибок по типам
         chat_not_found_count = 0
-        message_not_found_count = 0
         bot_blocked_count = 0
         other_errors_count = 0
 
@@ -1074,29 +1188,25 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                             if user_index <= 3:
                                 logger.info(f"Sending to user {user_id} via bot @{bot_info.username}")
 
-                            result = None  # Инициализируем result
-
-                            # Получаем keyboard из исходного сообщения
-                            keyboard = getattr(message, 'reply_markup', None)
+                            result = None
 
                             # Отправляем сообщение в зависимости от типа
                             if message.content_type == "text":
-                                # Текстовое сообщение
+                                # Текстовое сообщение с извлеченными кнопками
                                 result = await broadcast_bot.send_message(
                                     chat_id=user_id,
                                     text=message.text,
                                     entities=getattr(message, 'entities', None),
-                                    reply_markup=keyboard  # ✅ Кнопки добавлены
+                                    reply_markup=extracted_keyboard,  # ✅ Извлеченные кнопки
+                                    parse_mode=None
                                 )
 
                             elif message.content_type == "photo":
-                                # Фото с подписью - используем file из main bot
+                                # Фото с подписью и извлеченными кнопками
                                 try:
-                                    # Получаем file объект и скачиваем
                                     file = await bot.get_file(message.photo[-1].file_id)
                                     file_data = await bot.download_file(file.file_path)
 
-                                    # Отправляем как новый файл
                                     from aiogram.types import BufferedInputFile
                                     input_file = BufferedInputFile(file_data.read(), filename="photo.jpg")
 
@@ -1105,14 +1215,14 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         photo=input_file,
                                         caption=getattr(message, 'caption', None),
                                         caption_entities=getattr(message, 'caption_entities', None),
-                                        reply_markup=keyboard  # ✅ Кнопки добавлены
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
                                     )
                                 except Exception as photo_error:
                                     logger.error(f"Error processing photo for user {user_id}: {photo_error}")
                                     raise photo_error
 
                             elif message.content_type == "video":
-                                # Видео с подписью
+                                # Видео с подписью и извлеченными кнопками
                                 try:
                                     file = await bot.get_file(message.video.file_id)
                                     file_data = await bot.download_file(file.file_path)
@@ -1125,14 +1235,14 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         video=input_file,
                                         caption=getattr(message, 'caption', None),
                                         caption_entities=getattr(message, 'caption_entities', None),
-                                        reply_markup=keyboard  # ✅ Кнопки добавлены
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
                                     )
                                 except Exception as video_error:
                                     logger.error(f"Error processing video for user {user_id}: {video_error}")
                                     raise video_error
 
                             elif message.content_type == "document":
-                                # Документ
+                                # Документ с извлеченными кнопками
                                 try:
                                     file = await bot.get_file(message.document.file_id)
                                     file_data = await bot.download_file(file.file_path)
@@ -1146,144 +1256,29 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         document=input_file,
                                         caption=getattr(message, 'caption', None),
                                         caption_entities=getattr(message, 'caption_entities', None),
-                                        reply_markup=keyboard  # ✅ Кнопки добавлены
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
                                     )
                                 except Exception as doc_error:
                                     logger.error(f"Error processing document for user {user_id}: {doc_error}")
                                     raise doc_error
 
-                            elif message.content_type == "audio":
-                                # Аудио
-                                try:
-                                    file = await bot.get_file(message.audio.file_id)
-                                    file_data = await bot.download_file(file.file_path)
-
-                                    from aiogram.types import BufferedInputFile
-                                    filename = getattr(message.audio, 'file_name', 'audio.mp3')
-                                    input_file = BufferedInputFile(file_data.read(), filename=filename)
-
-                                    result = await broadcast_bot.send_audio(
-                                        chat_id=user_id,
-                                        audio=input_file,
-                                        caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None),
-                                        reply_markup=keyboard  # ✅ Кнопки добавлены
-                                    )
-                                except Exception as audio_error:
-                                    logger.error(f"Error processing audio for user {user_id}: {audio_error}")
-                                    raise audio_error
-
-                            elif message.content_type == "voice":
-                                # Голосовое сообщение
-                                try:
-                                    file = await bot.get_file(message.voice.file_id)
-                                    file_data = await bot.download_file(file.file_path)
-
-                                    from aiogram.types import BufferedInputFile
-                                    input_file = BufferedInputFile(file_data.read(), filename="voice.ogg")
-
-                                    result = await broadcast_bot.send_voice(
-                                        chat_id=user_id,
-                                        voice=input_file,
-                                        caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None),
-                                        reply_markup=keyboard  # ✅ Кнопки добавлены
-                                    )
-                                except Exception as voice_error:
-                                    logger.error(f"Error processing voice for user {user_id}: {voice_error}")
-                                    raise voice_error
-
-                            elif message.content_type == "video_note":
-                                # Кружок
-                                try:
-                                    file = await bot.get_file(message.video_note.file_id)
-                                    file_data = await bot.download_file(file.file_path)
-
-                                    from aiogram.types import BufferedInputFile
-                                    input_file = BufferedInputFile(file_data.read(), filename="video_note.mp4")
-
-                                    result = await broadcast_bot.send_video_note(
-                                        chat_id=user_id,
-                                        video_note=input_file,
-                                        reply_markup=keyboard  # ✅ Кнопки добавлены
-                                    )
-                                except Exception as vn_error:
-                                    logger.error(f"Error processing video_note for user {user_id}: {vn_error}")
-                                    raise vn_error
-
-                            elif message.content_type == "animation":
-                                # GIF
-                                try:
-                                    file = await bot.get_file(message.animation.file_id)
-                                    file_data = await bot.download_file(file.file_path)
-
-                                    from aiogram.types import BufferedInputFile
-                                    filename = getattr(message.animation, 'file_name', 'animation.gif')
-                                    input_file = BufferedInputFile(file_data.read(), filename=filename)
-
-                                    result = await broadcast_bot.send_animation(
-                                        chat_id=user_id,
-                                        animation=input_file,
-                                        caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None),
-                                        reply_markup=keyboard  # ✅ Кнопки добавлены
-                                    )
-                                except Exception as gif_error:
-                                    logger.error(f"Error processing animation for user {user_id}: {gif_error}")
-                                    raise gif_error
-
-                            elif message.content_type == "sticker":
-                                # Стикер - можно попробовать по file_id, так как стикеры глобальные
-                                result = await broadcast_bot.send_sticker(
-                                    chat_id=user_id,
-                                    sticker=message.sticker.file_id,
-                                    reply_markup=keyboard  # ✅ Кнопки добавлены
-                                )
-
-                            elif message.content_type == "location":
-                                # Местоположение
-                                result = await broadcast_bot.send_location(
-                                    chat_id=user_id,
-                                    latitude=message.location.latitude,
-                                    longitude=message.location.longitude,
-                                    reply_markup=keyboard  # ✅ Кнопки добавлены
-                                )
-
-                            elif message.content_type == "contact":
-                                # Контакт
-                                result = await broadcast_bot.send_contact(
-                                    chat_id=user_id,
-                                    phone_number=message.contact.phone_number,
-                                    first_name=message.contact.first_name,
-                                    last_name=getattr(message.contact, 'last_name', None),
-                                    reply_markup=keyboard  # ✅ Кнопки добавлены
-                                )
-
-                            elif message.content_type == "poll":
-                                # Опрос
-                                result = await broadcast_bot.send_poll(
-                                    chat_id=user_id,
-                                    question=message.poll.question,
-                                    options=[option.text for option in message.poll.options],
-                                    is_anonymous=message.poll.is_anonymous,
-                                    type=message.poll.type,
-                                    allows_multiple_answers=getattr(message.poll, 'allows_multiple_answers', False),
-                                    reply_markup=keyboard  # ✅ Кнопки добавлены
-                                )
                             else:
-                                # Неподдерживаемый тип - пропускаем
-                                logger.warning(f"Unsupported message type: {message.content_type}")
-                                error_count += 1
-                                other_errors_count += 1
-                                continue
+                                # Другие типы медиа - текстовый fallback с кнопками
+                                result = await broadcast_bot.send_message(
+                                    chat_id=user_id,
+                                    text=f"📎 МЕДИА СООБЩЕНИЕ\n\nОригинальное сообщение содержало: {message.content_type.upper()}",
+                                    reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                )
 
-                            # ВАЖНО: Проверяем что result не None и содержит message_id
+                            # Проверяем результат
                             if result and hasattr(result, 'message_id') and result.message_id:
                                 sent_count += 1
                                 if user_index <= 3:
-                                    keyboard_info = "with buttons" if has_keyboard else "no buttons"
+                                    button_count = len(extracted_keyboard.inline_keyboard) if has_keyboard else 0
+                                    total_buttons = sum(
+                                        len(row) for row in extracted_keyboard.inline_keyboard) if has_keyboard else 0
                                     logger.info(
-                                        f"✅ SUCCESS: User {user_id} received message {result.message_id} via @{bot_info.username} ({keyboard_info})")
+                                        f"✅ SUCCESS: User {user_id} received message {result.message_id} via @{bot_info.username} (keyboard: {button_count} rows, {total_buttons} buttons)")
                             else:
                                 error_count += 1
                                 other_errors_count += 1
@@ -1292,30 +1287,26 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
 
                         except Exception as e:
                             error_count += 1
-                            error_text = str(e)
+                            error_text = str(e).lower()
 
                             # Классифицируем ошибки
-                            if "chat not found" in error_text.lower():
+                            if "chat not found" in error_text:
                                 chat_not_found_count += 1
-                            elif "message to copy not found" in error_text.lower():
-                                message_not_found_count += 1
-                            elif "blocked" in error_text.lower() or "bot was blocked" in error_text.lower():
+                            elif "blocked" in error_text:
                                 bot_blocked_count += 1
                             else:
                                 other_errors_count += 1
 
-                            # Логируем первые несколько ошибок каждого типа
-                            if (
-                                    chat_not_found_count + message_not_found_count + bot_blocked_count + other_errors_count) <= 15:
+                            if error_count <= 10:
                                 logger.error(f"❌ EXCEPTION: User {user_id} via @{bot_info.username}: {e}")
 
-                        # Небольшая задержка между сообщениями
-                        if user_index % 10 == 0:  # Каждые 10 сообщений
+                        # Задержка между сообщениями
+                        if user_index % 20 == 0:
                             import asyncio
-                            await asyncio.sleep(0.1)  # 100ms пауза
+                            await asyncio.sleep(0.1)
 
-                        # Обновляем прогресс каждые 50 сообщений
-                        if (sent_count + error_count) % 50 == 0:
+                        # Обновляем прогресс
+                        if (sent_count + error_count) % 100 == 0:
                             progress = ((sent_count + error_count) / total_count) * 100
                             try:
                                 await stats_msg.edit_text(
@@ -1323,22 +1314,16 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                     f"📊 Статистика:\n"
                                     f"🤖 Ботов: {len(active_bots)}\n"
                                     f"👥 Пользователей: {total_count}\n"
-                                    f"📝 Тип сообщения: {message.content_type} ({keyboard_status})\n\n"
+                                    f"📝 Тип: {message.content_type} ({keyboard_status})\n\n"
                                     f"⏳ Прогресс: {sent_count + error_count}/{total_count} ({progress:.1f}%)\n"
                                     f"✅ Успешно: {sent_count}\n"
-                                    f"❌ Ошибок: {error_count}\n\n"
-                                    f"🔍 Типы ошибок:\n"
-                                    f"• Чат не найден: {chat_not_found_count}\n"
-                                    f"• Сообщение не найдено: {message_not_found_count}\n"
-                                    f"• Бот заблокирован: {bot_blocked_count}\n"
-                                    f"• Прочие: {other_errors_count}"
+                                    f"❌ Ошибок: {error_count}"
                                 )
                             except:
                                 pass
 
             except Exception as e:
                 logger.error(f"Error with bot token ...{bot_token[-10:]}: {e}")
-                # Если бот недоступен, считаем всех его пользователей как ошибки
                 error_count += len(user_ids)
                 other_errors_count += len(user_ids)
 
@@ -1350,35 +1335,21 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             f"📊 Итоговая статистика:\n"
             f"🤖 Ботов использовано: {len(active_bots)}\n"
             f"👥 Всего пользователей: {total_count}\n"
-            f"📝 Тип сообщения: {message.content_type} ({keyboard_status})\n"
+            f"📝 Тип: {message.content_type} ({keyboard_status})\n"
             f"✅ Успешно доставлено: {sent_count}\n"
             f"❌ Ошибок доставки: {error_count}\n"
             f"📈 Успешность: {success_rate:.1f}%\n\n"
             f"🔍 Детали ошибок:\n"
             f"• Чат не найден: {chat_not_found_count}\n"
-            f"• Сообщение не найдено: {message_not_found_count}\n"
             f"• Бот заблокирован: {bot_blocked_count}\n"
             f"• Прочие ошибки: {other_errors_count}\n\n"
             f"👤 Администратор: {message.from_user.full_name}\n"
-            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            f"Используйте /admin чтобы вернуться в панель"
+            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
         await stats_msg.edit_text(final_text)
 
-        logger.info(f"Broadcast completed: {sent_count} sent, {error_count} errors")
-
-        # Уведомляем других админов
-        await notify_admins_about_broadcast(
-            bot,
-            message.from_user.full_name,
-            message.from_user.id,
-            sent_count,
-            error_count,
-            total_count,
-            message.content_type,
-            has_keyboard
-        )
+        logger.info(f"Broadcast completed: {sent_count} sent, {error_count} errors, extracted keyboard: {has_keyboard}")
 
         await state.clear()
 
@@ -1389,7 +1360,6 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             f"Используйте /admin чтобы вернуться в панель"
         )
         await state.clear()
-
 async def notify_admins_about_broadcast(bot, admin_name, admin_id, sent_count, error_count, total_count):
     """Уведомить других админов о рассылке"""
     try:
