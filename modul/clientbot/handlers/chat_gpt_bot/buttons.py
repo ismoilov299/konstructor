@@ -117,12 +117,7 @@ def get_all_user_bt():
     return builder.as_markup(resize_keyboard=True)
 
 
-def help_bt():
-    builder = InlineKeyboardBuilder()
-    builder.button(text='❔ FAQ', callback_data='FAQ')
-    builder.button(text='📄 Правила пользования', url="https://telegra.ph/Pravila-polzovaniya-botom-12-17")
-    builder.button(text='🔙 Назад', callback_data='back')
-    return builder.as_markup()
+
 
 
 def back_in_faq():
