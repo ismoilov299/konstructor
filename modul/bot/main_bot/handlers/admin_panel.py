@@ -16,15 +16,12 @@ logger = logging.getLogger(__name__)
 
 class AdminChannelStates(StatesGroup):
     waiting_for_channel_message = State()
-
-class AdminChannelStates(StatesGroup):
-    waiting_for_channel_message = State()
     waiting_for_broadcast_message = State()
 
 # Админ ID список
 ADMIN_IDS = [
     1161180912,  # Основной админ
-    558618720,  # Дополнительный админ
+    # 558618720,  # Дополнительный админ
 ]
 
 
@@ -979,8 +976,14 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
         return
 
     try:
+        # Debug info
+        logger.info(f"Starting broadcast from admin {message.from_user.id}")
+        logger.info(f"Message ID: {message.message_id}, Chat ID: {message.chat.id}")
+        logger.info(f"Message type: {message.content_type}")
+
         # Получаем всех активных ботов
         active_bots = await get_all_active_bots()
+        logger.info(f"Found {len(active_bots)} active bots")
 
         if not active_bots:
             await message.answer(
@@ -992,6 +995,7 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
 
         # Получаем всех пользователей
         all_users = await get_all_bot_users()
+        logger.info(f"Found {len(all_users)} total users")
 
         if not all_users:
             await message.answer(
@@ -1017,6 +1021,12 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
         error_count = 0
         total_count = len(all_users)
 
+        # Счетчики ошибок по типам
+        chat_not_found_count = 0
+        message_not_found_count = 0
+        bot_blocked_count = 0
+        other_errors_count = 0
+
         # Группируем пользователей по ботам
         users_by_bot = {}
         for user in all_users:
@@ -1025,28 +1035,67 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                 users_by_bot[bot_token] = []
             users_by_bot[bot_token].append(user['uid'])
 
+        logger.info(f"Users grouped by {len(users_by_bot)} bots")
+
         # Отправляем через каждого бота
-        for bot_token, user_ids in users_by_bot.items():
+        for bot_index, (bot_token, user_ids) in enumerate(users_by_bot.items(), 1):
             try:
+                logger.info(f"Processing bot {bot_index}/{len(users_by_bot)}: token ending with ...{bot_token[-10:]}")
+                logger.info(f"Bot has {len(user_ids)} users")
+
                 # Создаем экземпляр бота
                 from aiogram import Bot
                 from modul.loader import bot_session
 
                 async with Bot(token=bot_token, session=bot_session).context(auto_close=False) as broadcast_bot:
 
-                    for user_id in user_ids:
+                    # Проверяем сам бот
+                    try:
+                        bot_info = await broadcast_bot.get_me()
+                        logger.info(f"Broadcasting via bot @{bot_info.username}")
+                    except Exception as e:
+                        logger.error(f"Cannot access bot with token ...{bot_token[-10:]}: {e}")
+                        error_count += len(user_ids)
+                        continue
+
+                    for user_index, user_id in enumerate(user_ids, 1):
                         try:
+                            # Debug для первых 3 пользователей каждого бота
+                            if user_index <= 3:
+                                logger.info(f"Sending to user {user_id} via bot @{bot_info.username}")
+                                logger.info(
+                                    f"copy_message params: chat_id={user_id}, from_chat_id={message.chat.id}, message_id={message.message_id}")
+
                             # Отправляем сообщение
-                            await broadcast_bot.copy_message(
+                            result = await broadcast_bot.copy_message(
                                 chat_id=user_id,
                                 from_chat_id=message.chat.id,
                                 message_id=message.message_id
                             )
                             sent_count += 1
 
+                            if user_index <= 3:
+                                logger.info(
+                                    f"Successfully sent to user {user_id}, result message_id: {result.message_id}")
+
                         except Exception as e:
                             error_count += 1
-                            logger.error(f"Error sending to user {user_id}: {e}")
+                            error_text = str(e)
+
+                            # Классифицируем ошибки
+                            if "chat not found" in error_text.lower():
+                                chat_not_found_count += 1
+                            elif "message to copy not found" in error_text.lower():
+                                message_not_found_count += 1
+                            elif "blocked" in error_text.lower() or "bot was blocked" in error_text.lower():
+                                bot_blocked_count += 1
+                            else:
+                                other_errors_count += 1
+
+                            # Логируем первые несколько ошибок каждого типа
+                            if (
+                                    chat_not_found_count + message_not_found_count + bot_blocked_count + other_errors_count) <= 10:
+                                logger.error(f"Error sending to user {user_id} via @{bot_info.username}: {e}")
 
                         # Обновляем прогресс каждые 50 сообщений
                         if (sent_count + error_count) % 50 == 0:
@@ -1059,15 +1108,21 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                     f"👥 Пользователей: {total_count}\n\n"
                                     f"⏳ Прогресс: {sent_count + error_count}/{total_count} ({progress:.1f}%)\n"
                                     f"✅ Успешно: {sent_count}\n"
-                                    f"❌ Ошибок: {error_count}"
+                                    f"❌ Ошибок: {error_count}\n\n"
+                                    f"🔍 Типы ошибок:\n"
+                                    f"• Чат не найден: {chat_not_found_count}\n"
+                                    f"• Сообщение не найдено: {message_not_found_count}\n"
+                                    f"• Бот заблокирован: {bot_blocked_count}\n"
+                                    f"• Прочие: {other_errors_count}"
                                 )
                             except:
                                 pass
 
             except Exception as e:
-                logger.error(f"Error with bot {bot_token}: {e}")
+                logger.error(f"Error with bot token ...{bot_token[-10:]}: {e}")
                 # Если бот недоступен, считаем всех его пользователей как ошибки
                 error_count += len(user_ids)
+                other_errors_count += len(user_ids)
 
         # Финальная статистика
         success_rate = (sent_count / total_count) * 100 if total_count > 0 else 0
@@ -1080,12 +1135,19 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             f"✅ Успешно доставлено: {sent_count}\n"
             f"❌ Ошибок доставки: {error_count}\n"
             f"📈 Успешность: {success_rate:.1f}%\n\n"
+            f"🔍 Детали ошибок:\n"
+            f"• Чат не найден: {chat_not_found_count}\n"
+            f"• Сообщение не найдено: {message_not_found_count}\n"
+            f"• Бот заблокирован: {bot_blocked_count}\n"
+            f"• Прочие ошибки: {other_errors_count}\n\n"
             f"👤 Администратор: {message.from_user.full_name}\n"
             f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             f"Используйте /admin чтобы вернуться в панель"
         )
 
         await stats_msg.edit_text(final_text)
+
+        logger.info(f"Broadcast completed: {sent_count} sent, {error_count} errors")
 
         # Уведомляем других админов
         await notify_admins_about_broadcast(
