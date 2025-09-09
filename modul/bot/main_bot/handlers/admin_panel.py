@@ -1064,6 +1064,8 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                             if user_index <= 3:
                                 logger.info(f"Sending to user {user_id} via bot @{bot_info.username}")
 
+                            result = None  # Инициализируем result
+
                             # Отправляем сообщение в зависимости от типа
                             if message.content_type == "text":
                                 # Текстовое сообщение
@@ -1214,11 +1216,17 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                 other_errors_count += 1
                                 continue
 
-                            sent_count += 1
-
-                            if user_index <= 3:
-                                logger.info(
-                                    f"Successfully sent to user {user_id}, result message_id: {result.message_id}")
+                            # ВАЖНО: Проверяем что result не None и содержит message_id
+                            if result and hasattr(result, 'message_id') and result.message_id:
+                                sent_count += 1
+                                if user_index <= 3:
+                                    logger.info(
+                                        f"✅ SUCCESS: User {user_id} received message {result.message_id} via @{bot_info.username}")
+                            else:
+                                error_count += 1
+                                other_errors_count += 1
+                                logger.error(
+                                    f"❌ FAILED: User {user_id} - no valid result returned via @{bot_info.username}")
 
                         except Exception as e:
                             error_count += 1
@@ -1236,8 +1244,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
 
                             # Логируем первые несколько ошибок каждого типа
                             if (
-                                    chat_not_found_count + message_not_found_count + bot_blocked_count + other_errors_count) <= 10:
-                                logger.error(f"Error sending to user {user_id} via @{bot_info.username}: {e}")
+                                    chat_not_found_count + message_not_found_count + bot_blocked_count + other_errors_count) <= 15:
+                                logger.error(f"❌ EXCEPTION: User {user_id} via @{bot_info.username}: {e}")
+
+                        # Небольшая задержка между сообщениями
+                        if user_index % 10 == 0:  # Каждые 10 сообщений
+                            import asyncio
+                            await asyncio.sleep(0.1)  # 100ms пауза
 
                         # Обновляем прогресс каждые 50 сообщений
                         if (sent_count + error_count) % 50 == 0:
@@ -1310,7 +1323,6 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             f"Используйте /admin чтобы вернуться в панель"
         )
         await state.clear()
-
 
 async def notify_admins_about_broadcast(bot, admin_name, admin_id, sent_count, error_count, total_count):
     """Уведомить других админов о рассылке"""
