@@ -1073,61 +1073,136 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                     entities=getattr(message, 'entities', None)
                                 )
                             elif message.content_type == "photo":
-                                # Фото с подписью
-                                result = await broadcast_bot.send_photo(
-                                    chat_id=user_id,
-                                    photo=message.photo[-1].file_id,
-                                    caption=getattr(message, 'caption', None),
-                                    caption_entities=getattr(message, 'caption_entities', None)
-                                )
+                                # Фото с подписью - используем file из main bot
+                                try:
+                                    # Получаем file объект и скачиваем
+                                    file = await bot.get_file(message.photo[-1].file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    # Отправляем как новый файл
+                                    from aiogram.types import BufferedInputFile
+                                    input_file = BufferedInputFile(file_data.read(), filename="photo.jpg")
+
+                                    result = await broadcast_bot.send_photo(
+                                        chat_id=user_id,
+                                        photo=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None)
+                                    )
+                                except Exception as photo_error:
+                                    logger.error(f"Error processing photo for user {user_id}: {photo_error}")
+                                    raise photo_error
                             elif message.content_type == "video":
                                 # Видео с подписью
-                                result = await broadcast_bot.send_video(
-                                    chat_id=user_id,
-                                    video=message.video.file_id,
-                                    caption=getattr(message, 'caption', None),
-                                    caption_entities=getattr(message, 'caption_entities', None)
-                                )
+                                try:
+                                    file = await bot.get_file(message.video.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    input_file = BufferedInputFile(file_data.read(), filename="video.mp4")
+
+                                    result = await broadcast_bot.send_video(
+                                        chat_id=user_id,
+                                        video=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None)
+                                    )
+                                except Exception as video_error:
+                                    logger.error(f"Error processing video for user {user_id}: {video_error}")
+                                    raise video_error
                             elif message.content_type == "document":
                                 # Документ
-                                result = await broadcast_bot.send_document(
-                                    chat_id=user_id,
-                                    document=message.document.file_id,
-                                    caption=getattr(message, 'caption', None),
-                                    caption_entities=getattr(message, 'caption_entities', None)
-                                )
+                                try:
+                                    file = await bot.get_file(message.document.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    filename = getattr(message.document, 'file_name', 'document')
+                                    input_file = BufferedInputFile(file_data.read(), filename=filename)
+
+                                    result = await broadcast_bot.send_document(
+                                        chat_id=user_id,
+                                        document=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None)
+                                    )
+                                except Exception as doc_error:
+                                    logger.error(f"Error processing document for user {user_id}: {doc_error}")
+                                    raise doc_error
                             elif message.content_type == "audio":
                                 # Аудио
-                                result = await broadcast_bot.send_audio(
-                                    chat_id=user_id,
-                                    audio=message.audio.file_id,
-                                    caption=getattr(message, 'caption', None),
-                                    caption_entities=getattr(message, 'caption_entities', None)
-                                )
+                                try:
+                                    file = await bot.get_file(message.audio.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    filename = getattr(message.audio, 'file_name', 'audio.mp3')
+                                    input_file = BufferedInputFile(file_data.read(), filename=filename)
+
+                                    result = await broadcast_bot.send_audio(
+                                        chat_id=user_id,
+                                        audio=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None)
+                                    )
+                                except Exception as audio_error:
+                                    logger.error(f"Error processing audio for user {user_id}: {audio_error}")
+                                    raise audio_error
                             elif message.content_type == "voice":
                                 # Голосовое сообщение
-                                result = await broadcast_bot.send_voice(
-                                    chat_id=user_id,
-                                    voice=message.voice.file_id,
-                                    caption=getattr(message, 'caption', None),
-                                    caption_entities=getattr(message, 'caption_entities', None)
-                                )
+                                try:
+                                    file = await bot.get_file(message.voice.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    input_file = BufferedInputFile(file_data.read(), filename="voice.ogg")
+
+                                    result = await broadcast_bot.send_voice(
+                                        chat_id=user_id,
+                                        voice=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None)
+                                    )
+                                except Exception as voice_error:
+                                    logger.error(f"Error processing voice for user {user_id}: {voice_error}")
+                                    raise voice_error
                             elif message.content_type == "video_note":
                                 # Кружок
-                                result = await broadcast_bot.send_video_note(
-                                    chat_id=user_id,
-                                    video_note=message.video_note.file_id
-                                )
+                                try:
+                                    file = await bot.get_file(message.video_note.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    input_file = BufferedInputFile(file_data.read(), filename="video_note.mp4")
+
+                                    result = await broadcast_bot.send_video_note(
+                                        chat_id=user_id,
+                                        video_note=input_file
+                                    )
+                                except Exception as vn_error:
+                                    logger.error(f"Error processing video_note for user {user_id}: {vn_error}")
+                                    raise vn_error
                             elif message.content_type == "animation":
                                 # GIF
-                                result = await broadcast_bot.send_animation(
-                                    chat_id=user_id,
-                                    animation=message.animation.file_id,
-                                    caption=getattr(message, 'caption', None),
-                                    caption_entities=getattr(message, 'caption_entities', None)
-                                )
+                                try:
+                                    file = await bot.get_file(message.animation.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    filename = getattr(message.animation, 'file_name', 'animation.gif')
+                                    input_file = BufferedInputFile(file_data.read(), filename=filename)
+
+                                    result = await broadcast_bot.send_animation(
+                                        chat_id=user_id,
+                                        animation=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None)
+                                    )
+                                except Exception as gif_error:
+                                    logger.error(f"Error processing animation for user {user_id}: {gif_error}")
+                                    raise gif_error
                             elif message.content_type == "sticker":
-                                # Стикер
+                                # Стикер - можно попробовать по file_id, так как стикеры глобальные
                                 result = await broadcast_bot.send_sticker(
                                     chat_id=user_id,
                                     sticker=message.sticker.file_id
