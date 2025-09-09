@@ -1262,11 +1262,147 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                     logger.error(f"Error processing document for user {user_id}: {doc_error}")
                                     raise doc_error
 
+                            elif message.content_type == "audio":
+                                # Аудио с извлеченными кнопками
+                                try:
+                                    file = await bot.get_file(message.audio.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    filename = getattr(message.audio, 'file_name', 'audio.mp3')
+                                    input_file = BufferedInputFile(file_data.read(), filename=filename)
+
+                                    result = await broadcast_bot.send_audio(
+                                        chat_id=user_id,
+                                        audio=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as audio_error:
+                                    logger.error(f"Error processing audio for user {user_id}: {audio_error}")
+                                    raise audio_error
+
+                            elif message.content_type == "voice":
+                                # Голосовое сообщение с извлеченными кнопками
+                                try:
+                                    file = await bot.get_file(message.voice.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    input_file = BufferedInputFile(file_data.read(), filename="voice.ogg")
+
+                                    result = await broadcast_bot.send_voice(
+                                        chat_id=user_id,
+                                        voice=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as voice_error:
+                                    logger.error(f"Error processing voice for user {user_id}: {voice_error}")
+                                    raise voice_error
+
+                            elif message.content_type == "video_note":
+                                # Кружок (video note) с извлеченными кнопками
+                                try:
+                                    file = await bot.get_file(message.video_note.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    input_file = BufferedInputFile(file_data.read(), filename="video_note.mp4")
+
+                                    result = await broadcast_bot.send_video_note(
+                                        chat_id=user_id,
+                                        video_note=input_file,
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as vn_error:
+                                    logger.error(f"Error processing video_note for user {user_id}: {vn_error}")
+                                    raise vn_error
+
+                            elif message.content_type == "animation":
+                                # GIF/анимация с извлеченными кнопками
+                                try:
+                                    file = await bot.get_file(message.animation.file_id)
+                                    file_data = await bot.download_file(file.file_path)
+
+                                    from aiogram.types import BufferedInputFile
+                                    filename = getattr(message.animation, 'file_name', 'animation.gif')
+                                    input_file = BufferedInputFile(file_data.read(), filename=filename)
+
+                                    result = await broadcast_bot.send_animation(
+                                        chat_id=user_id,
+                                        animation=input_file,
+                                        caption=getattr(message, 'caption', None),
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as gif_error:
+                                    logger.error(f"Error processing animation for user {user_id}: {gif_error}")
+                                    raise gif_error
+
+                            elif message.content_type == "sticker":
+                                # Стикер с извлеченными кнопками
+                                try:
+                                    result = await broadcast_bot.send_sticker(
+                                        chat_id=user_id,
+                                        sticker=message.sticker.file_id,  # Стикеры можно отправлять по file_id
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as sticker_error:
+                                    logger.error(f"Error processing sticker for user {user_id}: {sticker_error}")
+                                    raise sticker_error
+
+                            elif message.content_type == "location":
+                                # Местоположение с извлеченными кнопками
+                                try:
+                                    result = await broadcast_bot.send_location(
+                                        chat_id=user_id,
+                                        latitude=message.location.latitude,
+                                        longitude=message.location.longitude,
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as location_error:
+                                    logger.error(f"Error processing location for user {user_id}: {location_error}")
+                                    raise location_error
+
+                            elif message.content_type == "contact":
+                                # Контакт с извлеченными кнопками
+                                try:
+                                    result = await broadcast_bot.send_contact(
+                                        chat_id=user_id,
+                                        phone_number=message.contact.phone_number,
+                                        first_name=message.contact.first_name,
+                                        last_name=getattr(message.contact, 'last_name', None),
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as contact_error:
+                                    logger.error(f"Error processing contact for user {user_id}: {contact_error}")
+                                    raise contact_error
+
+                            elif message.content_type == "poll":
+                                # Опрос с извлеченными кнопками
+                                try:
+                                    result = await broadcast_bot.send_poll(
+                                        chat_id=user_id,
+                                        question=message.poll.question,
+                                        options=[option.text for option in message.poll.options],
+                                        is_anonymous=message.poll.is_anonymous,
+                                        type=message.poll.type,
+                                        allows_multiple_answers=getattr(message.poll, 'allows_multiple_answers', False),
+                                        reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
+                                    )
+                                except Exception as poll_error:
+                                    logger.error(f"Error processing poll for user {user_id}: {poll_error}")
+                                    raise poll_error
+
                             else:
-                                # Другие типы медиа - текстовый fallback с кнопками
+                                # Неподдерживаемые типы - текстовый fallback с кнопками
+                                logger.warning(f"Unsupported content type: {message.content_type}")
                                 result = await broadcast_bot.send_message(
                                     chat_id=user_id,
-                                    text=f"📎 МЕДИА СООБЩЕНИЕ\n\nОригинальное сообщение содержало: {message.content_type.upper()}",
+                                    text=f"📎 МЕДИА СООБЩЕНИЕ\n\nОригинальное сообщение содержало: {message.content_type.upper()}\n\n⚠️ Данный тип медиа не поддерживается для рассылки",
                                     reply_markup=extracted_keyboard  # ✅ Извлеченные кнопки
                                 )
 
@@ -1360,6 +1496,7 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             f"Используйте /admin чтобы вернуться в панель"
         )
         await state.clear()
+
 async def notify_admins_about_broadcast(bot, admin_name, admin_id, sent_count, error_count, total_count):
     """Уведомить других админов о рассылке"""
     try:
