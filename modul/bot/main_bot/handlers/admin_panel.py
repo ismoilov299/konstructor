@@ -1063,15 +1063,89 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                             # Debug для первых 3 пользователей каждого бота
                             if user_index <= 3:
                                 logger.info(f"Sending to user {user_id} via bot @{bot_info.username}")
-                                logger.info(
-                                    f"copy_message params: chat_id={user_id}, from_chat_id={message.chat.id}, message_id={message.message_id}")
 
-                            # Отправляем сообщение
-                            result = await broadcast_bot.copy_message(
-                                chat_id=user_id,
-                                from_chat_id=message.chat.id,
-                                message_id=message.message_id
-                            )
+                            # Отправляем сообщение в зависимости от типа
+                            if message.content_type == "text":
+                                # Текстовое сообщение
+                                result = await broadcast_bot.send_message(
+                                    chat_id=user_id,
+                                    text=message.text,
+                                    parse_mode=message.parse_mode,
+                                    entities=message.entities
+                                )
+                            elif message.content_type == "photo":
+                                # Фото с подписью
+                                result = await broadcast_bot.send_photo(
+                                    chat_id=user_id,
+                                    photo=message.photo[-1].file_id,
+                                    caption=message.caption,
+                                    parse_mode=message.parse_mode,
+                                    caption_entities=message.caption_entities
+                                )
+                            elif message.content_type == "video":
+                                # Видео с подписью
+                                result = await broadcast_bot.send_video(
+                                    chat_id=user_id,
+                                    video=message.video.file_id,
+                                    caption=message.caption,
+                                    parse_mode=message.parse_mode,
+                                    caption_entities=message.caption_entities
+                                )
+                            elif message.content_type == "document":
+                                # Документ
+                                result = await broadcast_bot.send_document(
+                                    chat_id=user_id,
+                                    document=message.document.file_id,
+                                    caption=message.caption,
+                                    parse_mode=message.parse_mode,
+                                    caption_entities=message.caption_entities
+                                )
+                            elif message.content_type == "audio":
+                                # Аудио
+                                result = await broadcast_bot.send_audio(
+                                    chat_id=user_id,
+                                    audio=message.audio.file_id,
+                                    caption=message.caption,
+                                    parse_mode=message.parse_mode,
+                                    caption_entities=message.caption_entities
+                                )
+                            elif message.content_type == "voice":
+                                # Голосовое сообщение
+                                result = await broadcast_bot.send_voice(
+                                    chat_id=user_id,
+                                    voice=message.voice.file_id,
+                                    caption=message.caption,
+                                    parse_mode=message.parse_mode,
+                                    caption_entities=message.caption_entities
+                                )
+                            elif message.content_type == "video_note":
+                                # Кружок
+                                result = await broadcast_bot.send_video_note(
+                                    chat_id=user_id,
+                                    video_note=message.video_note.file_id
+                                )
+                            elif message.content_type == "animation":
+                                # GIF
+                                result = await broadcast_bot.send_animation(
+                                    chat_id=user_id,
+                                    animation=message.animation.file_id,
+                                    caption=message.caption,
+                                    parse_mode=message.parse_mode,
+                                    caption_entities=message.caption_entities
+                                )
+                            elif message.content_type == "sticker":
+                                # Стикер
+                                result = await broadcast_bot.send_sticker(
+                                    chat_id=user_id,
+                                    sticker=message.sticker.file_id
+                                )
+                            else:
+                                # Неподдерживаемый тип - пропускаем
+                                logger.warning(f"Unsupported message type: {message.content_type}")
+                                error_count += 1
+                                other_errors_count += 1
+                                continue
+
                             sent_count += 1
 
                             if user_index <= 3:
