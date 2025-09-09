@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 class AdminChannelStates(StatesGroup):
     waiting_for_channel_message = State()
 
+class AdminChannelStates(StatesGroup):
+    waiting_for_channel_message = State()
+    waiting_for_broadcast_message = State()
 
 # Админ ID список
 ADMIN_IDS = [
@@ -43,11 +46,35 @@ def get_admin_main_menu():
         InlineKeyboardButton(text="📢 Каналы", callback_data="admin_channels")
     )
     keyboard.row(
+        InlineKeyboardButton(text="📣 Рассылка", callback_data="admin_broadcast"),  # Yangi tugma
         InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_refresh")
     )
 
     return keyboard.as_markup()
 
+@sync_to_async
+def get_all_active_bots():
+    """Получить все активные боты"""
+    try:
+        from modul.models import Bot
+        bots = Bot.objects.filter(bot_enable=True).values('token', 'username')
+        return list(bots)
+    except Exception as e:
+        logger.error(f"Error getting active bots: {e}")
+        return []
+
+@sync_to_async
+def get_all_bot_users():
+    """Получить всех пользователей всех ботов"""
+    try:
+        from modul.models import ClientBotUser
+        users = ClientBotUser.objects.select_related('user', 'bot').filter(
+            bot__bot_enable=True
+        ).values('uid', 'bot__token')
+        return list(users)
+    except Exception as e:
+        logger.error(f"Error getting bot users: {e}")
+        return []
 
 def get_channels_menu():
     """Меню управления каналами"""
@@ -834,3 +861,273 @@ async def process_admin_channel_message(message: Message, state: FSMContext, bot
             f"Используйте /admin чтобы вернуться в панель"
         )
         await state.clear()
+
+
+@sync_to_async
+def get_broadcast_stats():
+    """Получить статистику для рассылки"""
+    try:
+        from modul.models import Bot, ClientBotUser
+
+        active_bots = Bot.objects.filter(bot_enable=True).count()
+        total_users = ClientBotUser.objects.filter(bot__bot_enable=True).count()
+
+        return {
+            'active_bots': active_bots,
+            'total_users': total_users
+        }
+    except Exception as e:
+        logger.error(f"Error getting broadcast stats: {e}")
+        return {'active_bots': 0, 'total_users': 0}
+
+
+# Yangi handlerlar
+@main_bot_router.callback_query(F.data == "admin_broadcast")
+async def admin_broadcast_callback(callback: CallbackQuery):
+    """Меню рассылки"""
+    if not is_admin_user(callback.from_user.id):
+        await callback.answer("Доступ запрещен")
+        return
+
+    stats = await get_broadcast_stats()
+
+    text = (
+        f"📣 РАССЫЛКА ПО ВСЕМ БОТАМ\n\n"
+        f"📊 Охват рассылки:\n"
+        f"🤖 Активных ботов: {stats['active_bots']}\n"
+        f"👥 Всего пользователей: {stats['total_users']}\n\n"
+        f"⚠️ Сообщение будет отправлено ВСЕМ пользователям через ВСЕ активные боты!\n\n"
+        f"Выберите действие:"
+    )
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(
+        InlineKeyboardButton(text="📝 Создать рассылку", callback_data="broadcast_create"),
+        InlineKeyboardButton(text="📊 Статистика", callback_data="broadcast_stats")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")
+    )
+
+    await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
+    await callback.answer()
+
+
+@main_bot_router.callback_query(F.data == "broadcast_create")
+async def broadcast_create_callback(callback: CallbackQuery, state: FSMContext):
+    """Начать создание рассылки"""
+    if not is_admin_user(callback.from_user.id):
+        await callback.answer("Доступ запрещен")
+        return
+
+    text = (
+        f"📝 СОЗДАНИЕ РАССЫЛКИ\n\n"
+        f"Отправьте сообщение, которое хотите разослать:\n\n"
+        f"📎 Поддерживается:\n"
+        f"• Текст\n"
+        f"• Фото с подписью\n"
+        f"• Видео с подписью\n"
+        f"• Документы\n\n"
+        f"⚠️ После отправки сообщения начнется рассылка!"
+    )
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="admin_broadcast"))
+
+    await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
+    await state.set_state(AdminChannelStates.waiting_for_broadcast_message)
+    await callback.answer()
+
+
+@main_bot_router.callback_query(F.data == "broadcast_stats")
+async def broadcast_stats_callback(callback: CallbackQuery):
+    """Детальная статистика рассылки"""
+    if not is_admin_user(callback.from_user.id):
+        await callback.answer("Доступ запрещен")
+        return
+
+    bots = await get_all_active_bots()
+    stats = await get_broadcast_stats()
+
+    text = f"📊 ДЕТАЛЬНАЯ СТАТИСТИКА РАССЫЛКИ\n\n"
+    text += f"🤖 Активных ботов: {stats['active_bots']}\n"
+    text += f"👥 Всего пользователей: {stats['total_users']}\n\n"
+
+    if bots:
+        text += f"📋 Список активных ботов:\n"
+        for i, bot in enumerate(bots[:10], 1):  # Показываем первые 10
+            text += f"{i}. @{bot['username']}\n"
+
+        if len(bots) > 10:
+            text += f"... и еще {len(bots) - 10} ботов\n"
+
+    text += f"\n⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_broadcast"))
+
+    await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
+    await callback.answer()
+
+
+@main_bot_router.message(AdminChannelStates.waiting_for_broadcast_message)
+async def process_broadcast_message(message: Message, state: FSMContext, bot: Bot):
+    """Обработка сообщения для рассылки"""
+    if not is_admin_user(message.from_user.id):
+        await message.answer("Доступ запрещен")
+        await state.clear()
+        return
+
+    try:
+        # Получаем всех активных ботов
+        active_bots = await get_all_active_bots()
+
+        if not active_bots:
+            await message.answer(
+                "❌ Нет активных ботов для рассылки\n\n"
+                "Используйте /admin чтобы вернуться в панель"
+            )
+            await state.clear()
+            return
+
+        # Получаем всех пользователей
+        all_users = await get_all_bot_users()
+
+        if not all_users:
+            await message.answer(
+                "❌ Нет пользователей для рассылки\n\n"
+                "Используйте /admin чтобы вернуться в панель"
+            )
+            await state.clear()
+            return
+
+        # Показываем информацию о рассылке
+        stats_msg = await message.answer(
+            f"🚀 НАЧИНАЮ РАССЫЛКУ...\n\n"
+            f"📊 Статистика:\n"
+            f"🤖 Ботов: {len(active_bots)}\n"
+            f"👥 Пользователей: {len(all_users)}\n\n"
+            f"⏳ Прогресс: 0/{len(all_users)} (0%)\n"
+            f"✅ Успешно: 0\n"
+            f"❌ Ошибок: 0"
+        )
+
+        # Счетчики
+        sent_count = 0
+        error_count = 0
+        total_count = len(all_users)
+
+        # Группируем пользователей по ботам
+        users_by_bot = {}
+        for user in all_users:
+            bot_token = user['bot__token']
+            if bot_token not in users_by_bot:
+                users_by_bot[bot_token] = []
+            users_by_bot[bot_token].append(user['uid'])
+
+        # Отправляем через каждого бота
+        for bot_token, user_ids in users_by_bot.items():
+            try:
+                # Создаем экземпляр бота
+                from aiogram import Bot
+                from modul.loader import bot_session
+
+                async with Bot(token=bot_token, session=bot_session).context(auto_close=False) as broadcast_bot:
+
+                    for user_id in user_ids:
+                        try:
+                            # Отправляем сообщение
+                            await broadcast_bot.copy_message(
+                                chat_id=user_id,
+                                from_chat_id=message.chat.id,
+                                message_id=message.message_id
+                            )
+                            sent_count += 1
+
+                        except Exception as e:
+                            error_count += 1
+                            logger.error(f"Error sending to user {user_id}: {e}")
+
+                        # Обновляем прогресс каждые 50 сообщений
+                        if (sent_count + error_count) % 50 == 0:
+                            progress = ((sent_count + error_count) / total_count) * 100
+                            try:
+                                await stats_msg.edit_text(
+                                    f"🚀 РАССЫЛКА В ПРОЦЕССЕ...\n\n"
+                                    f"📊 Статистика:\n"
+                                    f"🤖 Ботов: {len(active_bots)}\n"
+                                    f"👥 Пользователей: {total_count}\n\n"
+                                    f"⏳ Прогресс: {sent_count + error_count}/{total_count} ({progress:.1f}%)\n"
+                                    f"✅ Успешно: {sent_count}\n"
+                                    f"❌ Ошибок: {error_count}"
+                                )
+                            except:
+                                pass
+
+            except Exception as e:
+                logger.error(f"Error with bot {bot_token}: {e}")
+                # Если бот недоступен, считаем всех его пользователей как ошибки
+                error_count += len(user_ids)
+
+        # Финальная статистика
+        success_rate = (sent_count / total_count) * 100 if total_count > 0 else 0
+
+        final_text = (
+            f"✅ РАССЫЛКА ЗАВЕРШЕНА!\n\n"
+            f"📊 Итоговая статистика:\n"
+            f"🤖 Ботов использовано: {len(active_bots)}\n"
+            f"👥 Всего пользователей: {total_count}\n"
+            f"✅ Успешно доставлено: {sent_count}\n"
+            f"❌ Ошибок доставки: {error_count}\n"
+            f"📈 Успешность: {success_rate:.1f}%\n\n"
+            f"👤 Администратор: {message.from_user.full_name}\n"
+            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"Используйте /admin чтобы вернуться в панель"
+        )
+
+        await stats_msg.edit_text(final_text)
+
+        # Уведомляем других админов
+        await notify_admins_about_broadcast(
+            bot,
+            message.from_user.full_name,
+            message.from_user.id,
+            sent_count,
+            error_count,
+            total_count
+        )
+
+        await state.clear()
+
+    except Exception as e:
+        logger.error(f"Error in broadcast: {e}")
+        await message.answer(
+            f"❌ Ошибка при рассылке: {str(e)}\n\n"
+            f"Используйте /admin чтобы вернуться в панель"
+        )
+        await state.clear()
+
+
+async def notify_admins_about_broadcast(bot, admin_name, admin_id, sent_count, error_count, total_count):
+    """Уведомить других админов о рассылке"""
+    try:
+        success_rate = (sent_count / total_count) * 100 if total_count > 0 else 0
+
+        text = (
+            f"📣 РАССЫЛКА ВЫПОЛНЕНА\n\n"
+            f"👤 Администратор: {admin_name} ({admin_id})\n"
+            f"📊 Результат:\n"
+            f"✅ Доставлено: {sent_count}\n"
+            f"❌ Ошибок: {error_count}\n"
+            f"📈 Успешность: {success_rate:.1f}%\n"
+            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
+        for aid in ADMIN_IDS:
+            if aid != admin_id:
+                try:
+                    await bot.send_message(aid, text)
+                except:
+                    pass
+    except Exception as e:
+        logger.error(f"Error notifying admins about broadcast: {e}")
