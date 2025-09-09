@@ -1070,53 +1070,47 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                 result = await broadcast_bot.send_message(
                                     chat_id=user_id,
                                     text=message.text,
-                                    parse_mode=message.parse_mode,
-                                    entities=message.entities
+                                    entities=getattr(message, 'entities', None)
                                 )
                             elif message.content_type == "photo":
                                 # Фото с подписью
                                 result = await broadcast_bot.send_photo(
                                     chat_id=user_id,
                                     photo=message.photo[-1].file_id,
-                                    caption=message.caption,
-                                    parse_mode=message.parse_mode,
-                                    caption_entities=message.caption_entities
+                                    caption=getattr(message, 'caption', None),
+                                    caption_entities=getattr(message, 'caption_entities', None)
                                 )
                             elif message.content_type == "video":
                                 # Видео с подписью
                                 result = await broadcast_bot.send_video(
                                     chat_id=user_id,
                                     video=message.video.file_id,
-                                    caption=message.caption,
-                                    parse_mode=message.parse_mode,
-                                    caption_entities=message.caption_entities
+                                    caption=getattr(message, 'caption', None),
+                                    caption_entities=getattr(message, 'caption_entities', None)
                                 )
                             elif message.content_type == "document":
                                 # Документ
                                 result = await broadcast_bot.send_document(
                                     chat_id=user_id,
                                     document=message.document.file_id,
-                                    caption=message.caption,
-                                    parse_mode=message.parse_mode,
-                                    caption_entities=message.caption_entities
+                                    caption=getattr(message, 'caption', None),
+                                    caption_entities=getattr(message, 'caption_entities', None)
                                 )
                             elif message.content_type == "audio":
                                 # Аудио
                                 result = await broadcast_bot.send_audio(
                                     chat_id=user_id,
                                     audio=message.audio.file_id,
-                                    caption=message.caption,
-                                    parse_mode=message.parse_mode,
-                                    caption_entities=message.caption_entities
+                                    caption=getattr(message, 'caption', None),
+                                    caption_entities=getattr(message, 'caption_entities', None)
                                 )
                             elif message.content_type == "voice":
                                 # Голосовое сообщение
                                 result = await broadcast_bot.send_voice(
                                     chat_id=user_id,
                                     voice=message.voice.file_id,
-                                    caption=message.caption,
-                                    parse_mode=message.parse_mode,
-                                    caption_entities=message.caption_entities
+                                    caption=getattr(message, 'caption', None),
+                                    caption_entities=getattr(message, 'caption_entities', None)
                                 )
                             elif message.content_type == "video_note":
                                 # Кружок
@@ -1129,9 +1123,8 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                 result = await broadcast_bot.send_animation(
                                     chat_id=user_id,
                                     animation=message.animation.file_id,
-                                    caption=message.caption,
-                                    parse_mode=message.parse_mode,
-                                    caption_entities=message.caption_entities
+                                    caption=getattr(message, 'caption', None),
+                                    caption_entities=getattr(message, 'caption_entities', None)
                                 )
                             elif message.content_type == "sticker":
                                 # Стикер
