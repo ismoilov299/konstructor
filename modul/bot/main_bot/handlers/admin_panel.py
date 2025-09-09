@@ -969,7 +969,7 @@ async def broadcast_stats_callback(callback: CallbackQuery):
 
 @main_bot_router.message(AdminChannelStates.waiting_for_broadcast_message)
 async def process_broadcast_message(message: Message, state: FSMContext, bot: Bot):
-    """Обработка сообщения для рассылки"""
+    """Обработка сообщения для рассылки с поддержкой кнопок"""
     if not is_admin_user(message.from_user.id):
         await message.answer("Доступ запрещен")
         await state.clear()
@@ -980,6 +980,14 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
         logger.info(f"Starting broadcast from admin {message.from_user.id}")
         logger.info(f"Message ID: {message.message_id}, Chat ID: {message.chat.id}")
         logger.info(f"Message type: {message.content_type}")
+
+        # Keyboard mavjudligini tekshiramiz
+        has_keyboard = hasattr(message, 'reply_markup') and message.reply_markup is not None
+        logger.info(f"Message has keyboard: {has_keyboard}")
+        if has_keyboard:
+            logger.info(f"Keyboard type: {type(message.reply_markup)}")
+            if hasattr(message.reply_markup, 'inline_keyboard'):
+                logger.info(f"Keyboard buttons count: {len(message.reply_markup.inline_keyboard)}")
 
         # Получаем всех активных ботов
         active_bots = await get_all_active_bots()
@@ -1006,11 +1014,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             return
 
         # Показываем информацию о рассылке
+        keyboard_status = "с кнопками" if has_keyboard else "без кнопок"
         stats_msg = await message.answer(
             f"🚀 НАЧИНАЮ РАССЫЛКУ...\n\n"
             f"📊 Статистика:\n"
             f"🤖 Ботов: {len(active_bots)}\n"
-            f"👥 Пользователей: {len(all_users)}\n\n"
+            f"👥 Пользователей: {len(all_users)}\n"
+            f"📝 Тип сообщения: {message.content_type} ({keyboard_status})\n\n"
             f"⏳ Прогресс: 0/{len(all_users)} (0%)\n"
             f"✅ Успешно: 0\n"
             f"❌ Ошибок: 0"
@@ -1066,14 +1076,19 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
 
                             result = None  # Инициализируем result
 
+                            # Получаем keyboard из исходного сообщения
+                            keyboard = getattr(message, 'reply_markup', None)
+
                             # Отправляем сообщение в зависимости от типа
                             if message.content_type == "text":
                                 # Текстовое сообщение
                                 result = await broadcast_bot.send_message(
                                     chat_id=user_id,
                                     text=message.text,
-                                    entities=getattr(message, 'entities', None)
+                                    entities=getattr(message, 'entities', None),
+                                    reply_markup=keyboard  # ✅ Кнопки добавлены
                                 )
+
                             elif message.content_type == "photo":
                                 # Фото с подписью - используем file из main bot
                                 try:
@@ -1089,11 +1104,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         chat_id=user_id,
                                         photo=input_file,
                                         caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None)
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=keyboard  # ✅ Кнопки добавлены
                                     )
                                 except Exception as photo_error:
                                     logger.error(f"Error processing photo for user {user_id}: {photo_error}")
                                     raise photo_error
+
                             elif message.content_type == "video":
                                 # Видео с подписью
                                 try:
@@ -1107,11 +1124,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         chat_id=user_id,
                                         video=input_file,
                                         caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None)
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=keyboard  # ✅ Кнопки добавлены
                                     )
                                 except Exception as video_error:
                                     logger.error(f"Error processing video for user {user_id}: {video_error}")
                                     raise video_error
+
                             elif message.content_type == "document":
                                 # Документ
                                 try:
@@ -1126,11 +1145,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         chat_id=user_id,
                                         document=input_file,
                                         caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None)
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=keyboard  # ✅ Кнопки добавлены
                                     )
                                 except Exception as doc_error:
                                     logger.error(f"Error processing document for user {user_id}: {doc_error}")
                                     raise doc_error
+
                             elif message.content_type == "audio":
                                 # Аудио
                                 try:
@@ -1145,11 +1166,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         chat_id=user_id,
                                         audio=input_file,
                                         caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None)
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=keyboard  # ✅ Кнопки добавлены
                                     )
                                 except Exception as audio_error:
                                     logger.error(f"Error processing audio for user {user_id}: {audio_error}")
                                     raise audio_error
+
                             elif message.content_type == "voice":
                                 # Голосовое сообщение
                                 try:
@@ -1163,11 +1186,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         chat_id=user_id,
                                         voice=input_file,
                                         caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None)
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=keyboard  # ✅ Кнопки добавлены
                                     )
                                 except Exception as voice_error:
                                     logger.error(f"Error processing voice for user {user_id}: {voice_error}")
                                     raise voice_error
+
                             elif message.content_type == "video_note":
                                 # Кружок
                                 try:
@@ -1179,11 +1204,13 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
 
                                     result = await broadcast_bot.send_video_note(
                                         chat_id=user_id,
-                                        video_note=input_file
+                                        video_note=input_file,
+                                        reply_markup=keyboard  # ✅ Кнопки добавлены
                                     )
                                 except Exception as vn_error:
                                     logger.error(f"Error processing video_note for user {user_id}: {vn_error}")
                                     raise vn_error
+
                             elif message.content_type == "animation":
                                 # GIF
                                 try:
@@ -1198,16 +1225,50 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                         chat_id=user_id,
                                         animation=input_file,
                                         caption=getattr(message, 'caption', None),
-                                        caption_entities=getattr(message, 'caption_entities', None)
+                                        caption_entities=getattr(message, 'caption_entities', None),
+                                        reply_markup=keyboard  # ✅ Кнопки добавлены
                                     )
                                 except Exception as gif_error:
                                     logger.error(f"Error processing animation for user {user_id}: {gif_error}")
                                     raise gif_error
+
                             elif message.content_type == "sticker":
                                 # Стикер - можно попробовать по file_id, так как стикеры глобальные
                                 result = await broadcast_bot.send_sticker(
                                     chat_id=user_id,
-                                    sticker=message.sticker.file_id
+                                    sticker=message.sticker.file_id,
+                                    reply_markup=keyboard  # ✅ Кнопки добавлены
+                                )
+
+                            elif message.content_type == "location":
+                                # Местоположение
+                                result = await broadcast_bot.send_location(
+                                    chat_id=user_id,
+                                    latitude=message.location.latitude,
+                                    longitude=message.location.longitude,
+                                    reply_markup=keyboard  # ✅ Кнопки добавлены
+                                )
+
+                            elif message.content_type == "contact":
+                                # Контакт
+                                result = await broadcast_bot.send_contact(
+                                    chat_id=user_id,
+                                    phone_number=message.contact.phone_number,
+                                    first_name=message.contact.first_name,
+                                    last_name=getattr(message.contact, 'last_name', None),
+                                    reply_markup=keyboard  # ✅ Кнопки добавлены
+                                )
+
+                            elif message.content_type == "poll":
+                                # Опрос
+                                result = await broadcast_bot.send_poll(
+                                    chat_id=user_id,
+                                    question=message.poll.question,
+                                    options=[option.text for option in message.poll.options],
+                                    is_anonymous=message.poll.is_anonymous,
+                                    type=message.poll.type,
+                                    allows_multiple_answers=getattr(message.poll, 'allows_multiple_answers', False),
+                                    reply_markup=keyboard  # ✅ Кнопки добавлены
                                 )
                             else:
                                 # Неподдерживаемый тип - пропускаем
@@ -1220,8 +1281,9 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                             if result and hasattr(result, 'message_id') and result.message_id:
                                 sent_count += 1
                                 if user_index <= 3:
+                                    keyboard_info = "with buttons" if has_keyboard else "no buttons"
                                     logger.info(
-                                        f"✅ SUCCESS: User {user_id} received message {result.message_id} via @{bot_info.username}")
+                                        f"✅ SUCCESS: User {user_id} received message {result.message_id} via @{bot_info.username} ({keyboard_info})")
                             else:
                                 error_count += 1
                                 other_errors_count += 1
@@ -1260,7 +1322,8 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
                                     f"🚀 РАССЫЛКА В ПРОЦЕССЕ...\n\n"
                                     f"📊 Статистика:\n"
                                     f"🤖 Ботов: {len(active_bots)}\n"
-                                    f"👥 Пользователей: {total_count}\n\n"
+                                    f"👥 Пользователей: {total_count}\n"
+                                    f"📝 Тип сообщения: {message.content_type} ({keyboard_status})\n\n"
                                     f"⏳ Прогресс: {sent_count + error_count}/{total_count} ({progress:.1f}%)\n"
                                     f"✅ Успешно: {sent_count}\n"
                                     f"❌ Ошибок: {error_count}\n\n"
@@ -1287,6 +1350,7 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             f"📊 Итоговая статистика:\n"
             f"🤖 Ботов использовано: {len(active_bots)}\n"
             f"👥 Всего пользователей: {total_count}\n"
+            f"📝 Тип сообщения: {message.content_type} ({keyboard_status})\n"
             f"✅ Успешно доставлено: {sent_count}\n"
             f"❌ Ошибок доставки: {error_count}\n"
             f"📈 Успешность: {success_rate:.1f}%\n\n"
@@ -1311,7 +1375,9 @@ async def process_broadcast_message(message: Message, state: FSMContext, bot: Bo
             message.from_user.id,
             sent_count,
             error_count,
-            total_count
+            total_count,
+            message.content_type,
+            has_keyboard
         )
 
         await state.clear()
