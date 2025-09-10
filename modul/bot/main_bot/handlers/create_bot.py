@@ -181,7 +181,7 @@ async def show_module_info(callback: CallbackQuery, state: FSMContext):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⚙️ Создать", callback_data="start_create_with_module")],
-        [InlineKeyboardButton(text="◀️ Назад к модулям", callback_data="create_bot")]
+        [InlineKeyboardButton(text="◀️ Назад ", callback_data="create_bot")]
     ])
 
     await callback.message.edit_text(
@@ -210,7 +210,7 @@ async def start_create_with_module(callback: CallbackQuery, state: FSMContext):
     )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="◀️ Назад к модулям", callback_data="create_bot")]
+        [InlineKeyboardButton(text="◀️ Назад ", callback_data="create_bot")]
     ])
 
     await callback.message.edit_text(
@@ -366,9 +366,8 @@ async def process_token(message: Message, state: FSMContext):
             f"• <b>Username:</b> @{bot_info['username']}\n"
             f"• <b>Имя:</b> {bot_info['first_name']}\n"
             f"• <b>ID:</b> <code>{bot_info['id']}</code>\n\n"
-            f"🔧 <b>Активный модуль:</b>\n"
+            f"🔧 <b>Активный :</b>\n"
             f"✅ {selected_module_name}\n\n"
-            f"🌐 <b>Webhook:</b> {webhook_status}\n\n"
             f"🚀 <b>Ссылка на бот:</b>\n"
             f"https://t.me/{bot_info['username']}\n\n"
             f"✨ <b>Бот полностью настроен и готов к работе!</b>\n"

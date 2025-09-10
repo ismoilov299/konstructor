@@ -37,7 +37,7 @@ async def bot_list_keyboard(user_bots):
             bot.get('enable_chatgpt', False)
         ])
 
-        button_text = f"{status} @{bot['username']} ({modules_count} модулей)"
+        button_text = f"{status} @{bot['username']} ({modules_count} )"
         buttons.append([InlineKeyboardButton(
             text=button_text,
             callback_data=f"manage_bot:{bot['id']}"
@@ -130,7 +130,7 @@ async def show_my_bots(callback: CallbackQuery):
                 "• Получите токен от @BotFather\n"
                 "• Выберите нужные модули\n"
                 "• Готово за 2-3 минуты!\n\n"
-                "💡 <b>Доступно 6 профессиональных модулей:</b>\n"
+                "💡 <b>Доступно 6 профессиональных ботов:</b>\n"
                 "👥 Реферальный, 💞 Дайвинчик, 💬 Asker Бот,\n"
                 "🎥 Кинотеатр, 💾 DownLoader, 💡 ChatGPT",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -162,7 +162,7 @@ async def show_my_bots(callback: CallbackQuery):
             f"📊 <b>Общая информация:</b>\n"
             f"• Всего ботов: {total_bots}\n"
             f"• Активных ботов: {active_bots}\n"
-            f"• Всего модулей: {total_modules}\n\n"
+            # f"• Всего модулей: {total_modules}\n\n"
             f"📋 <b>Список ботов:</b>\n"
             f"Нажмите на бот для управления ↓"
         )
@@ -351,7 +351,7 @@ async def edit_bot_modules(callback: CallbackQuery):
             return
 
         text = (
-            f"🔧 <b>Редактирование модулей @{bot_stats['bot_username']}</b>\n\n"
+            f"🔧 <b>Редактирование ботов @{bot_stats['bot_username']}</b>\n\n"
             f"Следующие модули можно включить/выключить:\n"
             f"Каждый модуль добавляет отдельную функцию в ваш бот.\n\n"
             f"✅ Включенные модули\n"
