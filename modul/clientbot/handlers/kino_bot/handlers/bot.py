@@ -386,7 +386,7 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
 
 
 def extract_keyboard_from_message(message: types.Message) -> InlineKeyboardMarkup | None:
-    """Habardan keyboard ni ajratib olish"""
+    """Habardan keyboard ni ajratib olish - CLIENT BOT VERSION"""
     try:
         if not hasattr(message, 'reply_markup') or message.reply_markup is None:
             logger.info("No reply_markup found in message")
@@ -424,6 +424,12 @@ def extract_keyboard_from_message(message: types.Message) -> InlineKeyboardMarku
                         new_btn = InlineKeyboardButton(text=btn.text,
                                                        switch_inline_query_current_chat=btn.switch_inline_query_current_chat)
                         logger.info(f"  - Switch inline query current chat button")
+                    elif hasattr(btn, 'web_app') and btn.web_app:
+                        new_btn = InlineKeyboardButton(text=btn.text, web_app=btn.web_app)
+                        logger.info(f"  - Web app button")
+                    elif hasattr(btn, 'login_url') and btn.login_url:
+                        new_btn = InlineKeyboardButton(text=btn.text, login_url=btn.login_url)
+                        logger.info(f"  - Login URL button")
                     else:
                         # Default - callback button
                         callback_data = f"broadcast_btn_{row_idx}_{btn_idx}"
@@ -450,7 +456,7 @@ def extract_keyboard_from_message(message: types.Message) -> InlineKeyboardMarku
 
 
 def log_message_structure(message: types.Message):
-    """Habar strukturasini JSON formatda log qilish"""
+    """Habar strukturasini JSON formatda log qilish - CLIENT BOT VERSION"""
     try:
         debug_data = {
             "message_id": message.message_id,
@@ -480,10 +486,142 @@ def log_message_structure(message: types.Message):
                     keyboard_structure.append(row_structure)
                 debug_data["reply_markup"]["keyboard_structure"] = keyboard_structure
 
-        logger.info(f"MESSAGE STRUCTURE: {json.dumps(debug_data, indent=2, ensure_ascii=False)}")
+        logger.info(f"CLIENT BOT MESSAGE STRUCTURE: {json.dumps(debug_data, indent=2, ensure_ascii=False)}")
 
     except Exception as e:
         logger.error(f"Error logging message structure: {e}")
+
+
+async def send_message_with_keyboard(bot, user_id: int, message: types.Message, keyboard: InlineKeyboardMarkup = None):
+    """Universal message sender with keyboard support"""
+    try:
+        if message.content_type == "text":
+            # Текстовое сообщение
+            return await bot.send_message(
+                chat_id=user_id,
+                text=message.text,
+                entities=getattr(message, 'entities', None),
+                reply_markup=keyboard,
+                parse_mode=None
+            )
+
+        elif message.content_type == "photo":
+            # Фото
+            return await bot.send_photo(
+                chat_id=user_id,
+                photo=message.photo[-1].file_id,
+                caption=getattr(message, 'caption', None),
+                caption_entities=getattr(message, 'caption_entities', None),
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "video":
+            # Видео
+            return await bot.send_video(
+                chat_id=user_id,
+                video=message.video.file_id,
+                caption=getattr(message, 'caption', None),
+                caption_entities=getattr(message, 'caption_entities', None),
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "document":
+            # Документ
+            return await bot.send_document(
+                chat_id=user_id,
+                document=message.document.file_id,
+                caption=getattr(message, 'caption', None),
+                caption_entities=getattr(message, 'caption_entities', None),
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "audio":
+            # Аудио
+            return await bot.send_audio(
+                chat_id=user_id,
+                audio=message.audio.file_id,
+                caption=getattr(message, 'caption', None),
+                caption_entities=getattr(message, 'caption_entities', None),
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "voice":
+            # Голосовое сообщение
+            return await bot.send_voice(
+                chat_id=user_id,
+                voice=message.voice.file_id,
+                caption=getattr(message, 'caption', None),
+                caption_entities=getattr(message, 'caption_entities', None),
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "video_note":
+            # Кружок (video note)
+            return await bot.send_video_note(
+                chat_id=user_id,
+                video_note=message.video_note.file_id,
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "animation":
+            # GIF/анимация
+            return await bot.send_animation(
+                chat_id=user_id,
+                animation=message.animation.file_id,
+                caption=getattr(message, 'caption', None),
+                caption_entities=getattr(message, 'caption_entities', None),
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "sticker":
+            # Стикер
+            return await bot.send_sticker(
+                chat_id=user_id,
+                sticker=message.sticker.file_id,
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "location":
+            # Местоположение
+            return await bot.send_location(
+                chat_id=user_id,
+                latitude=message.location.latitude,
+                longitude=message.location.longitude,
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "contact":
+            # Контакт
+            return await bot.send_contact(
+                chat_id=user_id,
+                phone_number=message.contact.phone_number,
+                first_name=message.contact.first_name,
+                last_name=getattr(message.contact, 'last_name', None),
+                reply_markup=keyboard
+            )
+
+        elif message.content_type == "poll":
+            # Опрос
+            return await bot.send_poll(
+                chat_id=user_id,
+                question=message.poll.question,
+                options=[option.text for option in message.poll.options],
+                is_anonymous=message.poll.is_anonymous,
+                type=message.poll.type,
+                allows_multiple_answers=getattr(message.poll, 'allows_multiple_answers', False),
+                reply_markup=keyboard
+            )
+        else:
+            # Неподдерживаемый тип - fallback
+            return await bot.send_message(
+                chat_id=user_id,
+                text=f"📎 Медиа сообщение\n\nТип: {message.content_type.upper()}",
+                reply_markup=keyboard
+            )
+
+    except Exception as e:
+        logger.error(f"Error sending message to {user_id}: {e}")
+        raise e
 
 
 @client_bot_router.message(SendMessagesForm.message)
@@ -491,170 +629,153 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
 
     try:
-        print(f"📤 [BROADCAST] Broadcast started by user: {message.from_user.id}")
+        print(f"📤 [CLIENT-BROADCAST] Broadcast started by user: {message.from_user.id}")
 
         # Debug: habar strukturasini log qilish
         log_message_structure(message)
 
         bot_db = await shortcuts.get_bot(message.bot)
-        print(f"🤖 [BROADCAST] Bot found: {bot_db}")
+        print(f"🤖 [CLIENT-BROADCAST] Bot found: {bot_db}")
 
         if not bot_db:
             await message.answer("❌ Bot ma'lumotlari topilmadi!")
             return
 
         users = await get_all_users(bot_db)
-        print(f"👥 [BROADCAST] Users found: {len(users)} - {users}")
+        print(f"👥 [CLIENT-BROADCAST] Users found: {len(users)} - {users}")
 
         if not users:
-            await message.answer("Нет пользователей для рассылки.")
+            await message.answer("❌ Нет пользователей для рассылки.")
             return
 
-        # Professional keyboard extraction
+        # ✅ Professional keyboard extraction (COPY_MESSAGE ISHLATMAYMIZ!)
         extracted_keyboard = extract_keyboard_from_message(message)
         has_buttons = extracted_keyboard is not None
         button_count = 0
 
         if has_buttons:
             button_count = sum(len(row) for row in extracted_keyboard.inline_keyboard)
-            print(f"🔘 [BROADCAST] Extracted {button_count} buttons from message")
+            print(f"🔘 [CLIENT-BROADCAST] Extracted {button_count} buttons from message")
+        else:
+            print(f"📝 [CLIENT-BROADCAST] No buttons found in message")
 
         success_count = 0
         fail_count = 0
         total_users = len(users)
 
         # Progress xabari
+        keyboard_status = f"с кнопками ({button_count} шт.)" if has_buttons else "без кнопок"
         progress_msg = await message.answer(
-            f"📤 Рассылка началась...\n"
-            f"👥 Всего: {total_users} пользователей\n"
-            f"{'🔘 С кнопками: ' + str(button_count) + ' шт.' if has_buttons else '📝 Без кнопок'}"
+            f"🚀 Рассылка началась...\n\n"
+            f"📊 Статистика:\n"
+            f"👥 Всего пользователей: {total_users}\n"
+            f"📝 Тип сообщения: {message.content_type} ({keyboard_status})\n"
+            f"✅ Отправлено: 0\n"
+            f"❌ Ошибок: 0\n"
+            f"📈 Прогресс: 0%"
         )
 
-        # Har 50 ta userdan keyin progress yangilanadi
-        update_interval = 50
+        # Рассылка по пользователям
+        update_interval = 25  # Каждые 25 пользователей обновляем прогресс
         last_update = 0
 
         for idx, user_id in enumerate(users, 1):
             try:
-                print(f"📨 [BROADCAST] Sending to user: {user_id} ({idx}/{total_users})")
+                print(f"📨 [CLIENT-BROADCAST] Sending to user: {user_id} ({idx}/{total_users})")
 
-                # 1-usul: copy_message (eng yaxshi variant)
-                try:
-                    await message.bot.copy_message(
-                        chat_id=user_id,
-                        from_chat_id=message.chat.id,
-                        message_id=message.message_id
-                    )
+                # ✅ НЕ ИСПОЛЬЗУЕМ copy_message - ИСПОЛЬЗУЕМ НАШИ ФУНКЦИИ!
+                result = await send_message_with_keyboard(
+                    bot=message.bot,
+                    user_id=user_id,
+                    message=message,
+                    keyboard=extracted_keyboard
+                )
+
+                if result and hasattr(result, 'message_id'):
                     success_count += 1
-                    print(f"✅ [BROADCAST] copy_message successful to {user_id}")
+                    if idx <= 5:  # Первые 5 пользователей
+                        print(
+                            f"✅ [CLIENT-BROADCAST] SUCCESS: User {user_id} received message {result.message_id} ({keyboard_status})")
+                else:
+                    fail_count += 1
+                    print(f"❌ [CLIENT-BROADCAST] FAILED: No valid result for user {user_id}")
 
-                except Exception as copy_error:
-                    print(f"⚠️ [BROADCAST] copy_message failed for {user_id}: {copy_error}")
-
-                    # 2-usul: Manual sending with extracted keyboard
-                    if message.text:
-                        await message.bot.send_message(
-                            chat_id=user_id,
-                            text=message.text,
-                            entities=message.entities,
-                            reply_markup=extracted_keyboard,
-                            parse_mode=None
-                        )
-                    elif message.photo:
-                        await message.bot.send_photo(
-                            chat_id=user_id,
-                            photo=message.photo[-1].file_id,
-                            caption=message.caption,
-                            caption_entities=message.caption_entities,
-                            reply_markup=extracted_keyboard
-                        )
-                    elif message.video:
-                        await message.bot.send_video(
-                            chat_id=user_id,
-                            video=message.video.file_id,
-                            caption=message.caption,
-                            caption_entities=message.caption_entities,
-                            reply_markup=extracted_keyboard
-                        )
-                    elif message.document:
-                        await message.bot.send_document(
-                            chat_id=user_id,
-                            document=message.document.file_id,
-                            caption=message.caption,
-                            caption_entities=message.caption_entities,
-                            reply_markup=extracted_keyboard
-                        )
-                    else:
-                        # Oxirgi imkoniyat
-                        await message.bot.send_message(
-                            chat_id=user_id,
-                            text="📢 Рассылка",
-                            reply_markup=extracted_keyboard
-                        )
-
-                    success_count += 1
-                    print(f"✅ [BROADCAST] Manual send successful to {user_id}")
-
-                # Progress yangilash
+                # Progress update
                 if idx - last_update >= update_interval or idx == total_users:
                     try:
+                        progress_percent = (idx / total_users * 100)
                         await progress_msg.edit_text(
-                            f"📤 Рассылка в процессе...\n"
-                            f"👥 Всего: {total_users}\n"
+                            f"🚀 Рассылка в процессе...\n\n"
+                            f"📊 Статистика:\n"
+                            f"👥 Всего пользователей: {total_users}\n"
+                            f"📝 Тип сообщения: {message.content_type} ({keyboard_status})\n"
                             f"✅ Отправлено: {success_count}\n"
                             f"❌ Ошибок: {fail_count}\n"
-                            f"📊 Прогресс: {idx}/{total_users} ({(idx / total_users * 100):.1f}%)\n"
-                            f"{'🔘 Кнопки: ' + str(button_count) + ' шт.' if has_buttons else '📝 Без кнопок'}"
+                            f"📈 Прогресс: {idx}/{total_users} ({progress_percent:.1f}%)"
                         )
                         last_update = idx
                     except:
                         pass
 
                 # Flood control
-                import asyncio
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.05)  # 50ms задержка между сообщениями
 
             except Exception as e:
                 fail_count += 1
-                print(f"❌ [BROADCAST] Error sending to {user_id}: {e}")
+                error_msg = str(e).lower()
+
+                print(f"❌ [CLIENT-BROADCAST] Error sending to {user_id}: {e}")
                 logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
 
-                if "flood" in str(e).lower() or "too many" in str(e).lower():
+                # Обработка flood control
+                if "flood" in error_msg or "too many" in error_msg:
+                    print(f"⏸️ [CLIENT-BROADCAST] Flood control triggered, sleeping...")
                     await asyncio.sleep(1)
 
-        # Progress xabarini o'chirish
+        # Удаляем progress сообщение
         try:
             await progress_msg.delete()
         except:
             pass
 
-        # Natijani ko'rsatish
+        # ✅ Финальная статистика
+        success_rate = (success_count / total_users * 100) if total_users > 0 else 0
+
         result_text = f"""
 📊 <b>Рассылка завершена!</b>
 
+📈 <b>Результат:</b>
 👥 Всего пользователей: {total_users}
 ✅ Успешно отправлено: {success_count}
 ❌ Ошибок: {fail_count}
-📈 Успешность: {(success_count / total_users * 100):.1f}%
+📊 Успешность: {success_rate:.1f}%
 
-🤖 Бот: @{bot_db.username}
-{'🔘 Кнопки отправлены: ' + str(button_count) + ' шт.' if has_buttons else '📝 Отправлено без кнопок'}
+🤖 <b>Детали:</b>
+📝 Тип сообщения: {message.content_type}
+{f'🔘 Кнопки: {button_count} шт.' if has_buttons else '📝 Без кнопок'}
+🏷️ Бот: @{bot_db.username if bot_db.username else 'Unknown'}
 
-💡 <i>Функции расcылки:</i>
-• Автоматическое извлечение кнопок
-• Резервный механизм отправки
-• Сохранение форматирования
-• Поддержка всех типов медиа
+💡 <i>Возможности рассылки:</i>
+• ✅ Извлечение кнопок из любых сообщений
+• ✅ Поддержка всех типов медиа
+• ✅ Сохранение форматирования
+• ✅ Flood control защита
+• ✅ Резервные механизмы отправки
 """
 
         await message.answer(result_text, parse_mode="HTML")
-        print(
-            f"📊 [BROADCAST] Broadcast completed: {success_count}/{total_users} {'with buttons' if has_buttons else 'without buttons'}")
+
+        print(f"📊 [CLIENT-BROADCAST] Broadcast completed: {success_count}/{total_users} " +
+              f"({'with ' + str(button_count) + ' buttons' if has_buttons else 'without buttons'})")
 
     except Exception as e:
-        print(f"❌ [BROADCAST] Broadcast error: {e}")
-        logger.error(f"[BROADCAST] Broadcast error: {e}")
-        await message.answer("❌ Ошибка во время рассылки!")
+        print(f"❌ [CLIENT-BROADCAST] Global broadcast error: {e}")
+        logger.error(f"[CLIENT-BROADCAST] Global broadcast error: {e}")
+        await message.answer(
+            f"❌ Критическая ошибка во время рассылки!\n\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"Обратитесь к администратору."
+        )
 
 
 # Qo'shimcha: Maxsus formatli xabar yuborish uchun helper funksiya
