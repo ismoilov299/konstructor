@@ -37,7 +37,7 @@ async def bot_list_keyboard(user_bots):
             bot.get('enable_chatgpt', False)
         ])
 
-        button_text = f"{status} @{bot['username']} ({modules_count} )"
+        button_text = f"{status} @{bot['username']} "
         buttons.append([InlineKeyboardButton(
             text=button_text,
             callback_data=f"manage_bot:{bot['id']}"
