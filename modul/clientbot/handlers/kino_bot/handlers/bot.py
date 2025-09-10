@@ -390,17 +390,17 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
 
     try:
-        print(f"📤 [KINO] Broadcast started by user: {message.from_user.id}")
+        print(f"📤 [BROADCAST] Broadcast started by user: {message.from_user.id}")
 
         bot_db = await shortcuts.get_bot(message.bot)
-        print(f"🤖 [KINO] Bot found: {bot_db}")
+        print(f"🤖 [BROADCAST] Bot found: {bot_db}")
 
         if not bot_db:
             await message.answer("❌ Bot ma'lumotlari topilmadi!")
             return
 
         users = await get_all_users(bot_db)
-        print(f"👥 [KINO] Users found: {len(users)} - {users}")
+        print(f"👥 [BROADCAST] Users found: {len(users)} - {users}")
 
         if not users:
             await message.answer("Нет пользователей для рассылки.")
@@ -411,39 +411,52 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
         total_users = len(users)
 
         # Progress xabari
-        progress_msg = await message.answer(f"📤 Рассылка boshlandi...\n👥 Jami: {total_users} foydalanuvchi")
+        progress_msg = await message.answer(f"📤 Рассылка началась...\n👥 Всего: {total_users} пользователей")
 
-        for user_id in users:
+        # Har 50 ta userdan keyin progress yangilanadi
+        update_interval = 50
+        last_update = 0
+
+        for idx, user_id in enumerate(users, 1):
             try:
-                print(f"📨 [KINO] Sending to user: {user_id}")
+                print(f"📨 [BROADCAST] Sending to user: {user_id} ({idx}/{total_users})")
 
-                if message.text:
-                    await message.bot.send_message(chat_id=user_id, text=message.text)
-                elif message.photo:
-                    await message.bot.send_photo(chat_id=user_id, photo=message.photo[-1].file_id,
-                                                 caption=message.caption)
-                elif message.video:
-                    await message.bot.send_video(chat_id=user_id, video=message.video.file_id, caption=message.caption)
-                elif message.audio:
-                    await message.bot.send_audio(chat_id=user_id, audio=message.audio.file_id, caption=message.caption)
-                elif message.document:
-                    await message.bot.send_document(chat_id=user_id, document=message.document.file_id,
-                                                    caption=message.caption)
-                else:
-                    await message.bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id,
-                                                   message_id=message.message_id)
+                # copy_message barcha formatni, buttonlarni va media ni saqlab qoladi
+                await message.bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id
+                )
 
                 success_count += 1
-                print(f"✅ [KINO] Successfully sent to {user_id}")
+                print(f"✅ [BROADCAST] Successfully sent to {user_id}")
 
-                # Flood control
+                # Progress yangilash
+                if idx - last_update >= update_interval or idx == total_users:
+                    try:
+                        await progress_msg.edit_text(
+                            f"📤 Рассылка в процессе...\n"
+                            f"👥 Всего: {total_users}\n"
+                            f"✅ Отправлено: {success_count}\n"
+                            f"❌ Ошибок: {fail_count}\n"
+                            f"📊 Прогресс: {idx}/{total_users} ({(idx / total_users * 100):.1f}%)"
+                        )
+                        last_update = idx
+                    except:
+                        pass
+
+                # Flood control - Telegram API limitlariga mos
                 import asyncio
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.05)  # 20 xabar/soniya
 
             except Exception as e:
                 fail_count += 1
-                print(f"❌ [KINO] Error sending to {user_id}: {e}")
+                print(f"❌ [BROADCAST] Error sending to {user_id}: {e}")
                 logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+                # Ba'zi xatolarda biroz ko'proq kutish
+                if "flood" in str(e).lower() or "too many" in str(e).lower():
+                    await asyncio.sleep(1)
 
         # Progress xabarini o'chirish
         try:
@@ -460,16 +473,80 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 ❌ Ошибок: {fail_count}
 📈 Успешность: {(success_count / total_users * 100):.1f}%
 
-🤖 Бот: {bot_db.username}
+🤖 Бот: @{bot_db.username}
+
+💡 <i>Поддерживаются:</i>
+• Все виды медиа
+• Форматирование текста
+• Inline кнопки
+• Эмодзи и специальные символы
 """
 
         await message.answer(result_text, parse_mode="HTML")
-        print(f"📊 [KINO] Broadcast completed: {success_count}/{total_users}")
+        print(f"📊 [BROADCAST] Broadcast completed: {success_count}/{total_users}")
 
     except Exception as e:
-        print(f"❌ [KINO] Broadcast error: {e}")
-        logger.error(f"[KINO] Broadcast error: {e}")
-        await message.answer("❌ Рассылка sırasında xatolik yuz berdi!")
+        print(f"❌ [BROADCAST] Broadcast error: {e}")
+        logger.error(f"[BROADCAST] Broadcast error: {e}")
+        await message.answer("❌ Ошибка во время рассылки!")
+
+
+# Qo'shimcha: Maxsus formatli xabar yuborish uchun helper funksiya
+async def send_formatted_message(bot, chat_id: int, message: types.Message):
+    """
+    Xabarni barcha format va buttonlar bilan yuborish
+    """
+    try:
+        # copy_message eng to'g'ri variant
+        return await bot.copy_message(
+            chat_id=chat_id,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id
+        )
+    except Exception as e:
+        # Fallback: manual formatting bilan
+        try:
+            if message.text:
+                return await bot.send_message(
+                    chat_id=chat_id,
+                    text=message.text,
+                    entities=message.entities,
+                    reply_markup=message.reply_markup
+                )
+            elif message.photo:
+                return await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=message.photo[-1].file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_markup=message.reply_markup
+                )
+            elif message.video:
+                return await bot.send_video(
+                    chat_id=chat_id,
+                    video=message.video.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_markup=message.reply_markup
+                )
+            elif message.document:
+                return await bot.send_document(
+                    chat_id=chat_id,
+                    document=message.document.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_markup=message.reply_markup
+                )
+            else:
+                # Oxirgi imkoniyat sifatida copy_message
+                return await bot.copy_message(
+                    chat_id=chat_id,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id
+                )
+        except Exception as fallback_error:
+            print(f"❌ Fallback error: {fallback_error}")
+            raise fallback_error
 
 
 

@@ -1,10 +1,6 @@
 import logging
 import re
-import traceback
-from contextlib import suppress
-
 from aiogram import F, Bot, types,html
-from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.filters import CommandStart, Filter, CommandObject
 from aiogram.utils.deep_linking import create_start_link
 from aiogram.fsm.context import FSMContext
@@ -12,7 +8,6 @@ from aiogram.types import Message, BotCommand, CallbackQuery, LabeledPrice, Inli
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 from django.db import transaction
-from openpyxl.styles.builtins import percent
 
 from modul import models
 from modul.clientbot import shortcuts
@@ -57,7 +52,6 @@ def save_user(telegram_user, bot: Bot, inviter_uid=None):
         if not bot_instance:
             raise ValueError(f"Bot with token {bot.token} not found")
 
-        # UserTG yaratish/topish
         user_tg, user_created = models.UserTG.objects.get_or_create(
             uid=telegram_user.id,
             defaults={
@@ -72,14 +66,12 @@ def save_user(telegram_user, bot: Bot, inviter_uid=None):
             user_tg.username = telegram_user.username
             user_tg.save(update_fields=['username'])
 
-        # Inviter topish
         inviter_client = None
         if inviter_uid and str(inviter_uid).isdigit():
             inviter_client = models.ClientBotUser.objects.filter(
                 uid=int(inviter_uid), bot=bot_instance
             ).first()
 
-        # ClientBotUser yaratish/topish
         client_user, client_created = models.ClientBotUser.objects.get_or_create(
             uid=telegram_user.id,
             bot=bot_instance,
@@ -228,17 +220,6 @@ async def check_user_subscriptions(bot: Bot, user_id: int) -> bool:
 @client_bot_router.message(F.text == "💸Заработать", AnonBotFilter())
 async def anon_referral(message: Message, bot: Bot, state: FSMContext):
     bot_db = await shortcuts.get_bot(bot)
-    # sub_status = await check_subs(message.from_user.id, bot)
-    # if not sub_status:
-    #     kb = await get_subs_kb(bot)
-    #     await message.answer(
-    #         '**Чтобы воспользоваться ботом, необходимо подписаться на каналы**',
-    #         reply_markup=kb,
-    #         parse_mode="HTML"
-    #     )
-    #     return
-
-    # Referral link yaratish (ref_ prefixi bilan)
     ref_link = await generate_referral_link(bot, message.from_user.id)
     price = await get_actual_price(bot.token)
 
@@ -313,12 +294,10 @@ def get_channels_with_type_for_check():
 
 
 async def generate_referral_link(bot, user_id):
-    """Referral link yaratish"""
     me = await bot.get_me()
     return f"https://t.me/{me.username}?start=ref_{user_id}"
 
 async def generate_anonymous_link(bot, user_id):
-    """Anonim xabar link yaratish"""
     me = await bot.get_me()
     return f"https://t.me/{me.username}?start=anon_{user_id}"
 
@@ -330,7 +309,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
     args = command.args
     logger.info(f"Anon bot start: user {user_id}, args: {args}")
 
-    # Kanallarni tekshirish
     channels = await get_channels_with_type_for_check()
     if channels:
         subscribed_all = True
@@ -362,7 +340,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
                 await remove_sponsor_channel(channel_id)
 
         if not subscribed_all:
-            # Args ni saqlash (har qanday format bo'lsa ham)
             if args:
                 await state.update_data(referral_uid=args)
 
@@ -370,7 +347,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             await message.answer("Для использования бота подпишитесь на наши каналы:", reply_markup=markup)
             return
 
-    # Argumentlarni tahlil qilish
     referrer_uid = None
     target_id = None
 
@@ -390,7 +366,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             if int(args) != user_id:
                 target_id = int(args)
 
-    # Foydalanuvchini saqlash
     try:
         result = await save_user(message.from_user, bot, referrer_uid)
         if result.get('inviter') and result['user_created']:
@@ -415,7 +390,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
         await message.answer("Произошла ошибка. Попробуйте позже.")
         return
 
-    # Anonim xabar uchun yo'naltirish
     if target_id:
         target_exists = await check_user_exists(target_id)
         if target_exists:
@@ -432,7 +406,6 @@ async def start_command(message: Message, state: FSMContext, bot: Bot, command: 
             )
             return
 
-    # Asosiy menyu - anonim link bilan
     anonymous_link = await generate_anonymous_link(bot, user_id)
     await message.answer(
         f"🚀 <b>Начни получать анонимные сообщения прямо сейчас!</b>\n\n"
