@@ -410,8 +410,18 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
         fail_count = 0
         total_users = len(users)
 
+        # Tugmalar mavjudligini tekshirish
+        has_buttons = bool(message.reply_markup and message.reply_markup.inline_keyboard)
+        button_count = 0
+        if has_buttons:
+            button_count = sum(len(row) for row in message.reply_markup.inline_keyboard)
+
         # Progress xabari
-        progress_msg = await message.answer(f"📤 Рассылка началась...\n👥 Всего: {total_users} пользователей")
+        progress_msg = await message.answer(
+            f"📤 Рассылка началась...\n"
+            f"👥 Всего: {total_users} пользователей\n"
+            f"{'🔘 С кнопками: ' + str(button_count) + ' шт.' if has_buttons else '📝 Без кнопок'}"
+        )
 
         # Har 50 ta userdan keyin progress yangilanadi
         update_interval = 50
@@ -421,7 +431,7 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
             try:
                 print(f"📨 [BROADCAST] Sending to user: {user_id} ({idx}/{total_users})")
 
-                # copy_message barcha formatni, buttonlarni va media ni saqlab qoladi
+                # copy_message barcha formatni, buttonlarni va media ni AYNAN nusxalaydi
                 await message.bot.copy_message(
                     chat_id=user_id,
                     from_chat_id=message.chat.id,
@@ -429,7 +439,8 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
                 )
 
                 success_count += 1
-                print(f"✅ [BROADCAST] Successfully sent to {user_id}")
+                print(
+                    f"✅ [BROADCAST] Successfully sent to {user_id} {('with buttons' if has_buttons else 'without buttons')}")
 
                 # Progress yangilash
                 if idx - last_update >= update_interval or idx == total_users:
@@ -439,7 +450,8 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
                             f"👥 Всего: {total_users}\n"
                             f"✅ Отправлено: {success_count}\n"
                             f"❌ Ошибок: {fail_count}\n"
-                            f"📊 Прогресс: {idx}/{total_users} ({(idx / total_users * 100):.1f}%)"
+                            f"📊 Прогресс: {idx}/{total_users} ({(idx / total_users * 100):.1f}%)\n"
+                            f"{'🔘 Кнопки: ' + str(button_count) + ' шт.' if has_buttons else '📝 Без кнопок'}"
                         )
                         last_update = idx
                     except:
@@ -474,21 +486,81 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 📈 Успешность: {(success_count / total_users * 100):.1f}%
 
 🤖 Бот: @{bot_db.username}
+{'🔘 Кнопки отправлены: ' + str(button_count) + ' шт.' if has_buttons else '📝 Отправлено без кнопок'}
 
-💡 <i>Поддерживаются:</i>
-• Все виды медиа
+💡 <i>copy_message автоматически сохраняет:</i>
 • Форматирование текста
-• Inline кнопки
-• Эмодзи и специальные символы
+• Inline кнопки  
+• Медиа файлы
+• Эмодзи и символы
 """
 
         await message.answer(result_text, parse_mode="HTML")
-        print(f"📊 [BROADCAST] Broadcast completed: {success_count}/{total_users}")
+        print(
+            f"📊 [BROADCAST] Broadcast completed: {success_count}/{total_users} {'with buttons' if has_buttons else 'without buttons'}")
 
     except Exception as e:
         print(f"❌ [BROADCAST] Broadcast error: {e}")
         logger.error(f"[BROADCAST] Broadcast error: {e}")
         await message.answer("❌ Ошибка во время рассылки!")
+
+
+# Qo'shimcha: Maxsus formatli xabar yuborish uchun helper funksiya
+async def send_formatted_message(bot, chat_id: int, message: types.Message):
+    """
+    Xabarni barcha format va buttonlar bilan yuborish
+    """
+    try:
+        # copy_message eng to'g'ri variant
+        return await bot.copy_message(
+            chat_id=chat_id,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id
+        )
+    except Exception as e:
+        # Fallback: manual formatting bilan
+        try:
+            if message.text:
+                return await bot.send_message(
+                    chat_id=chat_id,
+                    text=message.text,
+                    entities=message.entities,
+                    reply_markup=message.reply_markup
+                )
+            elif message.photo:
+                return await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=message.photo[-1].file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_markup=message.reply_markup
+                )
+            elif message.video:
+                return await bot.send_video(
+                    chat_id=chat_id,
+                    video=message.video.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_markup=message.reply_markup
+                )
+            elif message.document:
+                return await bot.send_document(
+                    chat_id=chat_id,
+                    document=message.document.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_markup=message.reply_markup
+                )
+            else:
+                # Oxirgi imkoniyat sifatida copy_message
+                return await bot.copy_message(
+                    chat_id=chat_id,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id
+                )
+        except Exception as fallback_error:
+            print(f"❌ Fallback error: {fallback_error}")
+            raise fallback_error
 
 
 # Qo'shimcha: Maxsus formatli xabar yuborish uchun helper funksiya
