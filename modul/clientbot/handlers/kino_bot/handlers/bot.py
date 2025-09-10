@@ -385,12 +385,116 @@ async def admin_send_message(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text('Отправьте сообщение для рассылки (текст, фото, видео и т.д.)', reply_markup=cancel_kb)
 
 
+def extract_keyboard_from_message(message: types.Message) -> InlineKeyboardMarkup | None:
+    """Habardan keyboard ni ajratib olish"""
+    try:
+        if not hasattr(message, 'reply_markup') or message.reply_markup is None:
+            logger.info("No reply_markup found in message")
+            return None
+
+        # reply_markup mavjud
+        reply_markup = message.reply_markup
+        logger.info(f"Found reply_markup: {type(reply_markup)}")
+
+        # Inline keyboard ekanligini tekshiramiz
+        if hasattr(reply_markup, 'inline_keyboard'):
+            inline_keyboard = reply_markup.inline_keyboard
+            logger.info(f"Found inline_keyboard with {len(inline_keyboard)} rows")
+
+            # Yangi keyboard builder yaratamiz
+            builder = InlineKeyboardBuilder()
+
+            for row_idx, row in enumerate(inline_keyboard):
+                row_buttons = []
+                for btn_idx, btn in enumerate(row):
+                    logger.info(f"Processing button [{row_idx}][{btn_idx}]: text='{btn.text}'")
+
+                    # Button type ni aniqlash
+                    if hasattr(btn, 'url') and btn.url:
+                        logger.info(f"  - URL button: {btn.url}")
+                        new_btn = InlineKeyboardButton(text=btn.text, url=btn.url)
+                    elif hasattr(btn, 'callback_data') and btn.callback_data:
+                        logger.info(f"  - Callback button: {btn.callback_data}")
+                        new_btn = InlineKeyboardButton(text=btn.text, callback_data=btn.callback_data)
+                    elif hasattr(btn, 'switch_inline_query') and btn.switch_inline_query is not None:
+                        new_btn = InlineKeyboardButton(text=btn.text, switch_inline_query=btn.switch_inline_query)
+                        logger.info(f"  - Switch inline query button")
+                    elif hasattr(btn,
+                                 'switch_inline_query_current_chat') and btn.switch_inline_query_current_chat is not None:
+                        new_btn = InlineKeyboardButton(text=btn.text,
+                                                       switch_inline_query_current_chat=btn.switch_inline_query_current_chat)
+                        logger.info(f"  - Switch inline query current chat button")
+                    else:
+                        # Default - callback button
+                        callback_data = f"broadcast_btn_{row_idx}_{btn_idx}"
+                        new_btn = InlineKeyboardButton(text=btn.text, callback_data=callback_data)
+                        logger.info(f"  - Default callback button: {callback_data}")
+
+                    row_buttons.append(new_btn)
+
+                # Row qo'shish
+                if row_buttons:
+                    builder.row(*row_buttons)
+
+            result_keyboard = builder.as_markup()
+            logger.info(f"Successfully created keyboard with {len(result_keyboard.inline_keyboard)} rows")
+            return result_keyboard
+
+        else:
+            logger.info("reply_markup does not have inline_keyboard")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error extracting keyboard: {e}")
+        return None
+
+
+def log_message_structure(message: types.Message):
+    """Habar strukturasini JSON formatda log qilish"""
+    try:
+        debug_data = {
+            "message_id": message.message_id,
+            "content_type": message.content_type,
+            "text": getattr(message, 'text', None),
+            "caption": getattr(message, 'caption', None),
+            "has_reply_markup": hasattr(message, 'reply_markup') and message.reply_markup is not None
+        }
+
+        if hasattr(message, 'reply_markup') and message.reply_markup:
+            debug_data["reply_markup"] = {
+                "type": type(message.reply_markup).__name__,
+                "has_inline_keyboard": hasattr(message.reply_markup, 'inline_keyboard')
+            }
+
+            if hasattr(message.reply_markup, 'inline_keyboard'):
+                keyboard_structure = []
+                for row in message.reply_markup.inline_keyboard:
+                    row_structure = []
+                    for btn in row:
+                        btn_info = {"text": btn.text}
+                        if hasattr(btn, 'url') and btn.url:
+                            btn_info["url"] = btn.url
+                        if hasattr(btn, 'callback_data') and btn.callback_data:
+                            btn_info["callback_data"] = btn.callback_data
+                        row_structure.append(btn_info)
+                    keyboard_structure.append(row_structure)
+                debug_data["reply_markup"]["keyboard_structure"] = keyboard_structure
+
+        logger.info(f"MESSAGE STRUCTURE: {json.dumps(debug_data, indent=2, ensure_ascii=False)}")
+
+    except Exception as e:
+        logger.error(f"Error logging message structure: {e}")
+
+
 @client_bot_router.message(SendMessagesForm.message)
 async def admin_send_message_msg(message: types.Message, state: FSMContext):
     await state.clear()
 
     try:
         print(f"📤 [BROADCAST] Broadcast started by user: {message.from_user.id}")
+
+        # Debug: habar strukturasini log qilish
+        log_message_structure(message)
 
         bot_db = await shortcuts.get_bot(message.bot)
         print(f"🤖 [BROADCAST] Bot found: {bot_db}")
@@ -406,15 +510,18 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
             await message.answer("Нет пользователей для рассылки.")
             return
 
+        # Professional keyboard extraction
+        extracted_keyboard = extract_keyboard_from_message(message)
+        has_buttons = extracted_keyboard is not None
+        button_count = 0
+
+        if has_buttons:
+            button_count = sum(len(row) for row in extracted_keyboard.inline_keyboard)
+            print(f"🔘 [BROADCAST] Extracted {button_count} buttons from message")
+
         success_count = 0
         fail_count = 0
         total_users = len(users)
-
-        # Tugmalar mavjudligini tekshirish
-        has_buttons = bool(message.reply_markup and message.reply_markup.inline_keyboard)
-        button_count = 0
-        if has_buttons:
-            button_count = sum(len(row) for row in message.reply_markup.inline_keyboard)
 
         # Progress xabari
         progress_msg = await message.answer(
@@ -431,16 +538,62 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
             try:
                 print(f"📨 [BROADCAST] Sending to user: {user_id} ({idx}/{total_users})")
 
-                # copy_message barcha formatni, buttonlarni va media ni AYNAN nusxalaydi
-                await message.bot.copy_message(
-                    chat_id=user_id,
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id
-                )
+                # 1-usul: copy_message (eng yaxshi variant)
+                try:
+                    await message.bot.copy_message(
+                        chat_id=user_id,
+                        from_chat_id=message.chat.id,
+                        message_id=message.message_id
+                    )
+                    success_count += 1
+                    print(f"✅ [BROADCAST] copy_message successful to {user_id}")
 
-                success_count += 1
-                print(
-                    f"✅ [BROADCAST] Successfully sent to {user_id} {('with buttons' if has_buttons else 'without buttons')}")
+                except Exception as copy_error:
+                    print(f"⚠️ [BROADCAST] copy_message failed for {user_id}: {copy_error}")
+
+                    # 2-usul: Manual sending with extracted keyboard
+                    if message.text:
+                        await message.bot.send_message(
+                            chat_id=user_id,
+                            text=message.text,
+                            entities=message.entities,
+                            reply_markup=extracted_keyboard,
+                            parse_mode=None
+                        )
+                    elif message.photo:
+                        await message.bot.send_photo(
+                            chat_id=user_id,
+                            photo=message.photo[-1].file_id,
+                            caption=message.caption,
+                            caption_entities=message.caption_entities,
+                            reply_markup=extracted_keyboard
+                        )
+                    elif message.video:
+                        await message.bot.send_video(
+                            chat_id=user_id,
+                            video=message.video.file_id,
+                            caption=message.caption,
+                            caption_entities=message.caption_entities,
+                            reply_markup=extracted_keyboard
+                        )
+                    elif message.document:
+                        await message.bot.send_document(
+                            chat_id=user_id,
+                            document=message.document.file_id,
+                            caption=message.caption,
+                            caption_entities=message.caption_entities,
+                            reply_markup=extracted_keyboard
+                        )
+                    else:
+                        # Oxirgi imkoniyat
+                        await message.bot.send_message(
+                            chat_id=user_id,
+                            text="📢 Рассылка",
+                            reply_markup=extracted_keyboard
+                        )
+
+                    success_count += 1
+                    print(f"✅ [BROADCAST] Manual send successful to {user_id}")
 
                 # Progress yangilash
                 if idx - last_update >= update_interval or idx == total_users:
@@ -457,16 +610,15 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
                     except:
                         pass
 
-                # Flood control - Telegram API limitlariga mos
+                # Flood control
                 import asyncio
-                await asyncio.sleep(0.05)  # 20 xabar/soniya
+                await asyncio.sleep(0.05)
 
             except Exception as e:
                 fail_count += 1
                 print(f"❌ [BROADCAST] Error sending to {user_id}: {e}")
                 logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
 
-                # Ba'zi xatolarda biroz ko'proq kutish
                 if "flood" in str(e).lower() or "too many" in str(e).lower():
                     await asyncio.sleep(1)
 
@@ -488,11 +640,11 @@ async def admin_send_message_msg(message: types.Message, state: FSMContext):
 🤖 Бот: @{bot_db.username}
 {'🔘 Кнопки отправлены: ' + str(button_count) + ' шт.' if has_buttons else '📝 Отправлено без кнопок'}
 
-💡 <i>copy_message автоматически сохраняет:</i>
-• Форматирование текста
-• Inline кнопки  
-• Медиа файлы
-• Эмодзи и символы
+💡 <i>Функции расcылки:</i>
+• Автоматическое извлечение кнопок
+• Резервный механизм отправки
+• Сохранение форматирования
+• Поддержка всех типов медиа
 """
 
         await message.answer(result_text, parse_mode="HTML")
@@ -561,66 +713,6 @@ async def send_formatted_message(bot, chat_id: int, message: types.Message):
         except Exception as fallback_error:
             print(f"❌ Fallback error: {fallback_error}")
             raise fallback_error
-
-
-# Qo'shimcha: Maxsus formatli xabar yuborish uchun helper funksiya
-async def send_formatted_message(bot, chat_id: int, message: types.Message):
-    """
-    Xabarni barcha format va buttonlar bilan yuborish
-    """
-    try:
-        # copy_message eng to'g'ri variant
-        return await bot.copy_message(
-            chat_id=chat_id,
-            from_chat_id=message.chat.id,
-            message_id=message.message_id
-        )
-    except Exception as e:
-        # Fallback: manual formatting bilan
-        try:
-            if message.text:
-                return await bot.send_message(
-                    chat_id=chat_id,
-                    text=message.text,
-                    entities=message.entities,
-                    reply_markup=message.reply_markup
-                )
-            elif message.photo:
-                return await bot.send_photo(
-                    chat_id=chat_id,
-                    photo=message.photo[-1].file_id,
-                    caption=message.caption,
-                    caption_entities=message.caption_entities,
-                    reply_markup=message.reply_markup
-                )
-            elif message.video:
-                return await bot.send_video(
-                    chat_id=chat_id,
-                    video=message.video.file_id,
-                    caption=message.caption,
-                    caption_entities=message.caption_entities,
-                    reply_markup=message.reply_markup
-                )
-            elif message.document:
-                return await bot.send_document(
-                    chat_id=chat_id,
-                    document=message.document.file_id,
-                    caption=message.caption,
-                    caption_entities=message.caption_entities,
-                    reply_markup=message.reply_markup
-                )
-            else:
-                # Oxirgi imkoniyat sifatida copy_message
-                return await bot.copy_message(
-                    chat_id=chat_id,
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id
-                )
-        except Exception as fallback_error:
-            print(f"❌ Fallback error: {fallback_error}")
-            raise fallback_error
-
-
 
 @client_bot_router.callback_query(F.data == "imp", AdminFilter(), StateFilter('*'))
 async def manage_user_handler(call: CallbackQuery, state: FSMContext):
