@@ -749,7 +749,7 @@ async def overall_stats_callback(callback: CallbackQuery):
             InlineKeyboardButton(text="🔄 Обновить", callback_data="overall_stats")
         )
         keyboard.row(
-            InlineKeyboardButton(text="📊 По модулям", callback_data="module_stats"),
+            # InlineKeyboardButton(text="📊 По модулям", callback_data="module_stats"),
             InlineKeyboardButton(text="👥 По владельцам", callback_data="owner_stats")
         )
         keyboard.row(
