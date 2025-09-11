@@ -1,20 +1,23 @@
-# modul/bot/main_bot/handlers/manage_bots.py
-"""
-Botlarni boshqarish handlerlari
-"""
+
+
 
 import logging
-from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.fsm.context import FSMContext
-from asgiref.sync import sync_to_async
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from modul.bot.main_bot.handlers.admin_panel import is_admin_user
 from modul.bot.main_bot.services.user_service import (
     get_user_bots, get_bot_statistics, toggle_bot_status,
     update_bot_modules, delete_bot
 )
 from modul.bot.main_bot.states import ManageBotStates
+from modul.models import Bot
+
+from datetime import datetime, timedelta
+from django.db.models import Count, Q, Sum
+from django.utils import timezone
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -502,20 +505,423 @@ async def confirm_bot_deletion(callback: CallbackQuery):
         await callback.answer("❌ Произошла ошибка!", show_alert=True)
 
 
-# Placeholder handlers
-@manage_bots_router.callback_query(F.data.startswith("bot_settings:"))
-async def bot_settings_redirect(callback: CallbackQuery):
-    """Настройки бота - перенаправление в bot_settings.py"""
-    pass  # handler существует в bot_settings.py
 
 
-@manage_bots_router.callback_query(F.data.startswith("bot_chart:"))
-async def bot_chart_placeholder(callback: CallbackQuery):
-    """Просмотр графика бота (placeholder)"""
-    await callback.answer("⚠️ Эта функция еще разрабатывается...", show_alert=True)
+
+# Database query functions
+@sync_to_async
+def get_overall_statistics():
+    """Umumiy statistika ma'lumotlarini olish"""
+    try:
+        from modul.models import Bot, ClientBotUser, UserTG, User
+
+        # Bugungi sana
+        today = timezone.now().date()
+        yesterday = today - timedelta(days=1)
+        week_ago = today - timedelta(days=7)
+        month_ago = today - timedelta(days=30)
+
+        # Asosiy statistika
+        total_bots = Bot.objects.count()
+        active_bots = Bot.objects.filter(bot_enable=True).count()
+        inactive_bots = total_bots - active_bots
+
+        # Foydalanuvchilar statistikasi
+        total_users = ClientBotUser.objects.count()
+        total_unique_users = UserTG.objects.count()
+
+        # Bugungi yangi foydalanuvchilar
+        today_new_users = ClientBotUser.objects.filter(
+            user__created_at__date=today
+        ).count()
+
+        # Kechagi yangi foydalanuvchilar
+        yesterday_new_users = ClientBotUser.objects.filter(
+            user__created_at__date=yesterday
+        ).count()
+
+        # Haftalik yangi foydalanuvchilar
+        week_new_users = ClientBotUser.objects.filter(
+            user__created_at__date__gte=week_ago
+        ).count()
+
+        # Oylik yangi foydalanuvchilar
+        month_new_users = ClientBotUser.objects.filter(
+            user__created_at__date__gte=month_ago
+        ).count()
+
+        # Eng mashhur botlar (foydalanuvchilar soni bo'yicha)
+        top_bots = Bot.objects.filter(bot_enable=True).annotate(
+            user_count=Count('clients')
+        ).order_by('-user_count')[:5]
+
+        # Bot turlari bo'yicha statistika
+        module_stats = {
+            'ChatGPT': Bot.objects.filter(enable_chatgpt=True, bot_enable=True).count(),
+            'Download': Bot.objects.filter(enable_download=True, bot_enable=True).count(),
+            'Leo/Davinci': Bot.objects.filter(Q(enable_leo=True) | Q(enable_davinci=True), bot_enable=True).count(),
+            'Anon Chat': Bot.objects.filter(enable_anon=True, bot_enable=True).count(),
+            'Referral': Bot.objects.filter(enable_refs=True, bot_enable=True).count(),
+            'Kino': Bot.objects.filter(enable_kino=True, bot_enable=True).count(),
+        }
+
+        # Bot owner'lar statistikasi
+        total_owners = Bot.objects.values('owner').distinct().count()
+        most_active_owner = Bot.objects.values('owner__username', 'owner__first_name').annotate(
+            bot_count=Count('id')
+        ).order_by('-bot_count').first()
+
+        # O'sish tendentsiyasi (bugun vs kecha)
+        growth_rate = 0
+        if yesterday_new_users > 0:
+            growth_rate = ((today_new_users - yesterday_new_users) / yesterday_new_users) * 100
+
+        return {
+            'total_bots': total_bots,
+            'active_bots': active_bots,
+            'inactive_bots': inactive_bots,
+            'total_users': total_users,
+            'total_unique_users': total_unique_users,
+            'today_new_users': today_new_users,
+            'yesterday_new_users': yesterday_new_users,
+            'week_new_users': week_new_users,
+            'month_new_users': month_new_users,
+            'top_bots': list(top_bots),
+            'module_stats': module_stats,
+            'total_owners': total_owners,
+            'most_active_owner': most_active_owner,
+            'growth_rate': growth_rate,
+            'today': today.strftime('%Y-%m-%d'),
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting overall statistics: {e}")
+        return None
+
+
+@sync_to_async
+def get_detailed_bot_stats():
+    """Botlar bo'yicha batafsil statistika"""
+    try:
+        from modul.models import Bot, ClientBotUser
+
+        # Har bir bot uchun foydalanuvchilar soni
+        bot_stats = []
+        bots = Bot.objects.filter(bot_enable=True).annotate(
+            user_count=Count('clients')
+        ).order_by('-user_count')
+
+        for bot in bots:
+            # Enabled modules
+            enabled_modules = []
+            if bot.enable_chatgpt:
+                enabled_modules.append('ChatGPT')
+            if bot.enable_download:
+                enabled_modules.append('Download')
+            if bot.enable_leo:
+                enabled_modules.append('Leo')
+            if bot.enable_davinci:
+                enabled_modules.append('Davinci')
+            if bot.enable_anon:
+                enabled_modules.append('Anon')
+            if bot.enable_refs:
+                enabled_modules.append('Refs')
+            if bot.enable_kino:
+                enabled_modules.append('Kino')
+
+            bot_stats.append({
+                'username': bot.username,
+                'user_count': bot.user_count,
+                'owner': bot.owner.username or bot.owner.first_name or f'User{bot.owner.uid}',
+                'modules': enabled_modules,
+                'module_count': len(enabled_modules)
+            })
+
+        return bot_stats[:10]  # Top 10 botlar
+
+    except Exception as e:
+        logger.error(f"Error getting detailed bot stats: {e}")
+        return []
+
+
+def format_number(num):
+    """Sonlarni formatlash (1000 -> 1K)"""
+    if num >= 1000000:
+        return f"{num / 1000000:.1f}M"
+    elif num >= 1000:
+        return f"{num / 1000:.1f}K"
+    else:
+        return str(num)
+
+
+def get_growth_emoji(rate):
+    """O'sish ko'rsatkichi uchun emoji"""
+    if rate > 10:
+        return "🚀"
+    elif rate > 5:
+        return "📈"
+    elif rate > 0:
+        return "↗️"
+    elif rate == 0:
+        return "➡️"
+    elif rate > -5:
+        return "↘️"
+    else:
+        return "📉"
 
 
 @manage_bots_router.callback_query(F.data == "overall_stats")
-async def overall_stats_placeholder(callback: CallbackQuery):
-    """Общая статистика (placeholder)"""
-    await callback.answer("⚠️ Эта функция еще разрабатывается...", show_alert=True)
+async def overall_stats_callback(callback: CallbackQuery):
+    """Umumiy statistika ko'rsatish"""
+    if not is_admin_user(callback.from_user.id):
+        await callback.answer("Доступ запрещен", show_alert=True)
+        return
+
+    try:
+        # Loading message
+        await callback.message.edit_text("📊 Загрузка статистики...")
+
+        # Ma'lumotlarni olish
+        stats = await get_overall_statistics()
+        detailed_stats = await get_detailed_bot_stats()
+
+        if not stats:
+            await callback.message.edit_text(
+                "❌ Ошибка при загрузке статистики",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+                ])
+            )
+            return
+
+        # Growth emoji
+        growth_emoji = get_growth_emoji(stats['growth_rate'])
+
+        # Asosiy statistika matni
+        text = f"""
+📊 <b>ОБЩАЯ СТАТИСТИКА СИСТЕМЫ</b>
+
+🤖 <b>Боты:</b>
+├ Всего: {stats['total_bots']}
+├ Активных: {stats['active_bots']} ✅
+└ Неактивных: {stats['inactive_bots']} ❌
+
+👥 <b>Пользователи:</b>
+├ Всего подключений: {format_number(stats['total_users'])}
+├ Уникальных: {format_number(stats['total_unique_users'])}
+├ Сегодня: +{stats['today_new_users']} {growth_emoji}
+├ Вчера: +{stats['yesterday_new_users']}
+├ За неделю: +{stats['week_new_users']}
+└ За месяц: +{stats['month_new_users']}
+
+📈 <b>Рост:</b>
+└ {growth_emoji} {stats['growth_rate']:+.1f}% (сегодня vs вчера)
+
+🏆 <b>Топ модулей:</b>
+"""
+
+        # Modullar statistikasi
+        for module, count in stats['module_stats'].items():
+            if count > 0:
+                percentage = (count / stats['active_bots'] * 100) if stats['active_bots'] > 0 else 0
+                text += f"├ {module}: {count} ({percentage:.1f}%)\n"
+
+        # Eng mashhur botlar
+        if stats['top_bots']:
+            text += f"\n🥇 <b>Топ ботов:</b>\n"
+            for i, bot in enumerate(stats['top_bots'][:3], 1):
+                emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
+                text += f"{emoji} @{bot.username}: {format_number(bot.user_count)} польз.\n"
+
+        # Владельцы
+        if stats['most_active_owner']:
+            owner_name = stats['most_active_owner']['owner__username'] or stats['most_active_owner'][
+                'owner__first_name'] or 'Unknown'
+            text += f"\n👑 <b>Самый активный владелец:</b>\n"
+            text += f"└ {owner_name} ({stats['most_active_owner']['bot_count']} ботов)\n"
+
+        text += f"\n⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
+
+        # Keyboard
+        keyboard = InlineKeyboardBuilder()
+        keyboard.row(
+            InlineKeyboardButton(text="📋 Детальная статистика", callback_data="detailed_stats"),
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="overall_stats")
+        )
+        keyboard.row(
+            InlineKeyboardButton(text="📊 По модулям", callback_data="module_stats"),
+            InlineKeyboardButton(text="👥 По владельцам", callback_data="owner_stats")
+        )
+        keyboard.row(
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")
+        )
+
+        await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode="HTML")
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in overall_stats: {e}")
+        await callback.message.edit_text(
+            f"❌ Ошибка при загрузке статистики:\n{str(e)}",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+            ])
+        )
+        await callback.answer()
+
+
+@manage_bots_router.callback_query(F.data == "detailed_stats")
+async def detailed_stats_callback(callback: CallbackQuery):
+    """Batafsil statistika"""
+    if not is_admin_user(callback.from_user.id):
+        await callback.answer("Доступ запрещен", show_alert=True)
+        return
+
+    try:
+        await callback.message.edit_text("📋 Загрузка детальной статистики...")
+
+        bot_stats = await get_detailed_bot_stats()
+
+        if not bot_stats:
+            await callback.message.edit_text(
+                "❌ Нет данных для отображения",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")]
+                ])
+            )
+            return
+
+        text = "📋 <b>ДЕТАЛЬНАЯ СТАТИСТИКА БОТОВ</b>\n\n"
+
+        for i, bot in enumerate(bot_stats, 1):
+            modules_text = ", ".join(bot['modules']) if bot['modules'] else "Нет модулей"
+            text += f"<b>{i}. @{bot['username']}</b>\n"
+            text += f"├ 👥 Пользователей: {format_number(bot['user_count'])}\n"
+            text += f"├ 👤 Владелец: {bot['owner']}\n"
+            text += f"├ 🧩 Модулей: {bot['module_count']}\n"
+            text += f"└ 📋 {modules_text}\n\n"
+
+        text += f"⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
+
+        keyboard = InlineKeyboardBuilder()
+        keyboard.row(
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="detailed_stats"),
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")
+        )
+
+        await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode="HTML")
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in detailed_stats: {e}")
+        await callback.answer("❌ Ошибка загрузки", show_alert=True)
+
+
+@manage_bots_router.callback_query(F.data == "module_stats")
+async def module_stats_callback(callback: CallbackQuery):
+    """Modullar bo'yicha statistika"""
+    if not is_admin_user(callback.from_user.id):
+        await callback.answer("Доступ запрещен", show_alert=True)
+        return
+
+    try:
+        await callback.message.edit_text("🧩 Загрузка статистики модулей...")
+
+        stats = await get_overall_statistics()
+
+        if not stats:
+            await callback.answer("❌ Ошибка загрузки", show_alert=True)
+            return
+
+        text = "🧩 <b>СТАТИСТИКА ПО МОДУЛЯМ</b>\n\n"
+
+        # Modullarni popularity bo'yicha saralash
+        sorted_modules = sorted(stats['module_stats'].items(), key=lambda x: x[1], reverse=True)
+
+        total_active_bots = stats['active_bots']
+
+        for module, count in sorted_modules:
+            if count > 0:
+                percentage = (count / total_active_bots * 100) if total_active_bots > 0 else 0
+                bar_length = int(percentage / 10)  # 10% = 1 блок
+                bar = "█" * bar_length + "░" * (10 - bar_length)
+
+                text += f"<b>{module}:</b>\n"
+                text += f"├ Ботов: {count}\n"
+                text += f"├ Процент: {percentage:.1f}%\n"
+                text += f"└ {bar}\n\n"
+
+        text += f"📊 Всего активных ботов: {total_active_bots}\n"
+        text += f"⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
+
+        keyboard = InlineKeyboardBuilder()
+        keyboard.row(
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="module_stats"),
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")
+        )
+
+        await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode="HTML")
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in module_stats: {e}")
+        await callback.answer("❌ Ошибка загрузки", show_alert=True)
+
+
+@manage_bots_router.callback_query(F.data == "owner_stats")
+async def owner_stats_callback(callback: CallbackQuery):
+    """Egalar bo'yicha statistika"""
+    if not is_admin_user(callback.from_user.id):
+        await callback.answer("Доступ запрещен", show_alert=True)
+        return
+
+    try:
+        await callback.message.edit_text("👥 Загрузка статистики владельцев...")
+
+        # Top owners query
+        top_owners = await sync_to_async(lambda: list(
+            Bot.objects.values(
+                'owner__username',
+                'owner__first_name',
+                'owner__uid'
+            ).annotate(
+                bot_count=Count('id'),
+                active_bot_count=Count('id', filter=Q(bot_enable=True)),
+                total_users=Count('clients', distinct=True)
+            ).order_by('-bot_count')[:10]
+        ))()
+
+        if not top_owners:
+            await callback.message.edit_text(
+                "❌ Нет данных о владельцах",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")]
+                ])
+            )
+            return
+
+        text = "👑 <b>ТОП ВЛАДЕЛЬЦЕВ БОТОВ</b>\n\n"
+
+        for i, owner in enumerate(top_owners, 1):
+            name = owner['owner__username'] or owner['owner__first_name'] or f"User{owner['owner__uid']}"
+            emoji = "👑" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+
+            text += f"<b>{emoji} {name}</b>\n"
+            text += f"├ 🤖 Всего ботов: {owner['bot_count']}\n"
+            text += f"├ ✅ Активных: {owner['active_bot_count']}\n"
+            text += f"└ 👥 Пользователей: {format_number(owner['total_users'])}\n\n"
+
+        text += f"⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
+
+        keyboard = InlineKeyboardBuilder()
+        keyboard.row(
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="owner_stats"),
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")
+        )
+
+        await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode="HTML")
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in owner_stats: {e}")
+        await callback.answer("❌ Ошибка загрузки", show_alert=True)
