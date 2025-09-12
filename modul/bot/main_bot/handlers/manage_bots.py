@@ -749,7 +749,6 @@ async def overall_stats_callback(callback: CallbackQuery):
 🤖 <b>Ваши боты:</b>
 ├ Всего: {stats['total_bots']}
 ├ Активных: {stats['active_bots']} ✅
-├ Неактивных: {stats['inactive_bots']} ❌
 └ Средний охват: {stats['avg_users_per_bot']:.1f} польз/бот
 
 👥 <b>Пользователи ваших ботов:</b>
