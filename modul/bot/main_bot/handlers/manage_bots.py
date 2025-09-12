@@ -847,7 +847,6 @@ async def my_detailed_stats_callback(callback: CallbackQuery):
             text += f"<b>{i}. @{bot['username']} {status_emoji}</b>\n"
             text += f"├ 👥 Всего пользователей: {format_number(bot['user_count'])}\n"
             text += f"├ 🆕 Сегодня: +{bot['today_users']}\n"
-            text += f"├ 🧩 Модулей: {bot['module_count']}\n"
             text += f"└ 📋 {modules_text}\n\n"
 
         text += f"⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
