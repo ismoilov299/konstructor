@@ -707,22 +707,19 @@ async def overall_stats_callback(callback: CallbackQuery):
         # Loading message
         await callback.message.edit_text("📊 Загрузка вашей статистики...")
 
-        # Foydalanuvchi ID
         user_telegram_id = callback.from_user.id
 
-        # Ma'lumotlarni olish
         stats = await get_user_bot_statistics(user_telegram_id)
 
         if not stats:
             await callback.message.edit_text(
                 "❌ Ошибка при загрузке статистики.\nВозможно, вы не зарегистрированы в системе.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="my_bots")]
                 ])
             )
             return
 
-        # Agar botlar yo'q bo'lsa
         if stats.get('no_bots'):
             username = stats['user'].username or stats['user'].first_name or f"User{stats['user'].uid}"
             await callback.message.edit_text(
@@ -732,7 +729,7 @@ async def overall_stats_callback(callback: CallbackQuery):
                 f"💡 Создайте первого бота через главное меню!",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="➕ Создать бота", callback_data="create_bot")],
-                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="my_bots")]
                 ]),
                 parse_mode="HTML"
             )
@@ -806,7 +803,7 @@ async def overall_stats_callback(callback: CallbackQuery):
             # InlineKeyboardButton(text="📈 Графики", callback_data="my_growth_stats")
         )
         keyboard.row(
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="my_bots")
         )
 
         await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode="HTML")
@@ -817,7 +814,7 @@ async def overall_stats_callback(callback: CallbackQuery):
         await callback.message.edit_text(
             f"❌ Ошибка при загрузке статистики:\n{str(e)}",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data="my_bots")]
             ])
         )
         await callback.answer()
