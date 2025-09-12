@@ -762,19 +762,9 @@ async def overall_stats_callback(callback: CallbackQuery):
 📈 <b>Рост аудитории:</b>
 └ {growth_emoji} {stats['growth_rate']:+.1f}% (сегодня vs вчера)
 
-🏆 <b>Ваши модули:</b>
 """
 
-        # Modullar statistikasi
-        active_modules = []
-        for module, count in stats['module_stats'].items():
-            if count > 0:
-                percentage = (count / stats['active_bots'] * 100) if stats['active_bots'] > 0 else 0
-                text += f"├ {module}: {count} ({percentage:.1f}%)\n"
-                active_modules.append(module)
 
-        if not active_modules:
-            text += "└ Пока нет активных модулей\n"
 
         # Eng mashhur bot
         if stats['most_popular_bot']:
