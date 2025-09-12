@@ -1,6 +1,4 @@
 
-
-
 import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -506,14 +504,18 @@ async def confirm_bot_deletion(callback: CallbackQuery):
 
 
 
-
-
-# Database query functions
+# Database query functions for specific user
 @sync_to_async
-def get_overall_statistics():
-    """Umumiy statistika ma'lumotlarini olish"""
+def get_user_bot_statistics(user_telegram_id):
+    """Foydalanuvchining botlari uchun statistika"""
     try:
         from modul.models import Bot, ClientBotUser, UserTG, User
+
+        # Foydalanuvchini topish
+        try:
+            user = User.objects.get(uid=user_telegram_id)
+        except User.DoesNotExist:
+            return None
 
         # Bugungi sana
         today = timezone.now().date()
@@ -521,62 +523,74 @@ def get_overall_statistics():
         week_ago = today - timedelta(days=7)
         month_ago = today - timedelta(days=30)
 
-        # Asosiy statistika
-        total_bots = Bot.objects.count()
-        active_bots = Bot.objects.filter(bot_enable=True).count()
+        # Foydalanuvchining botlari
+        user_bots = Bot.objects.filter(owner=user)
+        total_bots = user_bots.count()
+        active_bots = user_bots.filter(bot_enable=True).count()
         inactive_bots = total_bots - active_bots
 
-        # Foydalanuvchilar statistikasi
-        total_users = ClientBotUser.objects.count()
-        total_unique_users = UserTG.objects.count()
+        if total_bots == 0:
+            return {
+                'user': user,
+                'total_bots': 0,
+                'no_bots': True
+            }
+
+        # Foydalanuvchining botlaridagi userlar
+        user_bot_clients = ClientBotUser.objects.filter(bot__owner=user)
+        total_users = user_bot_clients.count()
+        total_unique_users = user_bot_clients.values('user').distinct().count()
 
         # Bugungi yangi foydalanuvchilar
-        today_new_users = ClientBotUser.objects.filter(
+        today_new_users = user_bot_clients.filter(
             user__created_at__date=today
         ).count()
 
         # Kechagi yangi foydalanuvchilar
-        yesterday_new_users = ClientBotUser.objects.filter(
+        yesterday_new_users = user_bot_clients.filter(
             user__created_at__date=yesterday
         ).count()
 
         # Haftalik yangi foydalanuvchilar
-        week_new_users = ClientBotUser.objects.filter(
+        week_new_users = user_bot_clients.filter(
             user__created_at__date__gte=week_ago
         ).count()
 
         # Oylik yangi foydalanuvchilar
-        month_new_users = ClientBotUser.objects.filter(
+        month_new_users = user_bot_clients.filter(
             user__created_at__date__gte=month_ago
         ).count()
 
-        # Eng mashhur botlar (foydalanuvchilar soni bo'yicha)
-        top_bots = Bot.objects.filter(bot_enable=True).annotate(
+        # Foydalanuvchining eng mashhur botlari
+        top_bots = user_bots.filter(bot_enable=True).annotate(
             user_count=Count('clients')
         ).order_by('-user_count')[:5]
 
-        # Bot turlari bo'yicha statistika
+        # Foydalanuvchining bot turlari statistikasi
         module_stats = {
-            'ChatGPT': Bot.objects.filter(enable_chatgpt=True, bot_enable=True).count(),
-            'Download': Bot.objects.filter(enable_download=True, bot_enable=True).count(),
-            'Leo/Davinci': Bot.objects.filter(Q(enable_leo=True) | Q(enable_davinci=True), bot_enable=True).count(),
-            'Anon Chat': Bot.objects.filter(enable_anon=True, bot_enable=True).count(),
-            'Referral': Bot.objects.filter(enable_refs=True, bot_enable=True).count(),
-            'Kino': Bot.objects.filter(enable_kino=True, bot_enable=True).count(),
+            'ChatGPT': user_bots.filter(enable_chatgpt=True, bot_enable=True).count(),
+            'Download': user_bots.filter(enable_download=True, bot_enable=True).count(),
+            'Leo/Davinci': user_bots.filter(Q(enable_leo=True) | Q(enable_davinci=True), bot_enable=True).count(),
+            'Anon Chat': user_bots.filter(enable_anon=True, bot_enable=True).count(),
+            'Referral': user_bots.filter(enable_refs=True, bot_enable=True).count(),
+            'Kino': user_bots.filter(enable_kino=True, bot_enable=True).count(),
         }
-
-        # Bot owner'lar statistikasi
-        total_owners = Bot.objects.values('owner').distinct().count()
-        most_active_owner = Bot.objects.values('owner__username', 'owner__first_name').annotate(
-            bot_count=Count('id')
-        ).order_by('-bot_count').first()
 
         # O'sish tendentsiyasi (bugun vs kecha)
         growth_rate = 0
         if yesterday_new_users > 0:
             growth_rate = ((today_new_users - yesterday_new_users) / yesterday_new_users) * 100
+        elif today_new_users > 0 and yesterday_new_users == 0:
+            growth_rate = 100  # 100% o'sish agar kecha 0 bo'lsa
+
+        # O'rtacha bot per user
+        avg_users_per_bot = total_users / active_bots if active_bots > 0 else 0
+
+        # Eng faol bot
+        most_popular_bot = top_bots.first() if top_bots else None
 
         return {
+            'user': user,
             'total_bots': total_bots,
             'active_bots': active_bots,
             'inactive_bots': inactive_bots,
@@ -588,26 +602,33 @@ def get_overall_statistics():
             'month_new_users': month_new_users,
             'top_bots': list(top_bots),
             'module_stats': module_stats,
-            'total_owners': total_owners,
-            'most_active_owner': most_active_owner,
             'growth_rate': growth_rate,
+            'avg_users_per_bot': avg_users_per_bot,
+            'most_popular_bot': most_popular_bot,
             'today': today.strftime('%Y-%m-%d'),
+            'no_bots': False
         }
 
     except Exception as e:
-        logger.error(f"Error getting overall statistics: {e}")
+        logger.error(f"Error getting user bot statistics for {user_telegram_id}: {e}")
         return None
 
 
 @sync_to_async
-def get_detailed_bot_stats():
-    """Botlar bo'yicha batafsil statistika"""
+def get_user_detailed_bot_stats(user_telegram_id):
+    """Foydalanuvchining botlari bo'yicha batafsil statistika"""
     try:
-        from modul.models import Bot, ClientBotUser
+        from modul.models import Bot, ClientBotUser, User
 
-        # Har bir bot uchun foydalanuvchilar soni
+        # Foydalanuvchini topish
+        try:
+            user = User.objects.get(uid=user_telegram_id)
+        except User.DoesNotExist:
+            return []
+
+        # Foydalanuvchining botlari
         bot_stats = []
-        bots = Bot.objects.filter(bot_enable=True).annotate(
+        bots = Bot.objects.filter(owner=user).annotate(
             user_count=Count('clients')
         ).order_by('-user_count')
 
@@ -629,18 +650,27 @@ def get_detailed_bot_stats():
             if bot.enable_kino:
                 enabled_modules.append('Kino')
 
+            # Bugungi yangi userlar shu bot uchun
+            today = timezone.now().date()
+            today_users = ClientBotUser.objects.filter(
+                bot=bot,
+                user__created_at__date=today
+            ).count()
+
             bot_stats.append({
                 'username': bot.username,
                 'user_count': bot.user_count,
-                'owner': bot.owner.username or bot.owner.first_name or f'User{bot.owner.uid}',
+                'today_users': today_users,
+                'is_active': bot.bot_enable,
                 'modules': enabled_modules,
-                'module_count': len(enabled_modules)
+                'module_count': len(enabled_modules),
+                'created_date': bot.id  # Bot creation order approximation
             })
 
-        return bot_stats[:10]  # Top 10 botlar
+        return bot_stats
 
     except Exception as e:
-        logger.error(f"Error getting detailed bot stats: {e}")
+        logger.error(f"Error getting detailed bot stats for user {user_telegram_id}: {e}")
         return []
 
 
@@ -672,40 +702,60 @@ def get_growth_emoji(rate):
 
 @manage_bots_router.callback_query(F.data == "overall_stats")
 async def overall_stats_callback(callback: CallbackQuery):
-    """Umumiy statistika ko'rsatish"""
-    if not is_admin_user(callback.from_user.id):
-        await callback.answer("Доступ запрещен", show_alert=True)
-        return
-
+    """Foydalanuvchining bot statistikasini ko'rsatish"""
     try:
         # Loading message
-        await callback.message.edit_text("📊 Загрузка статистики...")
+        await callback.message.edit_text("📊 Загрузка вашей статистики...")
+
+        # Foydalanuvchi ID
+        user_telegram_id = callback.from_user.id
 
         # Ma'lumotlarni olish
-        stats = await get_overall_statistics()
-        detailed_stats = await get_detailed_bot_stats()
+        stats = await get_user_bot_statistics(user_telegram_id)
 
         if not stats:
             await callback.message.edit_text(
-                "❌ Ошибка при загрузке статистики",
+                "❌ Ошибка при загрузке статистики.\nВозможно, вы не зарегистрированы в системе.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
                 ])
             )
             return
 
+        # Agar botlar yo'q bo'lsa
+        if stats.get('no_bots'):
+            username = stats['user'].username or stats['user'].first_name or f"User{stats['user'].uid}"
+            await callback.message.edit_text(
+                f"🤖 <b>Ваши боты</b>\n\n"
+                f"👤 Пользователь: {username}\n"
+                f"📊 У вас пока нет ботов в системе.\n\n"
+                f"💡 Создайте первого бота через главное меню!",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Создать бота", callback_data="create_bot")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+                ]),
+                parse_mode="HTML"
+            )
+            return
+
+        # Username olish
+        username = stats['user'].username or stats['user'].first_name or f"User{stats['user'].uid}"
+
         # Growth emoji
         growth_emoji = get_growth_emoji(stats['growth_rate'])
 
         # Asosiy statistika matni
         text = f"""
-📊 <b>ОБЩАЯ СТАТИСТИКА СИСТЕМЫ</b>
+👤 <b>СТАТИСТИКА ВАШИХ БОТОВ</b>
+<i>Владелец: {username}</i>
 
-🤖 <b>Боты:</b>
+🤖 <b>Ваши боты:</b>
 ├ Всего: {stats['total_bots']}
-└ Активных: {stats['active_bots']} ✅
+├ Активных: {stats['active_bots']} ✅
+├ Неактивных: {stats['inactive_bots']} ❌
+└ Средний охват: {stats['avg_users_per_bot']:.1f} польз/бот
 
-👥 <b>Пользователи:</b>
+👥 <b>Пользователи ваших ботов:</b>
 ├ Всего подключений: {format_number(stats['total_users'])}
 ├ Уникальных: {format_number(stats['total_unique_users'])}
 ├ Сегодня: +{stats['today_new_users']} {growth_emoji}
@@ -713,43 +763,47 @@ async def overall_stats_callback(callback: CallbackQuery):
 ├ За неделю: +{stats['week_new_users']}
 └ За месяц: +{stats['month_new_users']}
 
-📈 <b>Рост:</b>
+📈 <b>Рост аудитории:</b>
 └ {growth_emoji} {stats['growth_rate']:+.1f}% (сегодня vs вчера)
 
-🏆 <b>Топ модулей:</b>
+🏆 <b>Ваши модули:</b>
 """
 
         # Modullar statistikasi
+        active_modules = []
         for module, count in stats['module_stats'].items():
             if count > 0:
                 percentage = (count / stats['active_bots'] * 100) if stats['active_bots'] > 0 else 0
                 text += f"├ {module}: {count} ({percentage:.1f}%)\n"
+                active_modules.append(module)
 
-        # Eng mashhur botlar
-        if stats['top_bots']:
-            text += f"\n🥇 <b>Топ ботов:</b>\n"
+        if not active_modules:
+            text += "└ Пока нет активных модулей\n"
+
+        # Eng mashhur bot
+        if stats['most_popular_bot']:
+            text += f"\n🥇 <b>Самый популярный бот:</b>\n"
+            text += f"└ @{stats['most_popular_bot'].username}: {format_number(stats['most_popular_bot'].user_count)} польз.\n"
+
+        # Top 3 botlar
+        if len(stats['top_bots']) > 1:
+            text += f"\n🏆 <b>Топ ваших ботов:</b>\n"
             for i, bot in enumerate(stats['top_bots'][:3], 1):
                 emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
-                text += f"{emoji} @{bot.username}: {format_number(bot.user_count)} польз.\n"
-
-        # Владельцы
-        if stats['most_active_owner']:
-            owner_name = stats['most_active_owner']['owner__username'] or stats['most_active_owner'][
-                'owner__first_name'] or 'Unknown'
-            text += f"\n👑 <b>Самый активный владелец:</b>\n"
-            text += f"└ {owner_name} ({stats['most_active_owner']['bot_count']} ботов)\n"
+                status = "✅" if bot.bot_enable else "❌"
+                text += f"{emoji} @{bot.username}: {format_number(bot.user_count)} польз. {status}\n"
 
         text += f"\n⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
 
         # Keyboard
         keyboard = InlineKeyboardBuilder()
         keyboard.row(
-            InlineKeyboardButton(text="📋 Детальная статистика", callback_data="detailed_stats"),
+            InlineKeyboardButton(text="📋 Детали по ботам", callback_data="my_detailed_stats"),
             InlineKeyboardButton(text="🔄 Обновить", callback_data="overall_stats")
         )
         keyboard.row(
-            # InlineKeyboardButton(text="📊 По модулям", callback_data="module_stats"),
-            InlineKeyboardButton(text="👥 По владельцам", callback_data="owner_stats")
+            InlineKeyboardButton(text="📊 По модулям", callback_data="my_module_stats"),
+            InlineKeyboardButton(text="📈 Графики", callback_data="my_growth_stats")
         )
         keyboard.row(
             InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")
@@ -769,34 +823,34 @@ async def overall_stats_callback(callback: CallbackQuery):
         await callback.answer()
 
 
-@manage_bots_router.callback_query(F.data == "detailed_stats")
-async def detailed_stats_callback(callback: CallbackQuery):
-    """Batafsil statistika"""
-    if not is_admin_user(callback.from_user.id):
-        await callback.answer("Доступ запрещен", show_alert=True)
-        return
-
+@manage_bots_router.callback_query(F.data == "my_detailed_stats")
+async def my_detailed_stats_callback(callback: CallbackQuery):
+    """Foydalanuvchining botlari bo'yicha batafsil statistika"""
     try:
-        await callback.message.edit_text("📋 Загрузка детальной статистики...")
+        await callback.message.edit_text("📋 Загрузка детальной статистики ваших ботов...")
 
-        bot_stats = await get_detailed_bot_stats()
+        user_telegram_id = callback.from_user.id
+        bot_stats = await get_user_detailed_bot_stats(user_telegram_id)
 
         if not bot_stats:
             await callback.message.edit_text(
-                "❌ Нет данных для отображения",
+                "❌ У вас пока нет ботов для отображения статистики",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Создать бота", callback_data="create_bot")],
                     [InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")]
                 ])
             )
             return
 
-        text = "📋 <b>ДЕТАЛЬНАЯ СТАТИСТИКА БОТОВ</b>\n\n"
+        text = "📋 <b>ДЕТАЛЬНАЯ СТАТИСТИКА ВАШИХ БОТОВ</b>\n\n"
 
         for i, bot in enumerate(bot_stats, 1):
             modules_text = ", ".join(bot['modules']) if bot['modules'] else "Нет модулей"
-            text += f"<b>{i}. @{bot['username']}</b>\n"
-            text += f"├ 👥 Пользователей: {format_number(bot['user_count'])}\n"
-            text += f"├ 👤 Владелец: {bot['owner']}\n"
+            status_emoji = "✅" if bot['is_active'] else "❌"
+
+            text += f"<b>{i}. @{bot['username']} {status_emoji}</b>\n"
+            text += f"├ 👥 Всего пользователей: {format_number(bot['user_count'])}\n"
+            text += f"├ 🆕 Сегодня: +{bot['today_users']}\n"
             text += f"├ 🧩 Модулей: {bot['module_count']}\n"
             text += f"└ 📋 {modules_text}\n\n"
 
@@ -804,7 +858,7 @@ async def detailed_stats_callback(callback: CallbackQuery):
 
         keyboard = InlineKeyboardBuilder()
         keyboard.row(
-            InlineKeyboardButton(text="🔄 Обновить", callback_data="detailed_stats"),
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="my_detailed_stats"),
             InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")
         )
 
@@ -812,27 +866,24 @@ async def detailed_stats_callback(callback: CallbackQuery):
         await callback.answer()
 
     except Exception as e:
-        logger.error(f"Error in detailed_stats: {e}")
+        logger.error(f"Error in my_detailed_stats: {e}")
         await callback.answer("❌ Ошибка загрузки", show_alert=True)
 
 
-@manage_bots_router.callback_query(F.data == "module_stats")
-async def module_stats_callback(callback: CallbackQuery):
-    """Modullar bo'yicha statistika"""
-    if not is_admin_user(callback.from_user.id):
-        await callback.answer("Доступ запрещен", show_alert=True)
-        return
-
+@manage_bots_router.callback_query(F.data == "my_module_stats")
+async def my_module_stats_callback(callback: CallbackQuery):
+    """Foydalanuvchining modullar bo'yicha statistika"""
     try:
-        await callback.message.edit_text("🧩 Загрузка статистики модулей...")
+        await callback.message.edit_text("🧩 Загрузка статистики ваших модулей...")
 
-        stats = await get_overall_statistics()
+        user_telegram_id = callback.from_user.id
+        stats = await get_user_bot_statistics(user_telegram_id)
 
-        if not stats:
-            await callback.answer("❌ Ошибка загрузки", show_alert=True)
+        if not stats or stats.get('no_bots'):
+            await callback.answer("❌ У вас нет ботов", show_alert=True)
             return
 
-        text = "🧩 <b>СТАТИСТИКА ПО МОДУЛЯМ</b>\n\n"
+        text = "🧩 <b>ВАШИ МОДУЛИ</b>\n\n"
 
         # Modullarni popularity bo'yicha saralash
         sorted_modules = sorted(stats['module_stats'].items(), key=lambda x: x[1], reverse=True)
@@ -850,12 +901,16 @@ async def module_stats_callback(callback: CallbackQuery):
                 text += f"├ Процент: {percentage:.1f}%\n"
                 text += f"└ {bar}\n\n"
 
-        text += f"📊 Всего активных ботов: {total_active_bots}\n"
+        if total_active_bots == 0:
+            text += "❌ Нет активных ботов с модулями\n"
+        else:
+            text += f"📊 Ваших активных ботов: {total_active_bots}\n"
+
         text += f"⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
 
         keyboard = InlineKeyboardBuilder()
         keyboard.row(
-            InlineKeyboardButton(text="🔄 Обновить", callback_data="module_stats"),
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="my_module_stats"),
             InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")
         )
 
@@ -863,7 +918,73 @@ async def module_stats_callback(callback: CallbackQuery):
         await callback.answer()
 
     except Exception as e:
-        logger.error(f"Error in module_stats: {e}")
+        logger.error(f"Error in my_module_stats: {e}")
+        await callback.answer("❌ Ошибка загрузки", show_alert=True)
+
+
+@manage_bots_router.callback_query(F.data == "my_growth_stats")
+async def my_growth_stats_callback(callback: CallbackQuery):
+    """Foydalanuvchining o'sish statistikasi"""
+    try:
+        await callback.message.edit_text("📈 Загрузка графиков роста...")
+
+        user_telegram_id = callback.from_user.id
+        stats = await get_user_bot_statistics(user_telegram_id)
+
+        if not stats or stats.get('no_bots'):
+            await callback.answer("❌ У вас нет ботов", show_alert=True)
+            return
+
+        growth_emoji = get_growth_emoji(stats['growth_rate'])
+
+        text = f"""
+📈 <b>АНАЛИЗ РОСТА ВАШИХ БОТОВ</b>
+
+📊 <b>Динамика пользователей:</b>
+├ Сегодня: +{stats['today_new_users']} {growth_emoji}
+├ Вчера: +{stats['yesterday_new_users']}
+├ За неделю: +{stats['week_new_users']}
+└ За месяц: +{stats['month_new_users']}
+
+📈 <b>Показатели роста:</b>
+├ Дневной рост: {stats['growth_rate']:+.1f}% {growth_emoji}
+├ Недельный средний: {stats['week_new_users'] / 7:.1f} польз/день
+└ Месячный средний: {stats['month_new_users'] / 30:.1f} польз/день
+
+🎯 <b>Эффективность:</b>
+├ Всего ботов: {stats['active_bots']} активных
+├ Средний охват: {stats['avg_users_per_bot']:.1f} польз/бот
+└ Общая аудитория: {format_number(stats['total_users'])}
+
+💡 <b>Рекомендации:</b>
+"""
+
+        # Рекомендации на основе данных
+        if stats['growth_rate'] > 10:
+            text += "🚀 Отличный рост! Продолжайте в том же духе!\n"
+        elif stats['growth_rate'] > 0:
+            text += "📈 Стабильный рост. Рассмотрите новые модули.\n"
+        else:
+            text += "📉 Стоит активизировать продвижение ботов.\n"
+
+        if stats['avg_users_per_bot'] < 10:
+            text += "💡 Сосредоточьтесь на продвижении существующих ботов.\n"
+        elif stats['avg_users_per_bot'] > 100:
+            text += "🎯 Рассмотрите создание специализированных ботов.\n"
+
+        text += f"\n⏰ Обновлено: {datetime.now().strftime('%H:%M:%S')}"
+
+        keyboard = InlineKeyboardBuilder()
+        keyboard.row(
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="my_growth_stats"),
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="overall_stats")
+        )
+
+        await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode="HTML")
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in my_growth_stats: {e}")
         await callback.answer("❌ Ошибка загрузки", show_alert=True)
 
 
