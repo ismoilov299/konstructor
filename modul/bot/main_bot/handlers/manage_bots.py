@@ -802,8 +802,8 @@ async def overall_stats_callback(callback: CallbackQuery):
             InlineKeyboardButton(text="🔄 Обновить", callback_data="overall_stats")
         )
         keyboard.row(
-            InlineKeyboardButton(text="📊 По модулям", callback_data="my_module_stats"),
-            InlineKeyboardButton(text="📈 Графики", callback_data="my_growth_stats")
+            # InlineKeyboardButton(text="📊 По модулям", callback_data="my_module_stats"),
+            # InlineKeyboardButton(text="📈 Графики", callback_data="my_growth_stats")
         )
         keyboard.row(
             InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")
