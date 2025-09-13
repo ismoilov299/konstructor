@@ -30,7 +30,7 @@ def is_admin_user(user_id: int) -> bool:
     """Проверка админских прав"""
     return user_id in ADMIN_IDS
 
-
+# main_menu()
 def get_admin_main_menu():
     """Главное меню админ панели"""
     keyboard = InlineKeyboardBuilder()
@@ -48,7 +48,7 @@ def get_admin_main_menu():
         InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_refresh")
     )
     keyboard.row(
-        InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")
     )
 
     return keyboard.as_markup()
