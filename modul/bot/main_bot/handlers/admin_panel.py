@@ -47,6 +47,9 @@ def get_admin_main_menu():
         InlineKeyboardButton(text="📣 Рассылка", callback_data="admin_broadcast"),  # Yangi tugma
         InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_refresh")
     )
+    keyboard.row(
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")
+    )
 
     return keyboard.as_markup()
 

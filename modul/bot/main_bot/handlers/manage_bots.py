@@ -766,7 +766,6 @@ async def overall_stats_callback(callback: CallbackQuery):
 
 
 
-        # Eng mashhur bot
         if stats['most_popular_bot']:
             text += f"\n🥇 <b>Самый популярный бот:</b>\n"
             text += f"└ @{stats['most_popular_bot'].username}: {format_number(stats['most_popular_bot'].user_count)} польз.\n"
