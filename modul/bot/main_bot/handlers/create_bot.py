@@ -355,10 +355,13 @@ async def process_token(message: Message, state: FSMContext):
             'chatgpt': '💡 ChatGPT'
         }
 
-        selected_module_name = module_names.get(selected_module, selected_module)
-        webhook_status = "✅ Успешно" if webhook_success else "⚠️ Ошибка (будет повторная попытка позже)"
+        print(f"Selected module: '{selected_module}'")
+        print(f"Available modules: {list(module_names.keys())}")
 
-        await state.clear()
+        # Получаем название модуля
+        selected_module_name = module_names.get(selected_module, f"⚙️ {selected_module}")
+
+        print(f"Selected module name: '{selected_module_name}'")
 
         success_text = (
             f"🎉 <b>Бот успешно создан!</b>\n\n"
@@ -366,7 +369,7 @@ async def process_token(message: Message, state: FSMContext):
             f"• <b>Username:</b> @{bot_info['username']}\n"
             f"• <b>Имя:</b> {bot_info['first_name']}\n"
             f"• <b>ID:</b> <code>{bot_info['id']}</code>\n\n"
-            f"🔧 <b>Активный :</b>\n"
+            f"🔧 <b>Активный модуль:</b>\n"
             f"✅ {selected_module_name}\n\n"
             f"🚀 <b>Ссылка на бот:</b>\n"
             f"https://t.me/{bot_info['username']}\n\n"
