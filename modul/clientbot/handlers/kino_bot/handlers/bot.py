@@ -2472,7 +2472,7 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
         sorted_unique_qualities = sorted(unique_list, key=sort_key)
 
-        # Ограничиваем количество кнопок (максимум 8)
+        # ✅ УЛУЧШЕНИЕ - более осторожные пороги в кнопках
         for quality_item in sorted_unique_qualities[:8]:
             quality_data = quality_item['data']
             quality_id = quality_data.get('id')
@@ -2488,11 +2488,13 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             else:
                 icon = "📄"
 
-            button_text = f"{icon} {quality_label} ({size_mb:.1f} MB)"
-
-            # Предупреждение о размере файла
-            if size_mb > 50:
-                button_text += " ⚠️"
+            # ✅ УЛУЧШЕННЫЕ ПРЕДУПРЕЖДЕНИЯ
+            if size_mb > 45:  # Понижаем порог с 50 до 45
+                button_text = f"{icon} {quality_label} (~{size_mb:.0f} MB) ⚠️"
+            elif size_mb > 40:  # Новый промежуточный порог
+                button_text = f"{icon} {quality_label} (~{size_mb:.1f} MB) ⚡"
+            else:
+                button_text = f"{icon} {quality_label} ({size_mb:.1f} MB)"
 
             keyboard.row(InlineKeyboardButton(
                 text=button_text,
@@ -2501,10 +2503,12 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
         keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
 
-        # STEP 4: Отображение информации
+        # STEP 4: Отображение информации с предупреждением
         info_text = (
             f"YouTube видео найдено!\n\n"
             f"Доступно уникальных качеств: {len(unique_qualities)}\n\n"
+            f"⚠️ **Важно:** Реальный размер может отличаться от показанного\n"
+            f"📏 **Лимит Telegram:** 50 МБ\n\n"
             f"Выберите качество для загрузки:"
         )
 
@@ -2512,15 +2516,16 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
         await state.update_data(
             youtube_url=url,
             youtube_video_id=video_id,
-            youtube_available_qualities=available_qualities,  # Все качества для поиска по ID
-            youtube_unique_qualities=list(unique_qualities.values()),  # Уникальные качества
+            youtube_available_qualities=available_qualities,
+            youtube_unique_qualities=list(unique_qualities.values()),
             youtube_api_type="real_api"
         )
         logger.info("Data saved to state")
 
         await progress_msg.edit_text(
             info_text,
-            reply_markup=keyboard.as_markup()
+            reply_markup=keyboard.as_markup(),
+            parse_mode="Markdown"
         )
         logger.info("YouTube handler completed successfully")
 
@@ -2566,7 +2571,7 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
         size_mb = int(selected_quality.get('size', 0)) / (1024 * 1024)
         quality_label = selected_quality.get('quality', 'Unknown')
 
-        # Size check
+        # ✅ ПЕРВИЧНАЯ ПРОВЕРКА (по данным API)
         if size_mb > 50:
             await callback.message.edit_text(
                 f"Файл слишком большой для Telegram!\n\n"
@@ -2579,7 +2584,7 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             f"Отправляю запрос на загрузку...\n\n"
             f"ID видео: {video_id}\n"
             f"Качество: {quality_label}\n"
-            f"Размер: {size_mb:.1f} МБ"
+            f"Размер (примерный): {size_mb:.1f} МБ"
         )
 
         # Real quality ID bilan download URL olish
@@ -2599,26 +2604,96 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             f"Ссылка получена!\n\n"
             f"Запрошено: {quality_label}\n"
             f"Получено: {actual_quality}\n\n"
-            f"Ожидание готовности файла..."
+            f"Проверяю реальный размер файла..."
         )
 
-        # File ready check
-        is_ready = await wait_for_youtube_file_ready(download_url, max_wait_minutes=3)
+        # ✅ НОВОЕ - проверка реального размера через HEAD запрос
+        logger.info("🔍 Checking real file size before download...")
 
-        if not is_ready:
+        real_size_mb = size_mb  # fallback к размеру из API
+
+        try:
+            # Сначала ждем готовности файла
+            is_ready = await wait_for_youtube_file_ready(download_url, max_wait_minutes=2)
+
+            if not is_ready:
+                await callback.message.edit_text(
+                    f"Файл не готов через 2 минуты\n\n"
+                    f"Попробуйте позже или выберите другое качество"
+                )
+                return
+
+            # Теперь проверяем реальный размер
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.head(download_url, timeout=15) as response:
+                    logger.info(f"📡 HEAD response status: {response.status}")
+
+                    if response.status == 200:
+                        content_length = response.headers.get('content-length')
+
+                        if content_length:
+                            real_size_bytes = int(content_length)
+                            real_size_mb = real_size_bytes / (1024 * 1024)
+
+                            logger.info(f"📏 Real file size: {real_size_mb:.1f} MB")
+
+                            # ✅ КРИТИЧЕСКАЯ ПРОВЕРКА - реальный размер
+                            if real_size_mb > 50:
+                                logger.error(f"❌ Real file too large: {real_size_mb:.1f} MB")
+
+                                await callback.message.edit_text(
+                                    f"❌ **Файл слишком большой для Telegram**\n\n"
+                                    f"📊 **Показан в кнопке:** {size_mb:.1f} МБ\n"
+                                    f"📏 **Реальный размер:** {real_size_mb:.1f} МБ\n"
+                                    f"🚫 **Лимит Telegram:** 50 МБ\n\n"
+                                    f"💡 **Рекомендации:**\n"
+                                    f"• Выберите качество пониже (480p, 360p)\n"
+                                    f"• Попробуйте аудио версию\n"
+                                    f"• Используйте внешний сервис",
+                                    parse_mode="Markdown"
+                                )
+                                return
+
+                            logger.info(f"✅ Real file size OK: {real_size_mb:.1f} MB")
+
+                            # Обновляем сообщение с реальным размером
+                            await callback.message.edit_text(
+                                f"✅ Файл готов к загрузке!\n\n"
+                                f"📋 Качество: {actual_quality}\n"
+                                f"📊 Показан: {size_mb:.1f} МБ\n"
+                                f"📏 Реальный: {real_size_mb:.1f} МБ\n\n"
+                                f"Начинаю загрузку..."
+                            )
+                        else:
+                            logger.warning("⚠️ Could not get content-length, using API size")
+                    else:
+                        logger.warning(f"⚠️ HEAD request failed: {response.status}")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Size check failed: {e} - proceeding with API size")
+
+            # Если проверка не удалась, используем размер из API
             await callback.message.edit_text(
-                f"Файл не готов через 3 минуты\n\n"
-                f"Попробуйте позже"
+                f"⚠️ Не удалось проверить точный размер\n\n"
+                f"Запрошено: {quality_label}\n"
+                f"Получено: {actual_quality}\n"
+                f"Примерный размер: {size_mb:.1f} МБ\n\n"
+                f"Продолжаю загрузку..."
             )
-            return
 
-        # Download and send
+        # Download and send с обновленным размером
         await download_and_send_youtube_fast(
-            callback, download_url, selected_quality, video_id, size_mb
+            callback, download_url, selected_quality, video_id, real_size_mb
         )
 
     except Exception as e:
         logger.error(f"Fast download callback error: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         await callback.message.edit_text("Ошибка при загрузке")
 
 
