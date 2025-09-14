@@ -2426,20 +2426,61 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             )
             return
 
-        # STEP 2: Sifatlar asosida keyboard yaratish
-        keyboard = InlineKeyboardBuilder()
+        # STEP 2: Уникальные качества (убираем дубликаты)
+        unique_qualities = {}
 
-        # Sifatlarni tartibga solish (yuqoridan pastga)
-        sorted_qualities = sorted(available_qualities, key=lambda x: int(x.get('quality', '0p').replace('p', '')),
-                                  reverse=True)
-
-        for quality_data in sorted_qualities[:6]:  # Faqat 6 ta eng yaxshisi
-            quality_id = quality_data.get('id')
+        for quality_data in available_qualities:
             quality_label = quality_data.get('quality', 'Unknown')
             quality_type = quality_data.get('type', 'video')
             size_mb = int(quality_data.get('size', 0)) / (1024 * 1024)
 
-            # Button yaratish
+            # Создаем уникальный ключ для качества и типа
+            unique_key = f"{quality_label}_{quality_type}"
+
+            # Если такого качества еще нет, или текущее меньше по размеру - сохраняем
+            if unique_key not in unique_qualities or size_mb < unique_qualities[unique_key]['size_mb']:
+                unique_qualities[unique_key] = {
+                    'data': quality_data,
+                    'size_mb': size_mb,
+                    'quality_label': quality_label,
+                    'quality_type': quality_type
+                }
+
+        logger.info(f"Unique qualities found: {len(unique_qualities)}")
+
+        # STEP 3: Сортировка и создание клавиатуры
+        keyboard = InlineKeyboardBuilder()
+
+        # Преобразуем в список и сортируем по качеству
+        unique_list = list(unique_qualities.values())
+
+        # Сортировка по разрешению (сначала видео, потом аудио)
+        def sort_key(item):
+            quality_label = item['quality_label']
+            quality_type = item['quality_type']
+
+            # Извлекаем числовое значение разрешения
+            try:
+                resolution = int(quality_label.replace('p', '').replace('k', '000'))
+            except:
+                resolution = 0
+
+            # Видео имеет приоритет над аудио
+            type_priority = 0 if quality_type == 'video' else 1
+
+            return (type_priority, -resolution)  # Отрицательное для сортировки по убыванию
+
+        sorted_unique_qualities = sorted(unique_list, key=sort_key)
+
+        # Ограничиваем количество кнопок (максимум 8)
+        for quality_item in sorted_unique_qualities[:8]:
+            quality_data = quality_item['data']
+            quality_id = quality_data.get('id')
+            quality_label = quality_item['quality_label']
+            quality_type = quality_item['quality_type']
+            size_mb = quality_item['size_mb']
+
+            # Выбираем иконку
             if quality_type == 'video':
                 icon = "📹"
             elif quality_type == 'audio':
@@ -2449,7 +2490,7 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
             button_text = f"{icon} {quality_label} ({size_mb:.1f} MB)"
 
-            # Telegram limit warning
+            # Предупреждение о размере файла
             if size_mb > 50:
                 button_text += " ⚠️"
 
@@ -2460,11 +2501,10 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
         keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
 
-        # STEP 3: Ma'lumotlarni ko'rsatish
+        # STEP 4: Отображение информации
         info_text = (
             f"YouTube видео найдено!\n\n"
-            f"ID видео: {video_id}\n"
-            f"Доступно качеств: {len(available_qualities)}\n\n"
+            f"Доступно уникальных качеств: {len(unique_qualities)}\n\n"
             f"Выберите качество для загрузки:"
         )
 
@@ -2472,7 +2512,8 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
         await state.update_data(
             youtube_url=url,
             youtube_video_id=video_id,
-            youtube_available_qualities=available_qualities,  # Real qualities
+            youtube_available_qualities=available_qualities,  # Все качества для поиска по ID
+            youtube_unique_qualities=list(unique_qualities.values()),  # Уникальные качества
             youtube_api_type="real_api"
         )
         logger.info("Data saved to state")
