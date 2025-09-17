@@ -2374,6 +2374,26 @@ class UnifiedSocialDownloader:
             "Content-Type": "application/json"
         }
 
+    def get_platform_from_url(self, url: str):
+        """Определение платформы по URL"""
+        url_lower = url.lower()
+        if 'youtube.com' in url_lower or 'youtu.be' in url_lower:
+            return 'youtube'
+        elif 'instagram.com' in url_lower or 'instagr.am' in url_lower or 'inst.ae' in url_lower:
+            return 'instagram'
+        elif 'tiktok.com' in url_lower:
+            return 'tiktok'
+        elif 'twitter.com' in url_lower or 'x.com' in url_lower:
+            return 'twitter'
+        elif 'facebook.com' in url_lower or 'fb.watch' in url_lower:
+            return 'facebook'
+        elif 'reddit.com' in url_lower:
+            return 'reddit'
+        elif 'vimeo.com' in url_lower:
+            return 'vimeo'
+        else:
+            return 'unknown'
+
     async def download_media(self, url: str):
         """DEBUG: API запрос с подробным логированием"""
         logger.info(f"🔍 API REQUEST START")
