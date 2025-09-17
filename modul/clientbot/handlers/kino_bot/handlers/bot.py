@@ -2512,10 +2512,10 @@ async def unified_download_handler(message: Message, state: FSMContext, bot: Bot
     if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
-
+    print(message.text)
     url = message.text.strip()
     me = await bot.get_me()
-
+    print(url)
     # Определяем платформу
     platform = unified_downloader.get_platform_from_url(url)
 
