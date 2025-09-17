@@ -2734,7 +2734,7 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
         logger.info(f"🎭 Type: {selected_media.get('type', 'N/A')}")
         logger.info(f"📦 Extension: {selected_media.get('ext', 'N/A')}")
         logger.info(f"🔗 URL length: {len(selected_media.get('url', ''))}")
-        logger.info(f"🔗 URL preview: {selected_media.get('url', '')[:100]}...")
+        logger.info(f"🔗 URL preview: {selected_media.get('url', '')}")
 
         title = youtube_data.get('title', 'YouTube видео')
         download_url = selected_media.get('url')
