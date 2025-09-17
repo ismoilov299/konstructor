@@ -1,5 +1,6 @@
 import glob 
 import asyncio
+import json
 import subprocess
 import tempfile
 import time
@@ -2362,7 +2363,7 @@ class DownloaderBotFilter(Filter):
 
 
 class UnifiedSocialDownloader:
-    """Unified social media downloader using RapidAPI"""
+    """Unified downloader для ВСЕХ платформ включая YouTube"""
 
     def __init__(self):
         self.api_key = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
@@ -2376,18 +2377,12 @@ class UnifiedSocialDownloader:
         }
 
     async def download_media(self, url: str):
-        """API orqali media ma'lumotlarini olish"""
+        """Универсальный метод для всех платформ"""
         try:
             payload = {"url": url}
-
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                        f"{self.base_url}/autolink",
-                        json=payload,
-                        headers=self.headers,
-                        timeout=30
-                ) as response:
-
+                async with session.post(f"{self.base_url}/autolink", json=payload, headers=self.headers,
+                                        timeout=30) as response:
                     if response.status == 200:
                         data = await response.json()
                         if not data.get('error', True):
@@ -2396,45 +2391,52 @@ class UnifiedSocialDownloader:
                             return {'success': False, 'error': data.get('message', 'API error')}
                     else:
                         return {'success': False, 'error': f'HTTP {response.status}'}
-
         except Exception as e:
-            logger.error(f"API request error: {e}")
             return {'success': False, 'error': str(e)}
 
-    async def download_file(self, file_url: str, max_size_mb: int = 50):
-        """Fayl yuklab olish"""
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': '*/*',
-                'Connection': 'keep-alive'
-            }
+    def get_platform_from_url(self, url: str):
+        """Определение платформы"""
+        if 'youtube.com' in url or 'youtu.be' in url:
+            return 'youtube'
+        elif 'instagram.com' in url or 'instagr.am' in url:
+            return 'instagram'
+        elif 'tiktok.com' in url:
+            return 'tiktok'
+        elif 'twitter.com' in url or 'x.com' in url:
+            return 'twitter'
+        elif 'facebook.com' in url or 'fb.watch' in url:
+            return 'facebook'
+        elif 'reddit.com' in url:
+            return 'reddit'
+        elif 'vimeo.com' in url:
+            return 'vimeo'
+        else:
+            return 'unknown'
 
+    async def download_file(self, file_url: str, max_size_mb: int = 50):
+        """Скачивание файла"""
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             async with aiohttp.ClientSession() as session:
                 async with session.get(file_url, headers=headers, timeout=60) as response:
                     if response.status == 200:
-                        # Check file size
                         content_length = response.headers.get('content-length')
                         if content_length:
                             size_mb = int(content_length) / (1024 * 1024)
                             if size_mb > max_size_mb:
                                 return None
-
                         return await response.read()
-                    else:
-                        return None
-        except Exception as e:
-            logger.error(f"File download error: {e}")
+                    return None
+        except:
             return None
-
 
 # Global instance
 unified_downloader = UnifiedSocialDownloader()
 
 @client_bot_router.message(DownloaderBotFilter())
 @client_bot_router.message(Download.download)
-async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
-    """Главный handler для всех платформ"""
+async def unified_download_handler(message: Message, state: FSMContext, bot: Bot):
+    """Единый handler для всех платформ"""
     if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
@@ -2442,99 +2444,290 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
     url = message.text.strip()
     me = await bot.get_me()
 
-    # YouTube - оставляем существующую сложную систему с форматами
-    if 'youtube.com' in url or 'youtu.be' in url:
-        await handle_youtube(message, url, me, bot, state)  # Ваша существующая функция
+    # Определяем платформу
+    platform = unified_downloader.get_platform_from_url(url)
 
-    # Instagram - новая API система
-    elif 'instagram.com' in url or 'instagr.am' in url or 'inst.ae' in url:
-        await handle_instagram(message, url, me, bot)  # Обновленная функция
-
-    # TikTok - новая API система
-    elif 'tiktok.com' in url:
-        await handle_tiktok(message, url, me, bot, state)  # Обновленная функция
-
-    # Новые платформы
-    elif any(domain in url.lower() for domain in
-             ['twitter.com', 'x.com', 'facebook.com', 'fb.watch', 'reddit.com', 'vimeo.com']):
-        await handle_new_platforms(message, url, me, bot, state)
-
-    else:
+    if platform == 'unknown':
         await message.answer(
             "❗ Поддерживаются только YouTube, Instagram, TikTok, Twitter, Facebook, Reddit и Vimeo ссылки")
-
-
-async def handle_new_platforms(message: Message, url: str, me, bot: Bot, state: FSMContext):
-    """Handler для новых платформ (Twitter, Facebook, Reddit, Vimeo)"""
-
-    # Определение платформы
-    platform_map = {
-        'twitter.com': 'Twitter',
-        'x.com': 'Twitter',
-        'facebook.com': 'Facebook',
-        'fb.watch': 'Facebook',
-        'reddit.com': 'Reddit',
-        'vimeo.com': 'Vimeo'
-    }
-
-    platform = None
-    for domain, name in platform_map.items():
-        if domain in url.lower():
-            platform = name
-            break
-
-    if not platform:
-        await message.answer("❌ Неподдерживаемая платформа")
         return
 
-    progress_msg = await message.answer(f"⏳ Загружаю медиа из {platform}...")
+    # YOUTUBE - показываем форматы для выбора
+    if platform == 'youtube':
+        await handle_youtube_unified(message, url, me, bot, state)
+
+    # ВСЕ ОСТАЛЬНЫЕ - автоматически лучший формат
+    else:
+        await handle_other_platforms_unified(message, url, me, bot, state, platform)
+
+
+async def handle_youtube_unified(message: Message, url: str, me, bot: Bot, state: FSMContext):
+    """YouTube handler с выбором форматов через unified API"""
+    progress_msg = await message.answer("📡 Анализирую YouTube видео...")
 
     try:
-        # Получение данных через API
-        await progress_msg.edit_text(f"📡 Получаю информацию из {platform}...")
-
+        # Получаем данные через unified API
         result = await unified_downloader.download_media(url)
 
         if not result['success']:
-            await progress_msg.edit_text(f"❌ Не удалось получить данные из {platform}: {result['error']}")
+            await progress_msg.edit_text(f"❌ Не удалось получить данные: {result['error']}")
             return
 
         data = result['data']
+        title = data.get('title', 'YouTube видео')
+        duration = data.get('duration', 0)
+        medias = data.get('medias', [])
 
-        # Извлечение информации
-        title = data.get('title', f'{platform} медиа')
+        if not medias:
+            await progress_msg.edit_text("❌ Форматы не найдены")
+            return
+
+        await progress_msg.edit_text("🔍 Обрабатываю доступные форматы...")
+
+        # Группировка форматов
+        video_with_audio = []  # Видео с аудио (ready to use)
+        video_only = []  # Только видео
+        audio_only = []  # Только аудио
+
+        for media in medias:
+            media_type = media.get('type', '')
+            has_audio = media.get('is_audio', False)
+
+            if media_type == 'video' and has_audio:
+                video_with_audio.append(media)
+            elif media_type == 'video' and not has_audio:
+                video_only.append(media)
+            elif media_type == 'audio':
+                audio_only.append(media)
+
+        # Создание кнопок
+        keyboard = InlineKeyboardBuilder()
+
+        # 1. Видео с аудио (приоритет)
+        if video_with_audio:
+            keyboard.row(InlineKeyboardButton(
+                text="📹 Готовые форматы (Видео + Аудио)",
+                callback_data="yt_section_ready"
+            ))
+
+            for media in video_with_audio[:5]:  # Показываем топ 5
+                label = media.get('label', 'Unknown')
+                format_id = media.get('formatId', 0)
+
+                keyboard.row(InlineKeyboardButton(
+                    text=f"📹 {label}",
+                    callback_data=f"yt_dl_{format_id}"
+                ))
+
+        # 2. Только видео (для продвинутых)
+        if video_only:
+            keyboard.row(InlineKeyboardButton(
+                text="🎬 Только видео (без звука)",
+                callback_data="yt_section_video"
+            ))
+
+        # 3. Только аудио
+        if audio_only:
+            keyboard.row(InlineKeyboardButton(
+                text="🎵 Только аудио",
+                callback_data="yt_section_audio"
+            ))
+
+            for media in audio_only[:3]:  # Показываем топ 3 аудио
+                label = media.get('label', 'Unknown')
+                format_id = media.get('formatId', 0)
+
+                keyboard.row(InlineKeyboardButton(
+                    text=f"🎵 {label}",
+                    callback_data=f"yt_dl_{format_id}"
+                ))
+
+        keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
+
+        # Информация для пользователя
+        info_text = f"""✅ YouTube видео найдено!
+
+📝 {title}
+⏱ Длительность: {duration // 60}:{duration % 60:02d}
+
+📋 Доступно форматов:
+• Готовых (видео+аудио): {len(video_with_audio)}
+• Только видео: {len(video_only)}  
+• Только аудио: {len(audio_only)}
+
+Выберите формат для скачивания:"""
+
+        # Сохраняем в state
+        await state.update_data(
+            youtube_data=data,
+            youtube_url=url,
+            youtube_medias=medias
+        )
+
+        await progress_msg.edit_text(info_text, reply_markup=keyboard.as_markup())
+
+    except Exception as e:
+        logger.error(f"YouTube unified handler error: {e}")
+        await progress_msg.edit_text("❌ Ошибка при обработке YouTube видео")
+
+
+@client_bot_router.callback_query(F.data.startswith("yt_dl_"))
+async def process_youtube_download_unified(callback: CallbackQuery, state: FSMContext):
+    """Обработка скачивания YouTube через unified API"""
+    try:
+        await callback.answer()
+
+        # Получаем format_id
+        format_id = int(callback.data.replace("yt_dl_", ""))
+
+        # Получаем данные из state
+        data = await state.get_data()
+        youtube_data = data.get('youtube_data', {})
+        medias = data.get('youtube_medias', [])
+
+        # Находим выбранный формат
+        selected_media = None
+        for media in medias:
+            if media.get('formatId') == format_id:
+                selected_media = media
+                break
+
+        if not selected_media:
+            await callback.message.edit_text("❌ Выбранный формат не найден")
+            return
+
+        title = youtube_data.get('title', 'YouTube видео')
+        download_url = selected_media.get('url')
+        label = selected_media.get('label', 'Unknown')
+
+        await callback.message.edit_text(f"⏬ Скачиваю: {label}\n📝 {title}")
+
+        # Скачиваем файл
+        file_data = await unified_downloader.download_file(download_url)
+
+        if not file_data:
+            await callback.message.edit_text("❌ Не удалось скачать файл")
+            return
+
+        await callback.message.edit_text("📤 Отправляю в Telegram...")
+
+        # Определяем тип и расширение
+        media_type = selected_media.get('type', 'video')
+        ext = selected_media.get('ext', 'mp4')
+
+        # Создаем временный файл
+        with tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False) as temp_file:
+            temp_file.write(file_data)
+            temp_filepath = temp_file.name
+
+        try:
+            caption = f"🎥 YouTube\n📝 {title}\n📊 {label}\n🚀 @{callback.bot.username}"
+
+            if media_type == 'video':
+                await callback.bot.send_video(
+                    chat_id=callback.message.chat.id,
+                    video=FSInputFile(temp_filepath),
+                    caption=caption,
+                    supports_streaming=True
+                )
+            elif media_type == 'audio':
+                await callback.bot.send_audio(
+                    chat_id=callback.message.chat.id,
+                    audio=FSInputFile(temp_filepath),
+                    caption=caption
+                )
+
+            await callback.message.delete()
+            await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_data.get('url'))
+
+        finally:
+            try:
+                os.unlink(temp_filepath)
+            except:
+                pass
+
+    except Exception as e:
+        logger.error(f"YouTube download error: {e}")
+        await callback.message.edit_text("❌ Ошибка при скачивании")
+
+
+async def handle_other_platforms_unified(message: Message, url: str, me, bot: Bot, state: FSMContext, platform: str):
+    """Handler для остальных платформ - автоматический выбор лучшего формата"""
+    platform_names = {
+        'instagram': 'Instagram',
+        'tiktok': 'TikTok',
+        'twitter': 'Twitter',
+        'facebook': 'Facebook',
+        'reddit': 'Reddit',
+        'vimeo': 'Vimeo'
+    }
+
+    platform_name = platform_names.get(platform, platform.title())
+    progress_msg = await message.answer(f"⏳ Загружаю медиа из {platform_name}...")
+
+    try:
+        # Получаем данные
+        await progress_msg.edit_text(f"📡 Получаю информацию из {platform_name}...")
+        result = await unified_downloader.download_media(url)
+
+        if not result['success']:
+            await progress_msg.edit_text(f"❌ Не удалось получить данные: {result['error']}")
+            return
+
+        data = result['data']
+        title = data.get('title', f'{platform_name} медиа')
         author = data.get('author', 'Неизвестно')
         medias = data.get('medias', [])
 
         if not medias:
-            await progress_msg.edit_text(f"❌ Медиа из {platform} не найдено")
+            await progress_msg.edit_text(f"❌ Медиа из {platform_name} не найдено")
             return
 
-        # Выбор лучшего медиа
-        selected_media = medias[0]  # Берем первое
+        # Автоматический выбор лучшего формата
+        selected_media = None
+
+        # Приоритет: видео с аудио > видео без аудио > аудио
         for media in medias:
-            if media.get('type') == 'video':
+            if media.get('type') == 'video' and media.get('is_audio', False):
                 selected_media = media
                 break
 
-        # Показ информации и скачивание
-        await progress_msg.edit_text(f"✅ {platform} медиа найдено!\n\n📝 {title}\n👤 {author}\n\n📥 Скачиваю...")
+        if not selected_media:
+            for media in medias:
+                if media.get('type') == 'video':
+                    selected_media = media
+                    break
 
-        # Скачивание файла
+        if not selected_media:
+            selected_media = medias[0]  # Берем первый доступный
+
+        # Показываем информацию
+        info_text = f"✅ {platform_name} медиа найдено!\n\n📝 {title}"
+        if author and author != 'Неизвестно':
+            info_text += f"\n👤 {author}"
+        info_text += "\n\n📥 Скачиваю..."
+
+        await progress_msg.edit_text(info_text)
+
+        # Скачиваем
         file_data = await unified_downloader.download_file(selected_media['url'])
 
         if not file_data:
-            await progress_msg.edit_text(f"❌ Не удалось скачать файл из {platform}")
+            await progress_msg.edit_text(f"❌ Не удалось скачать файл из {platform_name}")
             return
 
         await progress_msg.edit_text("📤 Отправляю в Telegram...")
 
-        # Отправка
-        caption = f"🎥 {platform} медиа\n📝 {title}\n👤 {author}\nСкачано через @{me.username}"
-        media_type = selected_media.get('type', 'video')
-        extension = selected_media.get('extension', 'mp4')
+        # Отправляем
+        caption = f"🎥 {platform_name}\n📝 {title}"
+        if author and author != 'Неизвестно':
+            caption += f"\n👤 {author}"
+        caption += f"\n🚀 @{me.username}"
 
-        with tempfile.NamedTemporaryFile(suffix=f'.{extension}', delete=False) as temp_file:
+        media_type = selected_media.get('type', 'video')
+        ext = selected_media.get('ext', 'mp4')
+
+        with tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False) as temp_file:
             temp_file.write(file_data)
             temp_filepath = temp_file.name
 
@@ -2545,6 +2738,12 @@ async def handle_new_platforms(message: Message, url: str, me, bot: Bot, state: 
                     video=FSInputFile(temp_filepath),
                     caption=caption,
                     supports_streaming=True
+                )
+            elif media_type == 'audio':
+                await bot.send_audio(
+                    chat_id=message.chat.id,
+                    audio=FSInputFile(temp_filepath),
+                    caption=caption
                 )
             else:
                 await bot.send_document(
@@ -2564,1558 +2763,15 @@ async def handle_new_platforms(message: Message, url: str, me, bot: Bot, state: 
                 pass
 
     except Exception as e:
-        logger.error(f"{platform} handler error: {e}")
+        logger.error(f"{platform_name} handler error: {e}")
         try:
-            await progress_msg.edit_text(f"❌ Ошибка при скачивании из {platform}")
+            await progress_msg.edit_text(f"❌ Ошибка при скачивании из {platform_name}")
         except:
-            await message.answer(f"❌ Ошибка при скачивании из {platform}")
-
-
-async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
-    logger.info(f"YouTube handler started")
-    logger.info(f"URL: {url}")
-
-    try:
-        progress_msg = await message.answer("Анализирую YouTube видео...")
-        logger.info("Progress message sent")
-
-        # Video ID ni olish
-        video_id = extract_youtube_id(url)
-        if not video_id:
-            logger.error("Could not extract video ID")
-            await progress_msg.edit_text("Неверная ссылка YouTube")
-            return
-
-        # STEP 1: Avval mavjud sifatlarni olish
-        logger.info(f"Getting available qualities for video: {video_id}")
-        await progress_msg.edit_text("Получаю доступные качества...")
-
-        try:
-            # API dan mavjud sifatlarni olish
-            url_qualities = f"https://{RAPIDAPI_HOST}/get_available_quality/{video_id}"
-            headers = {
-                "x-rapidapi-key": RAPIDAPI_KEY,
-                "x-rapidapi-host": RAPIDAPI_HOST
-            }
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url_qualities, headers=headers, timeout=30) as response:
-                    if response.status == 200:
-                        available_qualities = await response.json()
-                        logger.info(f"Available qualities received: {len(available_qualities)}")
-                    else:
-                        logger.error(f"Failed to get qualities: {response.status}")
-                        available_qualities = []
-        except Exception as e:
-            logger.error(f"Error getting available qualities: {e}")
-            available_qualities = []
-
-        if not available_qualities:
-            await progress_msg.edit_text(
-                "Не удалось получить качества видео\n\n"
-                "Проверьте ссылку или попробуйте позже"
-            )
-            return
-
-        # STEP 2: Уникальные качества (убираем дубликаты)
-        unique_qualities = {}
-
-        for quality_data in available_qualities:
-            quality_label = quality_data.get('quality', 'Unknown')
-            quality_type = quality_data.get('type', 'video')
-            size_mb = int(quality_data.get('size', 0)) / (1024 * 1024)
-
-            # Создаем уникальный ключ для качества и типа
-            unique_key = f"{quality_label}_{quality_type}"
-
-            # Если такого качества еще нет, или текущее меньше по размеру - сохраняем
-            if unique_key not in unique_qualities or size_mb < unique_qualities[unique_key]['size_mb']:
-                unique_qualities[unique_key] = {
-                    'data': quality_data,
-                    'size_mb': size_mb,
-                    'quality_label': quality_label,
-                    'quality_type': quality_type
-                }
-
-        logger.info(f"Unique qualities found: {len(unique_qualities)}")
-
-        # STEP 3: Сортировка и создание клавиатуры
-        keyboard = InlineKeyboardBuilder()
-
-        # Преобразуем в список и сортируем по качеству
-        unique_list = list(unique_qualities.values())
-
-        # Сортировка по разрешению (сначала видео, потом аудио)
-        def sort_key(item):
-            quality_label = item['quality_label']
-            quality_type = item['quality_type']
-
-            # Извлекаем числовое значение разрешения
-            try:
-                resolution = int(quality_label.replace('p', '').replace('k', '000'))
-            except:
-                resolution = 0
-
-            # Видео имеет приоритет над аудио
-            type_priority = 0 if quality_type == 'video' else 1
-
-            return (type_priority, -resolution)  # Отрицательное для сортировки по убыванию
-
-        sorted_unique_qualities = sorted(unique_list, key=sort_key)
-
-        # ✅ УЛУЧШЕНИЕ - более осторожные пороги в кнопках
-        for quality_item in sorted_unique_qualities[:8]:
-            quality_data = quality_item['data']
-            quality_id = quality_data.get('id')
-            quality_label = quality_item['quality_label']
-            quality_type = quality_item['quality_type']
-            size_mb = quality_item['size_mb']
-
-            # Выбираем иконку
-            if quality_type == 'video':
-                icon = "📹"
-            elif quality_type == 'audio':
-                icon = "🎵"
-            else:
-                icon = "📄"
-
-            # ✅ УЛУЧШЕННЫЕ ПРЕДУПРЕЖДЕНИЯ
-            if size_mb > 45:  # Понижаем порог с 50 до 45
-                button_text = f"{icon} {quality_label} (~{size_mb:.0f} MB) ⚠️"
-            elif size_mb > 40:  # Новый промежуточный порог
-                button_text = f"{icon} {quality_label} (~{size_mb:.1f} MB) ⚡"
-            else:
-                button_text = f"{icon} {quality_label} ({size_mb:.1f} MB)"
-
-            keyboard.row(InlineKeyboardButton(
-                text=button_text,
-                callback_data=f"yt_fast_dl_{quality_id}"
-            ))
-
-        keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
-
-        # STEP 4: Отображение информации с предупреждением
-        info_text = (
-            f"YouTube видео найдено!\n\n"
-            f"Доступно уникальных качеств: {len(unique_qualities)}\n\n"
-            f"⚠️ **Важно:** Реальный размер может отличаться от показанного\n"
-            f"📏 **Лимит Telegram:** 50 МБ\n\n"
-            f"Выберите качество для загрузки:"
-        )
-
-        # State ga saqlash
-        await state.update_data(
-            youtube_url=url,
-            youtube_video_id=video_id,
-            youtube_available_qualities=available_qualities,
-            youtube_unique_qualities=list(unique_qualities.values()),
-            youtube_api_type="real_api"
-        )
-        logger.info("Data saved to state")
-
-        await progress_msg.edit_text(
-            info_text,
-            reply_markup=keyboard.as_markup(),
-            parse_mode="Markdown"
-        )
-        logger.info("YouTube handler completed successfully")
-
-    except Exception as e:
-        logger.error(f"YouTube handler error: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        await message.answer("Ошибка при обработке YouTube видео")
-
-
-@client_bot_router.callback_query(F.data.startswith("yt_fast_dl_"))
-async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
-    logger.info(f"Fast download callback triggered")
-    logger.info(f"Callback data: {callback.data}")
-
-    try:
-        await callback.answer()
-
-        # Quality ID olish
-        quality_id = callback.data.replace("yt_fast_dl_", "")
-        logger.info(f"Selected quality ID: {quality_id}")
-
-        # State dan ma'lumot olish
-        data = await state.get_data()
-        video_id = data.get('youtube_video_id')
-        available_qualities = data.get('youtube_available_qualities', [])
-
-        if not video_id:
-            await callback.message.edit_text("Данные видео не найдены")
-            return
-
-        # Tanlangan quality ni topish
-        selected_quality = None
-        for q in available_qualities:
-            if str(q.get('id')) == str(quality_id):
-                selected_quality = q
-                break
-
-        if not selected_quality:
-            await callback.message.edit_text("Выбранное качество не найдено")
-            return
-
-        size_mb = int(selected_quality.get('size', 0)) / (1024 * 1024)
-        quality_label = selected_quality.get('quality', 'Unknown')
-
-        # ✅ ПЕРВИЧНАЯ ПРОВЕРКА (по данным API)
-        if size_mb > 50:
-            await callback.message.edit_text(
-                f"Файл слишком большой для Telegram!\n\n"
-                f"Размер: {size_mb:.1f} МБ\n"
-                f"Лимит: 50 МБ"
-            )
-            return
-
-        await callback.message.edit_text(
-            f"Отправляю запрос на загрузку...\n\n"
-            f"ID видео: {video_id}\n"
-            f"Качество: {quality_label}\n"
-            f"Размер (примерный): {size_mb:.1f} МБ"
-        )
-
-        # Real quality ID bilan download URL olish
-        download_data = await get_youtube_info_via_fast_api(video_id, quality_id)
-
-        if not download_data or 'file' not in download_data:
-            await callback.message.edit_text("URL для загрузки не найден")
-            return
-
-        download_url = download_data['file']
-        actual_quality = download_data.get('quality', quality_label)
-
-        logger.info(f"Download URL obtained with real quality ID")
-        logger.info(f"Requested: {quality_label}, Got: {actual_quality}")
-
-        await callback.message.edit_text(
-            f"Ссылка получена!\n\n"
-            f"Запрошено: {quality_label}\n"
-            f"Получено: {actual_quality}\n\n"
-            f"Проверяю реальный размер файла..."
-        )
-
-        # ✅ НОВОЕ - проверка реального размера через HEAD запрос
-        logger.info("🔍 Checking real file size before download...")
-
-        real_size_mb = size_mb  # fallback к размеру из API
-
-        try:
-            # Сначала ждем готовности файла
-            is_ready = await wait_for_youtube_file_ready(download_url, max_wait_minutes=2)
-
-            if not is_ready:
-                await callback.message.edit_text(
-                    f"Файл не готов через 2 минуты\n\n"
-                    f"Попробуйте позже или выберите другое качество"
-                )
-                return
-
-            # Теперь проверяем реальный размер
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-
-            async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.head(download_url, timeout=15) as response:
-                    logger.info(f"📡 HEAD response status: {response.status}")
-
-                    if response.status == 200:
-                        content_length = response.headers.get('content-length')
-
-                        if content_length:
-                            real_size_bytes = int(content_length)
-                            real_size_mb = real_size_bytes / (1024 * 1024)
-
-                            logger.info(f"📏 Real file size: {real_size_mb:.1f} MB")
-
-                            # ✅ КРИТИЧЕСКАЯ ПРОВЕРКА - реальный размер
-                            if real_size_mb > 50:
-                                logger.error(f"❌ Real file too large: {real_size_mb:.1f} MB")
-
-                                await callback.message.edit_text(
-                                    f"❌ **Файл слишком большой для Telegram**\n\n"
-                                    f"📊 **Показан в кнопке:** {size_mb:.1f} МБ\n"
-                                    f"📏 **Реальный размер:** {real_size_mb:.1f} МБ\n"
-                                    f"🚫 **Лимит Telegram:** 50 МБ\n\n"
-                                    f"💡 **Рекомендации:**\n"
-                                    f"• Выберите качество пониже (480p, 360p)\n"
-                                    f"• Попробуйте аудио версию\n"
-                                    f"• Используйте внешний сервис",
-                                    parse_mode="Markdown"
-                                )
-                                return
-
-                            logger.info(f"✅ Real file size OK: {real_size_mb:.1f} MB")
-
-                            # Обновляем сообщение с реальным размером
-                            await callback.message.edit_text(
-                                f"✅ Файл готов к загрузке!\n\n"
-                                f"📋 Качество: {actual_quality}\n"
-                                f"📊 Показан: {size_mb:.1f} МБ\n"
-                                f"📏 Реальный: {real_size_mb:.1f} МБ\n\n"
-                                f"Начинаю загрузку..."
-                            )
-                        else:
-                            logger.warning("⚠️ Could not get content-length, using API size")
-                    else:
-                        logger.warning(f"⚠️ HEAD request failed: {response.status}")
-
-        except Exception as e:
-            logger.warning(f"⚠️ Size check failed: {e} - proceeding with API size")
-
-            # Если проверка не удалась, используем размер из API
-            await callback.message.edit_text(
-                f"⚠️ Не удалось проверить точный размер\n\n"
-                f"Запрошено: {quality_label}\n"
-                f"Получено: {actual_quality}\n"
-                f"Примерный размер: {size_mb:.1f} МБ\n\n"
-                f"Продолжаю загрузку..."
-            )
-
-        # Download and send с обновленным размером
-        await download_and_send_youtube_fast(
-            callback, download_url, selected_quality, video_id, real_size_mb
-        )
-
-    except Exception as e:
-        logger.error(f"Fast download callback error: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        await callback.message.edit_text("Ошибка при загрузке")
-
-
-@client_bot_router.callback_query(F.data == "yt_more_formats")
-async def show_more_formats(callback: CallbackQuery):
-    logger.info("🔧 More formats requested")
-    await callback.answer()
-    keyboard = create_more_formats_keyboard()
-    await callback.message.edit_text(
-        "🔧 <b>Дополнительные форматы:</b>\n\n"
-        "🎬 Только видео - без звука\n"
-        "📹 Видео+Аудио - полный формат",
-        reply_markup=keyboard.as_markup(),
-        parse_mode="HTML"
-    )
-
-
-@client_bot_router.callback_query(F.data == "yt_main_formats")
-async def show_main_formats(callback: CallbackQuery):
-    logger.info("📹 Main formats requested")
-    await callback.answer()
-    keyboard = create_youtube_format_keyboard()
-    await callback.message.edit_text(
-        "📥 <b>Основные форматы:</b>\n\n"
-        "📹 = Видео + Аудио вместе",
-        reply_markup=keyboard.as_markup(),
-        parse_mode="HTML"
-    )
-
-
-async def download_and_send_youtube_fast(callback, download_url, format_data, video_id, size_mb):
-    logger.info(f"📥 Starting download and send process")
-    logger.info(f"🔗 Download URL: {download_url[:50]}...")
-    logger.info(f"📋 Format: {format_data}")
-
-    temp_dir = None
-    try:
-        # Temp directory yaratish
-        temp_dir = tempfile.mkdtemp(prefix='yt_fast_')
-        filename = f"youtube_{video_id}_{format_data['quality']}.mp4"
-        filepath = os.path.join(temp_dir, filename)
-        logger.info(f"📁 Temp file path: {filepath}")
-        print(format_data)
-
-        # Format description yaratish
-        format_desc = format_data.get('desc', format_data.get('quality', 'Unknown'))
-        if format_desc == format_data.get('quality', 'Unknown') and 'quality' in format_data:
-            # Agar 'desc' yo'q bo'lsa, quality va type dan yaratish
-            quality = format_data.get('quality', 'Unknown')
-            format_type = format_data.get('type', 'video')
-            format_desc = f"{quality} {format_type}"
-
-        await callback.message.edit_text(
-            f"⏬ <b>Загружаю...</b>\n\n"
-            f"🆔 <b>ID видео:</b> {video_id}\n"
-            f"📋 <b>Формат:</b> {format_desc}\n"
-            f"📦 <b>Размер:</b> {size_mb:.1f} МБ",
-            parse_mode="HTML"
-        )
-
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Connection': 'keep-alive',
-            'Accept-Encoding': 'identity'
-        }
-
-        downloaded = 0
-        start_time = time.time()
-
-        logger.info("🌐 Starting file download...")
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(download_url, timeout=300) as response:
-                status = response.status
-                logger.info(f"📡 Download response status: {status}")
-
-                if status == 200:
-                    total_size = int(response.headers.get('content-length', 0))
-                    logger.info(f"📦 Total download size: {total_size} bytes")
-
-                    with open(filepath, 'wb') as file:
-                        last_update = time.time()
-
-                        async for chunk in response.content.iter_chunked(8192):
-                            file.write(chunk)
-                            downloaded += len(chunk)
-
-                            current_time = time.time()
-                            if current_time - last_update >= 3:
-                                if total_size > 0:
-                                    progress = (downloaded / total_size) * 100
-                                    speed = downloaded / (current_time - start_time) / (1024 * 1024)
-                                    logger.info(f"📊 Progress: {progress:.0f}%, Speed: {speed:.1f} MB/s")
-
-                                    await callback.message.edit_text(
-                                        f"⏬ <b>Загружаю: {progress:.0f}%</b>\n\n"
-                                        f"🆔 <b>ID видео:</b> {video_id}\n"
-                                        f"📋 <b>Формат:</b> {format_desc}\n"
-                                        f"📊 <b>Скорость:</b> {speed:.1f} МБ/с\n"
-                                        f"📦 <b>Загружено:</b> {downloaded / (1024 * 1024):.1f} МБ",
-                                        parse_mode="HTML"
-                                    )
-
-                                last_update = current_time
-                else:
-                    raise Exception(f"Download failed: HTTP {status}")
-
-        # Fayl hajmini tekshirish
-        file_size = os.path.getsize(filepath)
-        file_size_mb = file_size / (1024 * 1024)
-        logger.info(f"✅ File downloaded: {file_size_mb:.1f} MB")
-
-        if file_size_mb > 50:
-            logger.error(f"❌ File too large for Telegram: {file_size_mb:.1f} MB")
-            await callback.message.edit_text(
-                f"❌ <b>Файл слишком большой для Telegram</b>\n\n"
-                f"📦 <b>Размер:</b> {file_size_mb:.1f} МБ\n"
-                f"📏 <b>Лимит:</b> 50 МБ",
-                parse_mode="HTML"
-            )
-            return
-
-        # Telegram ga yuborish
-        await callback.message.edit_text(
-            f"📤 <b>Отправляю в Telegram...</b>\n\n"
-            f"🆔 <b>ID видео:</b> {video_id}",
-            parse_mode="HTML"
-        )
-
-        caption = (
-            f"🎥 YouTube Видео\n"
-            f"🆔 {video_id}\n"
-            f"📋 {format_desc}\n"
-            f"📦 {file_size_mb:.1f} МБ\n"
-            f"🚀 Загружено через Fast API"
-        )
-
-        logger.info("📤 Sending to Telegram...")
-        try:
-            # format_data['type'] ni ham xavfsiz olish
-            format_type = format_data.get('type', 'progressive')
-
-            if format_type == 'progressive':
-                await callback.bot.send_video(
-                    chat_id=callback.message.chat.id,
-                    video=FSInputFile(filepath),
-                    caption=caption,
-                    supports_streaming=True
-                )
-            else:
-                await callback.bot.send_document(
-                    chat_id=callback.message.chat.id,
-                    document=FSInputFile(filepath),
-                    caption=caption
-                )
-
-            await callback.message.delete()
-            logger.info("✅ File sent successfully!")
-
-            # Analytics
-            try:
-                await shortcuts.add_to_analitic_data(
-                    (await callback.bot.get_me()).username,
-                    callback.message.chat.id
-                )
-            except Exception as analytics_error:
-                logger.warning(f"⚠️ Analytics error: {analytics_error}")
-
-        except Exception as send_error:
-            logger.error(f"❌ Error sending file: {send_error}")
-            await callback.message.edit_text(
-                f"❌ <b>Ошибка отправки файла</b>\n\n"
-                f"📋 <b>Ошибка:</b> {str(send_error)[:100]}...",
-                parse_mode="HTML"
-            )
-
-    except Exception as e:
-        logger.error(f"❌ Download and send error: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"📍 Traceback: {traceback.format_exc()}")
-        await callback.message.edit_text(
-            f"❌ <b>Ошибка при загрузке</b>\n\n"
-            f"📋 <b>Ошибка:</b> {str(e)[:100]}...",
-            parse_mode="HTML"
-        )
-    finally:
-        # Cleanup
-        if temp_dir and os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir)
-                logger.info("🗑️ Temp files cleaned up")
-            except Exception as cleanup_error:
-                logger.warning(f"⚠️ Cleanup error: {cleanup_error}")
-
-
-@client_bot_router.callback_query(F.data == "too_large")
-async def handle_too_large_callback(callback: CallbackQuery):
-    """Handle too large file selection"""
-    await callback.answer(
-        "Этот файл слишком большой для Telegram (более 50 MB). "
-        "Выберите формат с меньшим качеством.",
-        show_alert=True
-    )
-
-
-
-
-
-
-
-from modul.loader import client_bot_router
-from aiogram import F
-import json
-RAPIDAPI_KEY = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
-RAPIDAPI_HOST = "youtube-video-fast-downloader-24-7.p.rapidapi.com"
-
-
-def extract_youtube_id(url):
-    """YouTube URL dan video ID ni olish"""
-    logger.info(f"Extracting video ID from URL: {url}")
-
-    patterns = [
-        r'(?:youtube\.be/)([a-zA-Z0-9_-]+)',
-        r'(?:youtube\.com/watch\?v=)([a-zA-Z0-9_-]+)',
-        r'(?:youtube\.com/embed/)([a-zA-Z0-9_-]+)',
-        r'(?:youtube\.com/v/)([a-zA-Z0-9_-]+)',
-        r'(?:youtube\.com/shorts/)([a-zA-Z0-9_-]+)',
-        r'(?:youtu\.be/)([a-zA-Z0-9_-]+)'
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            video_id = match.group(1)
-            logger.info(f"✅ Video ID extracted: {video_id}")
-            return video_id
-
-    logger.error(f"❌ Could not extract video ID from: {url}")
-    return None
-
-
-
-def get_available_youtube_qualities():
-    """Mavjud YouTube sifatlari"""
-    return {
-        "18": {"quality": "360p", "type": "progressive", "format": "MP4", "desc": "360p MP4 (Video+Audio)"},
-        "22": {"quality": "720p", "type": "progressive", "format": "MP4", "desc": "720p MP4 (Video+Audio)"},
-        "247": {"quality": "720p", "type": "video", "format": "WebM", "desc": "720p WebM (Video only)"},
-        "248": {"quality": "1080p", "type": "video", "format": "WebM", "desc": "1080p WebM (Video only)"},
-        "360": {"quality": "360p", "type": "progressive", "format": "MP4", "desc": "360p (Video+Audio)"},
-        "720": {"quality": "720p", "type": "progressive", "format": "MP4", "desc": "720p (Video+Audio)"},
-        "1080": {"quality": "1080p", "type": "progressive", "format": "MP4", "desc": "1080p (Video+Audio)"}
-    }
-
-
-async def get_youtube_info_via_fast_api(video_id, quality="247"):
-    """Fast API orqali YouTube video ma'lumotlarini olish - DEBUGGING BILAN"""
-    logger.info(f"🔍 API request starting...")
-    logger.info(f"   Video ID: {video_id}")
-    logger.info(f"   Quality: {quality}")
-    logger.info(f"   API Host: {RAPIDAPI_HOST}")
-
-    try:
-        url = f"https://{RAPIDAPI_HOST}/download_short/{video_id}"
-        params = {"quality": quality}
-        headers = {
-            "x-rapidapi-key": RAPIDAPI_KEY,
-            "x-rapidapi-host": RAPIDAPI_HOST
-        }
-
-        logger.info(f"📡 Request URL: {url}")
-        logger.info(f"📋 Request params: {params}")
-        logger.info(f"🔑 Request headers: {headers}")
-
-        async with aiohttp.ClientSession() as session:
-            logger.info("🌐 Making HTTP request...")
-            async with session.get(url, headers=headers, params=params, timeout=30) as response:
-                status = response.status
-                logger.info(f"📡 Response status: {status}")
-
-                if status == 200:
-                    try:
-                        data = await response.json()
-                        logger.info(f"✅ API Success! Response keys: {list(data.keys())}")
-                        logger.info(f"📄 Full response: {json.dumps(data, indent=2)}")
-                        return data
-                    except Exception as json_error:
-                        logger.error(f"❌ JSON parsing error: {json_error}")
-                        text_response = await response.text()
-                        logger.error(f"📄 Raw response: {text_response}")
-                        return None
-                else:
-                    error_text = await response.text()
-                    logger.error(f"❌ API error {status}: {error_text}")
-                    return None
-
-    except asyncio.TimeoutError:
-        logger.error("⏰ API request timeout (30s)")
-        return None
-    except Exception as e:
-        logger.error(f"❌ API request error: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"📍 Traceback: {traceback.format_exc()}")
-        return None
-
-
-async def wait_for_youtube_file_ready(file_url, max_wait_minutes=3):
-    """YouTube fayl tayyor bo'lishini kutish"""
-    logger.info(f"⏳ Waiting for file to be ready...")
-    logger.info(f"🔗 File URL: {file_url}")
-    logger.info(f"⏱ Max wait time: {max_wait_minutes} minutes")
-
-    start_time = time.time()
-    max_wait_seconds = max_wait_minutes * 60
-    check_interval = 10
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*',
-        'Connection': 'keep-alive'
-    }
-
-    attempt = 1
-
-    while time.time() - start_time < max_wait_seconds:
-        try:
-            logger.info(f"🔄 Attempt #{attempt} - checking file status...")
-
-            async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.head(file_url, timeout=10) as response:
-                    status = response.status
-                    logger.info(f"📡 HEAD response status: {status}")
-
-                    if status == 200:
-                        content_length = response.headers.get('content-length', 'Unknown')
-                        content_type = response.headers.get('content-type', 'Unknown')
-                        logger.info(f"✅ File ready! Size: {content_length}, Type: {content_type}")
-                        return True
-
-                    elif status == 404:
-                        elapsed = time.time() - start_time
-                        remaining = max_wait_seconds - elapsed
-                        logger.info(f"⏳ File not ready yet (404). Remaining: {remaining/60:.1f} min")
-
-                    else:
-                        logger.warning(f"⚠️ Unexpected status: {status}")
-
-            if time.time() - start_time < max_wait_seconds:
-                logger.info(f"💤 Sleeping {check_interval} seconds...")
-                await asyncio.sleep(check_interval)
-                attempt += 1
-
-        except Exception as e:
-            logger.error(f"❌ Check error: {type(e).__name__}: {e}")
-            await asyncio.sleep(check_interval)
-            attempt += 1
-
-    logger.error(f"⏰ Wait time expired ({max_wait_minutes} min)")
-    return False
-
-
-def create_youtube_format_keyboard():
-    keyboard = InlineKeyboardBuilder()
-    qualities = get_available_youtube_qualities()
-
-    # Asosiy formatlar
-    popular_formats = ["22", "18", "720", "360"]
-
-    for quality_id in popular_formats:
-        if quality_id in qualities:
-            fmt = qualities[quality_id]
-            icon = "📹" if fmt["type"] == "progressive" else "🎬"
-            button_text = f"{icon} {fmt['desc']}"
-            keyboard.row(InlineKeyboardButton(
-                text=button_text,
-                callback_data=f"yt_fast_dl_{quality_id}"
-            ))
-
-    keyboard.row(InlineKeyboardButton(text="🔧 Другие форматы", callback_data="yt_more_formats"))
-    keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
-    return keyboard
-
-
-def create_more_formats_keyboard():
-    keyboard = InlineKeyboardBuilder()
-    qualities = get_available_youtube_qualities()
-    additional_formats = ["1080", "247", "248"]
-
-    for quality_id in additional_formats:
-        if quality_id in qualities:
-            fmt = qualities[quality_id]
-            icon = "📹" if fmt["type"] == "progressive" else "🎬"
-            button_text = f"{icon} {fmt['desc']}"
-            keyboard.row(InlineKeyboardButton(
-                text=button_text,
-                callback_data=f"yt_fast_dl_{quality_id}"
-            ))
-
-    keyboard.row(InlineKeyboardButton(text="⬅️ Основные форматы", callback_data="yt_main_formats"))
-    keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
-    return keyboard
+            await message.answer(f"❌ Ошибка при скачивании из {platform_name}")
 
 @client_bot_router.callback_query(F.data == "cancel_download")
-async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
-    """Handle download cancellation"""
-    await callback.message.edit_text("❌ Загрузка отменена.")
+async def cancel_download_unified(callback: CallbackQuery, state: FSMContext):
+    """Отмена скачивания"""
+    await callback.message.edit_text("❌ Скачивание отменено")
     await callback.answer("Отменено")
     await state.clear()
-
-
-
-class InstagramDownloader:
-    def __init__(self):
-        self.ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'max_filesize': 50000000,
-            'format': 'best',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Origin': 'https://www.instagram.com',
-                'Referer': 'https://www.instagram.com/',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-                'Connection': 'keep-alive',
-            }
-        }
-
-    async def download_with_yt_dlp(self, url):
-        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
-
-    async def download_with_api(self, url):
-        # API endpoints for different Instagram content types
-        api_endpoints = [
-            "https://api.instagram.com/oembed/?url={}",
-            "https://www.instagram.com/api/v1/media/{}/info/",
-            "https://www.instagram.com/p/{}/?__a=1&__d=1"
-        ]
-
-        # Extract media ID from URL
-        media_id = re.search(r'/p/([^/]+)', url)
-        if not media_id:
-            media_id = re.search(r'/reel/([^/]+)', url)
-        if not media_id:
-            return None
-
-        media_id = media_id.group(1)
-
-        async with aiohttp.ClientSession() as session:
-            for endpoint in api_endpoints:
-                try:
-                    formatted_url = endpoint.format(url if '{}' in endpoint else media_id)
-                    async with session.get(formatted_url) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if 'video_url' in data:
-                                return {'url': data['video_url'], 'ext': 'mp4'}
-                            elif 'thumbnail_url' in data:
-                                return {'url': data['thumbnail_url'], 'ext': 'jpg'}
-                except Exception as e:
-                    logger.error(f"API endpoint error: {e}")
-                    continue
-        return None
-
-
-async def handle_instagram(message: Message, url: str, me, bot: Bot):
-    progress_msg = await message.answer("⏳ Загружаю медиа из Instagram...")
-    message_deleted = False
-
-    try:
-        # Clean up URL - remove tracking parameters
-        if '?' in url:
-            url = url.split('?')[0]
-
-        # Check if URL is valid Instagram URL
-        if not any(domain in url for domain in ['instagram.com', 'instagr.am', 'instagram']):
-            try:
-                await progress_msg.edit_text("❌ Это не похоже на ссылку Instagram")
-            except Exception as e:
-                logger.error(f"Error editing message: {e}")
-                await message.answer("❌ Это не похоже на ссылку Instagram")
-            return
-
-        logger.info(f"Processing Instagram URL: {url}")
-
-        # Определяем, является ли это reel или обычным постом
-        is_reel = "/reel/" in url
-        logger.info(f"Is this a reel? {is_reel}")
-
-        # Create temp directory for files if it doesn't exist
-        temp_dir = "/var/www/downloads"
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # Generate unique ID for this request
-        import hashlib
-        import time
-        request_id = hashlib.md5(f"{url}_{time.time()}".encode()).hexdigest()[:10]
-
-        # Helper function to send Instagram files
-        async def send_instagram_files(message, directory, files, me, bot):
-            """Helper function to send downloaded Instagram files"""
-            sent_count = 0
-            media_files = []
-
-            # Логируем все найденные файлы для отладки
-            logger.info(f"Files in directory {directory}: {files}")
-
-            # Проверяем, содержит ли имя директории или файлы слово "reel" - это поможет определить видео
-            is_file_reel = "reel" in directory.lower() or any("reel" in f.lower() for f in files)
-            logger.info(f"Files indicate reel: {is_file_reel}")
-
-            # First sort files to ensure correct order and filter unwanted files
-            for f in sorted(files):
-                filepath = os.path.join(directory, f)
-                if not os.path.isfile(filepath):
-                    continue
-
-                # Skip small files and metadata files
-                filesize = os.path.getsize(filepath)
-                if filesize < 1000 or '.json' in f or '.txt' in f:
-                    continue
-
-                # Determine file type by extension
-                ext = os.path.splitext(f)[1].lower()
-
-                # Determine if this is a video by file extension
-                if ext in ['.mp4', '.mov', '.webm']:
-                    media_type = 'video'
-                elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-                    # If we know this is a reel but file is an image, it's a thumbnail
-                    media_type = 'thumbnail' if (is_reel or is_file_reel) else 'photo'
-                else:
-                    # Log unusual extensions for analysis
-                    logger.info(f"Unusual file extension found: {ext} in file {f}")
-                    continue
-
-                media_files.append((filepath, media_type))
-
-            # Then send files
-            total_files = len(media_files)
-            logger.info(f"Found {total_files} media files in directory {directory}")
-
-            for i, (filepath, media_type) in enumerate(media_files):
-                try:
-                    logger.info(f"Sending file {i + 1}/{total_files}: {filepath} as {media_type}")
-
-                    if media_type == 'video':
-                        try:
-                            await bot.send_video(
-                                chat_id=message.chat.id,
-                                video=FSInputFile(filepath),
-                                caption=f"📹 Instagram видео {i + 1}/{total_files}\nСкачано через @{me.username}"
-                            )
-                            sent_count += 1
-                        except Exception as video_error:
-                            logger.error(f"Error sending as video, trying as document: {video_error}")
-                            await bot.send_document(
-                                chat_id=message.chat.id,
-                                document=FSInputFile(filepath),
-                                caption=f"📹 Instagram видео {i + 1}/{total_files}\nСкачано через @{me.username}"
-                            )
-                            sent_count += 1
-                    elif media_type == 'thumbnail':
-                        await bot.send_photo(
-                            chat_id=message.chat.id,
-                            photo=FSInputFile(filepath),
-                            caption=f"🎞 Instagram превью видео {i + 1}/{total_files}\nСкачано через @{me.username}"
-                        )
-                        sent_count += 1
-                    else:  # photo
-                        await bot.send_photo(
-                            chat_id=message.chat.id,
-                            photo=FSInputFile(filepath),
-                            caption=f"🖼 Instagram фото {i + 1}/{total_files}\nСкачано через @{me.username}"
-                        )
-                        sent_count += 1
-
-                    # Add small delay between posts
-                    await asyncio.sleep(0.5)
-                except Exception as e:
-                    logger.error(f"Error sending file {filepath}: {e}")
-
-                    # Try alternate method if primary fails
-                    try:
-                        await bot.send_document(
-                            chat_id=message.chat.id,
-                            document=FSInputFile(filepath),
-                            caption=f"📄 Instagram медиа {i + 1}/{total_files}\nСкачано через @{me.username}"
-                        )
-                        sent_count += 1
-                    except Exception as fallback_error:
-                        logger.error(f"Fallback error for file {filepath}: {fallback_error}")
-
-            return sent_count > 0
-
-        # Безопасное редактирование сообщения
-        async def safe_edit_message(msg, text):
-            nonlocal message_deleted
-            if not message_deleted:
-                try:
-                    await msg.edit_text(text)
-                except Exception as e:
-                    logger.error(f"Error editing message: {e}")
-                    message_deleted = True
-                    await message.answer(text)
-
-        # First, try direct API method if this is a reel (fastest method)
-        if is_reel:
-            await safe_edit_message(progress_msg, "🔍 Использую прямой API метод для reel...")
-
-            try:
-                import re
-                import aiohttp
-
-                # Extract shortcode
-                match = re.search(r'/reel/([^/]+)', url)
-                if match:
-                    shortcode = match.group(1)
-
-                    # Try specialized API endpoint for reels
-                    api_url = f"https://www.instagram.com/graphql/query/?query_hash=b3055c01b4b222b8a47dc12b090e4e64&variables={{\"shortcode\":\"{shortcode}\"}}"
-
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 12_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 105.0.0.11.118 (iPhone11,8; iOS 12_3_1; en_US; en-US; scale=2.00; 828x1792; 165586599)",
-                        "Accept": "*/*",
-                        "Accept-Language": "en-US,en;q=0.5",
-                        "Origin": "https://www.instagram.com",
-                        "Referer": url,
-                        "x-ig-app-id": "936619743392459",
-                    }
-
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(api_url, headers=headers, timeout=10) as response:
-                            if response.status == 200:
-                                data = await response.json()
-
-                                if 'data' in data and 'shortcode_media' in data['data']:
-                                    media = data['data']['shortcode_media']
-
-                                    if media.get('is_video') and 'video_url' in media:
-                                        video_url = media['video_url']
-                                        logger.info(f"Found video URL via API: {video_url}")
-
-                                        try:
-                                            await bot.send_video(
-                                                chat_id=message.chat.id,
-                                                video=video_url,
-                                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                                            )
-                                            await shortcuts.add_to_analitic_data(me.username, url)
-                                            try:
-                                                await progress_msg.delete()
-                                                message_deleted = True
-                                            except:
-                                                pass
-                                            return
-                                        except Exception as video_err:
-                                            logger.error(f"Error sending video: {video_err}")
-
-                                    # If video not found but we have image
-                                    if 'display_url' in media:
-                                        display_url = media['display_url']
-                                        logger.info(f"Found image URL via API: {display_url}")
-
-                                        try:
-                                            await bot.send_photo(
-                                                chat_id=message.chat.id,
-                                                photo=display_url,
-                                                caption=f"🎞 Instagram превью видео\nСкачано через @{me.username}"
-                                            )
-                                            await shortcuts.add_to_analitic_data(me.username, url)
-                                            try:
-                                                await progress_msg.delete()
-                                                message_deleted = True
-                                            except:
-                                                pass
-                                            return
-                                        except Exception as photo_err:
-                                            logger.error(f"Error sending image: {photo_err}")
-            except Exception as e:
-                logger.error(f"Direct API method error: {e}")
-
-        # Approach 1: Direct instaloader method (using Python subprocess)
-        await safe_edit_message(progress_msg, "🔍 Загружаю через instaloader (метод 1/3)...")
-
-        try:
-            # Check if instaloader is installed
-            instaloader_present = False
-            try:
-                subprocess.run(["instaloader", "--version"], capture_output=True, text=True, check=True)
-                instaloader_present = True
-            except (subprocess.SubprocessError, FileNotFoundError):
-                logger.info("Instaloader not found, skipping method 1")
-
-            if instaloader_present:
-                # Extract shortcode from URL
-                import re
-                match = re.search(r'/(p|reel)/([^/]+)', url)
-                if not match:
-                    logger.warning(f"Could not extract shortcode from URL: {url}")
-                else:
-                    shortcode = match.group(2)
-                    output_dir = os.path.join(temp_dir, f"insta_{request_id}")
-                    os.makedirs(output_dir, exist_ok=True)
-
-                    # Try to download using instaloader
-                    cmd = [
-                        "instaloader",
-                        "--no-metadata-json",
-                        "--no-captions",
-                        "--no-video-thumbnails",
-                        "--login", "anonymous",
-                        f"--dirname-pattern={output_dir}",
-                        f"--filename-pattern={shortcode}",
-                        f"-- -{shortcode}"  # Format for downloading by shortcode
-                    ]
-
-                    try:
-                        process = await asyncio.create_subprocess_exec(
-                            *cmd,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
-                        stdout, stderr = await process.communicate()
-
-                        if process.returncode == 0:
-                            # Find downloaded files
-                            files = os.listdir(output_dir)
-
-                            if files:
-                                success = await send_instagram_files(message, output_dir, files, me, bot)
-                                if success:
-                                    await shortcuts.add_to_analitic_data(me.username, url)
-                                    try:
-                                        await progress_msg.delete()
-                                        message_deleted = True
-                                    except:
-                                        pass
-                                    # Clean up
-                                    shutil.rmtree(output_dir, ignore_errors=True)
-                                    return
-                    except Exception as e:
-                        logger.error(f"Instaloader error: {e}")
-        except Exception as e:
-            logger.error(f"Approach 1 error: {e}")
-
-        # Approach 2: Gallery-dl method (external tool)
-        await safe_edit_message(progress_msg, "🔍 Загружаю через gallery-dl (метод 2/3)...")
-
-        try:
-            # Check if gallery-dl is installed
-            gallery_dl_present = False
-            try:
-                subprocess.run(["gallery-dl", "--version"], capture_output=True, text=True, check=True)
-                gallery_dl_present = True
-            except (subprocess.SubprocessError, FileNotFoundError):
-                logger.info("Gallery-dl not found, skipping method 2")
-
-            if gallery_dl_present:
-                output_dir = os.path.join(temp_dir, f"insta_{request_id}")
-                os.makedirs(output_dir, exist_ok=True)
-
-                # Try to download using gallery-dl
-                cmd = [
-                    "gallery-dl",
-                    "--cookies", "none",
-                    "--dest", output_dir,
-                    url
-                ]
-
-                try:
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    stdout, stderr = await process.communicate()
-
-                    # Check if files were downloaded
-                    files = os.listdir(output_dir)
-
-                    if files:
-                        success = await send_instagram_files(message, output_dir, files, me, bot)
-                        if success:
-                            await shortcuts.add_to_analitic_data(me.username, url)
-                            try:
-                                await progress_msg.delete()
-                                message_deleted = True
-                            except:
-                                pass
-                            # Clean up
-                            shutil.rmtree(output_dir, ignore_errors=True)
-                            return
-                except Exception as e:
-                    logger.error(f"Gallery-dl error: {e}")
-        except Exception as e:
-            logger.error(f"Approach 2 error: {e}")
-
-        # Approach 3: youtube-dl / yt-dlp method (fallback)
-        await safe_edit_message(progress_msg, "🔍 Загружаю через yt-dlp (метод 3/3)...")
-
-        try:
-            output_file = os.path.join(temp_dir, f"insta_{request_id}")
-
-            # Advanced yt-dlp options with writethumbnail
-            ydl_opts = {
-                'format': 'best',
-                'outtmpl': f"{output_file}.%(ext)s",
-                'writethumbnail': True,  # Save thumbnails too
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
-                    'Accept': '*/*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Referer': 'https://www.instagram.com/',
-                    'Origin': 'https://www.instagram.com',
-                    'x-ig-app-id': '936619743392459',
-                }
-            }
-
-            # Попробуем сначала без cookie
-            try:
-                no_cookie_opts = ydl_opts.copy()
-
-                with YoutubeDL(no_cookie_opts) as ydl:
-                    await asyncio.get_event_loop().run_in_executor(
-                        executor,
-                        lambda: ydl.extract_info(url, download=True)
-                    )
-            except Exception as no_cookie_error:
-                logger.error(f"Failed without cookies: {no_cookie_error}")
-
-                # Try with cookies
-                cookies_file = os.path.join(temp_dir, f"cookies_{request_id}.txt")
-                with open(cookies_file, "w") as f:
-                    f.write("""# Netscape HTTP Cookie File
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tcsrftoken\tsomerandomcsrftoken
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tmid\tYf8XQgABAAHaJf3kDKq0ZiVw4YHl
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tds_user_id\t1234567890
-.instagram.com\tTRUE\t/\tFALSE\t1999999999\tsessionid\t1234567890%3A12345abcdef%3A1
-""")
-                ydl_opts['cookiefile'] = cookies_file
-
-                try:
-                    with YoutubeDL(ydl_opts) as ydl:
-                        await asyncio.get_event_loop().run_in_executor(
-                            executor,
-                            lambda: ydl.extract_info(url, download=True)
-                        )
-                except Exception as e:
-                    logger.error(f"Failed with cookies too: {e}")
-
-            # Check for downloaded files - first check for videos
-            media_found = False
-
-            # First check for video files
-            for ext in ['mp4', 'webm', 'mov']:
-                filepath = f"{output_file}.{ext}"
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-                    logger.info(f"Found video file: {filepath} size: {os.path.getsize(filepath)}")
-                    try:
-                        await bot.send_video(
-                            chat_id=message.chat.id,
-                            video=FSInputFile(filepath),
-                            caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                        )
-                        media_found = True
-                        await shortcuts.add_to_analitic_data(me.username, url)
-                        try:
-                            await progress_msg.delete()
-                            message_deleted = True
-                        except:
-                            pass
-                        break
-                    except Exception as send_error:
-                        logger.error(f"Error sending video: {send_error}")
-                        # Try as document if video fails
-                        try:
-                            await bot.send_document(
-                                chat_id=message.chat.id,
-                                document=FSInputFile(filepath),
-                                caption=f"📹 Instagram видео\nСкачано через @{me.username}"
-                            )
-                            media_found = True
-                            await shortcuts.add_to_analitic_data(me.username, url)
-                            try:
-                                await progress_msg.delete()
-                                message_deleted = True
-                            except:
-                                pass
-                            break
-                        except Exception as doc_error:
-                            logger.error(f"Error sending as document: {doc_error}")
-                    finally:
-                        try:
-                            if os.path.exists(filepath):
-                                os.remove(filepath)
-                        except:
-                            pass
-
-            # If no video found, check for images
-            if not media_found:
-                image_files = []
-                for ext in ['jpg', 'jpeg', 'png', 'webp']:
-                    # Check direct filename matches
-                    filepath = f"{output_file}.{ext}"
-                    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-                        image_files.append(filepath)
-
-                    # Also check for alternate filenames (like thumbnails)
-                    for alt_file in glob.glob(f"{output_file}*.{ext}"):
-                        if os.path.exists(alt_file) and os.path.getsize(alt_file) > 0:
-                            image_files.append(alt_file)
-
-                # Sort by size - larger files first (usually better quality)
-                image_files.sort(key=lambda f: os.path.getsize(f), reverse=True)
-
-                for filepath in image_files:
-                    try:
-                        logger.info(f"Found image file: {filepath} size: {os.path.getsize(filepath)}")
-
-                        # Determine if this is a reel thumbnail or regular photo
-                        caption = "🎞 Instagram превью видео" if is_reel else "🖼 Instagram фото"
-
-                        await bot.send_photo(
-                            chat_id=message.chat.id,
-                            photo=FSInputFile(filepath),
-                            caption=f"{caption}\nСкачано через @{me.username}"
-                        )
-                        media_found = True
-                        await shortcuts.add_to_analitic_data(me.username, url)
-                        try:
-                            await progress_msg.delete()
-                            message_deleted = True
-                        except:
-                            pass
-                        break
-                    except Exception as send_error:
-                        logger.error(f"Error sending image: {send_error}")
-                        # Try as document if photo fails
-                        try:
-                            await bot.send_document(
-                                chat_id=message.chat.id,
-                                document=FSInputFile(filepath),
-                                caption=f"{caption}\nСкачано через @{me.username}"
-                            )
-                            media_found = True
-                            await shortcuts.add_to_analitic_data(me.username, url)
-                            try:
-                                await progress_msg.delete()
-                                message_deleted = True
-                            except:
-                                pass
-                            break
-                        except Exception as doc_error:
-                            logger.error(f"Error sending as document: {doc_error}")
-                    finally:
-                        try:
-                            if os.path.exists(filepath):
-                                os.remove(filepath)
-                        except:
-                            pass
-
-            # Clean up all related files
-            for f in glob.glob(f"{output_file}*"):
-                try:
-                    if os.path.exists(f):
-                        os.remove(f)
-                except:
-                    pass
-
-            # Clean up cookies file if it exists
-            cookies_file = os.path.join(temp_dir, f"cookies_{request_id}.txt")
-            try:
-                if os.path.exists(cookies_file):
-                    os.remove(cookies_file)
-            except:
-                pass
-
-            if media_found:
-                return
-
-        except Exception as e:
-            logger.error(f"Approach 3 error: {e}")
-
-        # If all approaches failed, try one final direct API request for thumbnails
-        try:
-            await safe_edit_message(progress_msg, "🔍 Использую запасной метод...")
-
-            import re
-            import aiohttp
-
-            # Extract shortcode
-            match = re.search(r'/(p|reel)/([^/]+)', url)
-            if match:
-                shortcode = match.group(2)
-                post_type = match.group(1)
-
-                # Try OEmbed API - works well for thumbnails
-                oembed_url = f"https://api.instagram.com/oembed/?url=https://www.instagram.com/{post_type}/{shortcode}/"
-
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                    "Accept": "application/json",
-                }
-
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(oembed_url, headers=headers, timeout=10) as response:
-                        if response.status == 200:
-                            try:
-                                data = await response.json()
-
-                                if 'thumbnail_url' in data:
-                                    thumbnail_url = data['thumbnail_url']
-                                    logger.info(f"Found thumbnail URL via OEmbed: {thumbnail_url}")
-
-                                    caption = "🎞 Instagram превью видео" if is_reel else "🖼 Instagram фото"
-
-                                    try:
-                                        await bot.send_photo(
-                                            chat_id=message.chat.id,
-                                            photo=thumbnail_url,
-                                            caption=f"{caption}\nСкачано через @{me.username}"
-                                        )
-                                        await shortcuts.add_to_analitic_data(me.username, url)
-                                        try:
-                                            await progress_msg.delete()
-                                            message_deleted = True
-                                        except:
-                                            pass
-                                        return
-                                    except Exception as photo_err:
-                                        logger.error(f"Error sending image: {photo_err}")
-                            except Exception as json_error:
-                                logger.error(f"JSON parsing error: {json_error}")
-        except Exception as e:
-            logger.error(f"Final fallback method error: {e}")
-
-        # If all approaches failed, send error message
-        if not message_deleted:
-            try:
-                await progress_msg.delete()
-                message_deleted = True
-            except:
-                pass
-
-        await message.answer(
-            "❌ Не удалось загрузить медиа из Instagram. Instagram часто блокирует подобные загрузки. Попробуйте другой пост или позже.")
-
-    except Exception as e:
-        logger.error(f"Instagram handler error: {e}")
-        if not message_deleted:
-            try:
-                await progress_msg.delete()
-            except:
-                pass
-
-        await message.answer("❌ Ошибка при скачивании из Instagram. Возможно, пост приватный или удалён.")
-
-
-async def send_instagram_files(message, directory, files, me, bot):
-    """Helper function to send downloaded Instagram files"""
-    sent_count = 0
-    media_files = []
-
-    # Логируем все найденные файлы для отладки
-    logger.info(f"Files in directory {directory}: {files}")
-
-    # Проверяем, содержит ли имя директории "reel" - это поможет нам определить, что это видео
-    is_reel = "reel" in directory.lower() or any("reel" in f.lower() for f in files)
-    logger.info(f"Is this a reel? {is_reel}")
-
-    # First sort files to ensure correct order and filter unwanted files
-    for f in sorted(files):
-        filepath = os.path.join(directory, f)
-        if not os.path.isfile(filepath):
-            continue
-
-        # Skip small files and metadata files
-        filesize = os.path.getsize(filepath)
-        if filesize < 1000 or '.json' in f or '.txt' in f:
-            continue
-
-        # Determine file type by extension
-        ext = os.path.splitext(f)[1].lower()
-
-        # Determine if this is a video by file extension
-        if ext in ['.mp4', '.mov', '.webm']:
-            media_type = 'video'
-        elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-            # If we know this is a reel but file is an image, it's a thumbnail
-            media_type = 'thumbnail' if is_reel else 'photo'
-        else:
-            # Log unusual extensions for analysis
-            logger.info(f"Unusual file extension found: {ext} in file {f}")
-            continue
-
-        media_files.append((filepath, media_type))
-
-    # Then send files
-    total_files = len(media_files)
-    logger.info(f"Found {total_files} media files in directory {directory}")
-
-    for i, (filepath, media_type) in enumerate(media_files):
-        try:
-            logger.info(f"Sending file {i + 1}/{total_files}: {filepath} as {media_type}")
-
-            if media_type == 'video':
-                try:
-                    await bot.send_video(
-                        chat_id=message.chat.id,
-                        video=FSInputFile(filepath),
-                        caption=f"📹 Instagram видео {i + 1}/{total_files}\nСкачано через @{me.username}"
-                    )
-                    sent_count += 1
-                except Exception as video_error:
-                    logger.error(f"Error sending as video, trying as document: {video_error}")
-                    await bot.send_document(
-                        chat_id=message.chat.id,
-                        document=FSInputFile(filepath),
-                        caption=f"📹 Instagram видео {i + 1}/{total_files}\nСкачано через @{me.username}"
-                    )
-                    sent_count += 1
-            elif media_type == 'thumbnail':
-                await bot.send_photo(
-                    chat_id=message.chat.id,
-                    photo=FSInputFile(filepath),
-                    caption=f"🎞 Instagram превью видео {i + 1}/{total_files}\nСкачано через @{me.username}"
-                )
-                sent_count += 1
-            else:  # photo
-                await bot.send_photo(
-                    chat_id=message.chat.id,
-                    photo=FSInputFile(filepath),
-                    caption=f"🖼 Instagram фото {i + 1}/{total_files}\nСкачано через @{me.username}"
-                )
-                sent_count += 1
-
-            # Add small delay between posts
-            await asyncio.sleep(0.5)
-        except Exception as e:
-            logger.error(f"Error sending file {filepath}: {e}")
-
-            # Try alternate method if primary fails
-            try:
-                await bot.send_document(
-                    chat_id=message.chat.id,
-                    document=FSInputFile(filepath),
-                    caption=f"📄 Instagram медиа {i + 1}/{total_files}\nСкачано через @{me.username}"
-                )
-                sent_count += 1
-            except Exception as fallback_error:
-                logger.error(f"Fallback error for file {filepath}: {fallback_error}")
-
-    return sent_count > 0
-
-
-async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str,state: FSMContext):
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            video_path = ydl.prepare_filename(info)
-
-            if os.path.exists(video_path):
-                try:
-                    video = FSInputFile(video_path)
-                    await bot.send_video(
-                        chat_id=message.chat.id,
-                        video=video,
-                        caption=f"📹 {info.get('title', 'Video')} (Низкое качество)\nСкачано через @{me.username}",
-                        supports_streaming=True
-                    )
-                    await state.set_state(Download.download)
-                finally:
-                    # Всегда удаляем файл после отправки
-                    if os.path.exists(video_path):
-                        os.remove(video_path)
-            else:
-                raise FileNotFoundError("Downloaded video file not found")
-
-    except Exception as e:
-        logger.error(f"Error downloading and sending video from {platform}: {e}")
-        await message.answer(f"❌ Не удалось скачать видео из {platform}")
-
-
-async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMContext):
-    try:
-        ydl_opts = {
-            'format': 'mp4',
-            'quiet': True,
-            'no_warnings': True,
-            'max_filesize': 40000000,
-        }
-
-        if '?' in url:
-            url = url.split('?')[0]
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                # Получаем информацию о видео без скачивания
-                info = ydl.extract_info(url, download=False)
-                if info and 'url' in info:
-                    try:
-                        await bot.send_video(
-                            chat_id=message.chat.id,
-                            video=info['url'],
-                            caption=f"📹 TikTok video\nСкачано через @{me.username}",
-                        )
-                        await state.set_state(Download.download)
-                        await shortcuts.add_to_analitic_data(me.username, url)
-                        return
-                    except Exception:
-
-                        await download_and_send_video(message, url, ydl_opts, me, bot, "TikTok",state)
-                else:
-                    await message.answer("❌ Не удалось получить ссылку на видео")
-
-            except Exception as e:
-                logger.error(f"TikTok processing error: {e}")
-                await message.answer("❌ Ошибка при скачивании из TikTok")
-
-    except Exception as e:
-        logger.error(f"TikTok handler error: {e}")
-        await message.answer("❌ Ошибка при обработке TikTok видео")
