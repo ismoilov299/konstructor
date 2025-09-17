@@ -2363,8 +2363,6 @@ class DownloaderBotFilter(Filter):
 
 
 class UnifiedSocialDownloader:
-    """Unified downloader для ВСЕХ платформ включая YouTube"""
-
     def __init__(self):
         self.api_key = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
         self.api_host = "social-download-all-in-one.p.rapidapi.com"
@@ -2377,58 +2375,112 @@ class UnifiedSocialDownloader:
         }
 
     async def download_media(self, url: str):
-        """Универсальный метод для всех платформ"""
+        """DEBUG: API запрос с подробным логированием"""
+        logger.info(f"🔍 API REQUEST START")
+        logger.info(f"📍 URL: {url}")
+        logger.info(f"🌐 API Host: {self.api_host}")
+
         try:
             payload = {"url": url}
+            logger.info(f"📋 Payload: {payload}")
+
             async with aiohttp.ClientSession() as session:
+                logger.info(f"📡 Making POST request...")
+
                 async with session.post(f"{self.base_url}/autolink", json=payload, headers=self.headers,
                                         timeout=30) as response:
+                    status = response.status
+                    logger.info(f"📊 Response status: {status}")
+
                     if response.status == 200:
                         data = await response.json()
+                        logger.info(f"✅ API SUCCESS")
+                        logger.info(f"🔍 Response keys: {list(data.keys())}")
+                        logger.info(f"📝 Title: {data.get('title', 'N/A')}")
+                        logger.info(f"📱 Source: {data.get('source', 'N/A')}")
+                        logger.info(f"🎥 Medias count: {len(data.get('medias', []))}")
+                        logger.info(f"❌ Error flag: {data.get('error', 'N/A')}")
+
+                        # Log first few medias
+                        medias = data.get('medias', [])
+                        for i, media in enumerate(medias[:3]):
+                            logger.info(
+                                f"🎬 Media {i + 1}: {media.get('label', 'N/A')} - {media.get('type', 'N/A')} - FormatID: {media.get('formatId', 'N/A')}")
+
                         if not data.get('error', True):
                             return {'success': True, 'data': data}
                         else:
-                            return {'success': False, 'error': data.get('message', 'API error')}
+                            error_msg = data.get('message', 'API error')
+                            logger.error(f"❌ API returned error: {error_msg}")
+                            return {'success': False, 'error': error_msg}
                     else:
-                        return {'success': False, 'error': f'HTTP {response.status}'}
+                        error_text = await response.text()
+                        logger.error(f"❌ HTTP Error {status}: {error_text}")
+                        return {'success': False, 'error': f'HTTP {status}: {error_text}'}
+
         except Exception as e:
+            logger.error(f"❌ Exception in API request: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"📍 Traceback: {traceback.format_exc()}")
             return {'success': False, 'error': str(e)}
 
-    def get_platform_from_url(self, url: str):
-        """Определение платформы"""
-        if 'youtube.com' in url or 'youtu.be' in url:
-            return 'youtube'
-        elif 'instagram.com' in url or 'instagr.am' in url:
-            return 'instagram'
-        elif 'tiktok.com' in url:
-            return 'tiktok'
-        elif 'twitter.com' in url or 'x.com' in url:
-            return 'twitter'
-        elif 'facebook.com' in url or 'fb.watch' in url:
-            return 'facebook'
-        elif 'reddit.com' in url:
-            return 'reddit'
-        elif 'vimeo.com' in url:
-            return 'vimeo'
-        else:
-            return 'unknown'
-
     async def download_file(self, file_url: str, max_size_mb: int = 50):
-        """Скачивание файла"""
+        """DEBUG: Скачивание файла с подробным логированием"""
+        logger.info(f"⬇️ FILE DOWNLOAD START")
+        logger.info(f"🔗 URL: {file_url[:100]}...")
+        logger.info(f"📏 Max size: {max_size_mb} MB")
+
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': '*/*',
+                'Connection': 'keep-alive'
+            }
+
+            logger.info(f"🌐 Creating session...")
             async with aiohttp.ClientSession() as session:
+                logger.info(f"📡 Making GET request...")
+
                 async with session.get(file_url, headers=headers, timeout=60) as response:
+                    status = response.status
+                    logger.info(f"📊 Response status: {status}")
+
+                    # Headers info
+                    content_length = response.headers.get('content-length')
+                    content_type = response.headers.get('content-type')
+                    logger.info(f"📦 Content-Length: {content_length}")
+                    logger.info(f"📄 Content-Type: {content_type}")
+
                     if response.status == 200:
-                        content_length = response.headers.get('content-length')
                         if content_length:
                             size_mb = int(content_length) / (1024 * 1024)
+                            logger.info(f"📏 File size: {size_mb:.2f} MB")
+
                             if size_mb > max_size_mb:
+                                logger.error(f"❌ File too large: {size_mb:.2f} MB > {max_size_mb} MB")
                                 return None
-                        return await response.read()
-                    return None
-        except:
+
+                            logger.info(f"✅ File size OK, downloading...")
+                        else:
+                            logger.warning(f"⚠️ No content-length header, downloading anyway...")
+
+                        data = await response.read()
+                        actual_size = len(data) / (1024 * 1024)
+                        logger.info(f"✅ Downloaded successfully: {actual_size:.2f} MB")
+                        return data
+
+                    else:
+                        logger.error(f"❌ Download failed with status: {status}")
+                        response_text = await response.text()
+                        logger.error(f"📄 Response: {response_text[:200]}...")
+                        return None
+
+        except Exception as e:
+            logger.error(f"❌ Exception in file download: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"📍 Traceback: {traceback.format_exc()}")
             return None
+
 
 # Global instance
 unified_downloader = UnifiedSocialDownloader()
@@ -2462,15 +2514,24 @@ async def unified_download_handler(message: Message, state: FSMContext, bot: Bot
 
 
 async def handle_youtube_unified(message: Message, url: str, me, bot: Bot, state: FSMContext):
-    """YouTube handler с выбором форматов через unified API"""
+    """YouTube handler с логированием"""
+    logger.info(f"🎯 YOUTUBE HANDLER START")
+    logger.info(f"🔗 URL: {url}")
+    logger.info(f"👤 User: {message.from_user.id}")
+
     progress_msg = await message.answer("📡 Анализирую YouTube видео...")
 
     try:
         # Получаем данные через unified API
+        logger.info(f"📡 Getting data from API...")
         result = await unified_downloader.download_media(url)
 
+        logger.info(f"🔍 API result success: {result.get('success')}")
+
         if not result['success']:
-            await progress_msg.edit_text(f"❌ Не удалось получить данные: {result['error']}")
+            error_msg = result['error']
+            logger.error(f"❌ API failed: {error_msg}")
+            await progress_msg.edit_text(f"❌ Не удалось получить данные: {error_msg}")
             return
 
         data = result['data']
@@ -2478,27 +2539,47 @@ async def handle_youtube_unified(message: Message, url: str, me, bot: Bot, state
         duration = data.get('duration', 0)
         medias = data.get('medias', [])
 
+        logger.info(f"📝 Title: {title}")
+        logger.info(f"⏱ Duration: {duration}")
+        logger.info(f"🎥 Medias count: {len(medias)}")
+
         if not medias:
+            logger.error(f"❌ No medias found")
             await progress_msg.edit_text("❌ Форматы не найдены")
             return
 
         await progress_msg.edit_text("🔍 Обрабатываю доступные форматы...")
 
-        # Группировка форматов
-        video_with_audio = []  # Видео с аудио (ready to use)
-        video_only = []  # Только видео
-        audio_only = []  # Только аудио
+        # Анализ форматов
+        logger.info(f"🔍 ANALYZING FORMATS:")
+        video_with_audio = []
+        video_only = []
+        audio_only = []
 
-        for media in medias:
+        for i, media in enumerate(medias):
             media_type = media.get('type', '')
             has_audio = media.get('is_audio', False)
+            format_id = media.get('formatId')
+            label = media.get('label', 'N/A')
+
+            logger.info(f"🎬 Format {i}: ID={format_id}, Type={media_type}, Audio={has_audio}, Label={label}")
 
             if media_type == 'video' and has_audio:
                 video_with_audio.append(media)
+                logger.info(f"  ✅ Added to video_with_audio")
             elif media_type == 'video' and not has_audio:
                 video_only.append(media)
+                logger.info(f"  ✅ Added to video_only")
             elif media_type == 'audio':
                 audio_only.append(media)
+                logger.info(f"  ✅ Added to audio_only")
+            else:
+                logger.info(f"  ⚠️ Uncategorized format")
+
+        logger.info(f"📊 CATEGORIZATION RESULTS:")
+        logger.info(f"📹 Video with audio: {len(video_with_audio)}")
+        logger.info(f"🎬 Video only: {len(video_only)}")
+        logger.info(f"🎵 Audio only: {len(audio_only)}")
 
         # Создание кнопок
         keyboard = InlineKeyboardBuilder()
@@ -2510,32 +2591,29 @@ async def handle_youtube_unified(message: Message, url: str, me, bot: Bot, state
                 callback_data="yt_section_ready"
             ))
 
-            for media in video_with_audio[:5]:  # Показываем топ 5
+            for media in video_with_audio[:5]:
                 label = media.get('label', 'Unknown')
                 format_id = media.get('formatId', 0)
+
+                logger.info(f"🔘 Adding button: {label} (ID: {format_id})")
 
                 keyboard.row(InlineKeyboardButton(
                     text=f"📹 {label}",
                     callback_data=f"yt_dl_{format_id}"
                 ))
 
-        # 2. Только видео (для продвинутых)
-        if video_only:
-            keyboard.row(InlineKeyboardButton(
-                text="🎬 Только видео (без звука)",
-                callback_data="yt_section_video"
-            ))
-
-        # 3. Только аудио
+        # 2. Только аудио
         if audio_only:
             keyboard.row(InlineKeyboardButton(
                 text="🎵 Только аудио",
                 callback_data="yt_section_audio"
             ))
 
-            for media in audio_only[:3]:  # Показываем топ 3 аудио
+            for media in audio_only[:3]:
                 label = media.get('label', 'Unknown')
                 format_id = media.get('formatId', 0)
+
+                logger.info(f"🔘 Adding audio button: {label} (ID: {format_id})")
 
                 keyboard.row(InlineKeyboardButton(
                     text=f"🎵 {label}",
@@ -2558,72 +2636,130 @@ async def handle_youtube_unified(message: Message, url: str, me, bot: Bot, state
 Выберите формат для скачивания:"""
 
         # Сохраняем в state
+        logger.info(f"💾 Saving to state...")
         await state.update_data(
             youtube_data=data,
             youtube_url=url,
             youtube_medias=medias
         )
 
+        logger.info(f"✅ Showing format selection to user")
         await progress_msg.edit_text(info_text, reply_markup=keyboard.as_markup())
 
     except Exception as e:
-        logger.error(f"YouTube unified handler error: {e}")
-        await progress_msg.edit_text("❌ Ошибка при обработке YouTube видео")
+        logger.error(f"❌ CRITICAL ERROR in YouTube handler: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Full traceback: {traceback.format_exc()}")
+        await progress_msg.edit_text(f"❌ Критическая ошибка: {str(e)[:100]}...")
+
+
+# Включить DEBUG логирование
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
 async def process_youtube_download_unified(callback: CallbackQuery, state: FSMContext):
-    """Обработка скачивания YouTube через unified API"""
+    """YouTube download callback с логированием"""
+    logger.info(f"🎯 YOUTUBE CALLBACK START")
+    logger.info(f"📋 Callback data: {callback.data}")
+    logger.info(f"👤 User: {callback.from_user.id}")
+
     try:
         await callback.answer()
 
         # Получаем format_id
-        format_id = int(callback.data.replace("yt_dl_", ""))
+        format_id_str = callback.data.replace("yt_dl_", "")
+        logger.info(f"🔢 Format ID string: '{format_id_str}'")
+
+        try:
+            format_id = int(format_id_str)
+            logger.info(f"🔢 Format ID integer: {format_id}")
+        except ValueError as e:
+            logger.error(f"❌ Cannot convert format_id to int: {e}")
+            await callback.message.edit_text("❌ Ошибка формата ID")
+            return
 
         # Получаем данные из state
+        logger.info(f"📊 Getting data from state...")
         data = await state.get_data()
+        logger.info(f"🗂 State keys: {list(data.keys())}")
+
         youtube_data = data.get('youtube_data', {})
         medias = data.get('youtube_medias', [])
 
+        logger.info(f"📝 YouTube title: {youtube_data.get('title', 'N/A')}")
+        logger.info(f"🎥 Total medias: {len(medias)}")
+
         # Находим выбранный формат
+        logger.info(f"🔍 Searching for format_id: {format_id}")
         selected_media = None
-        for media in medias:
-            if media.get('formatId') == format_id:
+
+        for i, media in enumerate(medias):
+            media_format_id = media.get('formatId')
+            logger.info(f"🎬 Media {i}: formatId={media_format_id}, label={media.get('label', 'N/A')}")
+
+            if media_format_id == format_id:
                 selected_media = media
+                logger.info(f"✅ FOUND matching media!")
                 break
 
         if not selected_media:
+            logger.error(f"❌ Selected media not found for format_id: {format_id}")
             await callback.message.edit_text("❌ Выбранный формат не найден")
             return
+
+        # Детали выбранного медиа
+        logger.info(f"📋 SELECTED MEDIA DETAILS:")
+        logger.info(f"🏷 Label: {selected_media.get('label', 'N/A')}")
+        logger.info(f"🎭 Type: {selected_media.get('type', 'N/A')}")
+        logger.info(f"📦 Extension: {selected_media.get('ext', 'N/A')}")
+        logger.info(f"🔗 URL length: {len(selected_media.get('url', ''))}")
+        logger.info(f"🔗 URL preview: {selected_media.get('url', '')[:100]}...")
 
         title = youtube_data.get('title', 'YouTube видео')
         download_url = selected_media.get('url')
         label = selected_media.get('label', 'Unknown')
 
+        if not download_url:
+            logger.error(f"❌ No download URL in selected media!")
+            await callback.message.edit_text("❌ URL для скачивания не найден")
+            return
+
         await callback.message.edit_text(f"⏬ Скачиваю: {label}\n📝 {title}")
 
         # Скачиваем файл
+        logger.info(f"⬇️ Starting file download...")
         file_data = await unified_downloader.download_file(download_url)
 
         if not file_data:
-            await callback.message.edit_text("❌ Не удалось скачать файл")
+            logger.error(f"❌ File download failed!")
+            await callback.message.edit_text("❌ Не удалось скачать файл (см. логи для деталей)")
             return
 
+        logger.info(f"✅ File downloaded successfully!")
         await callback.message.edit_text("📤 Отправляю в Telegram...")
 
         # Определяем тип и расширение
         media_type = selected_media.get('type', 'video')
         ext = selected_media.get('ext', 'mp4')
 
+        logger.info(f"📄 Media type: {media_type}")
+        logger.info(f"📎 Extension: {ext}")
+
         # Создаем временный файл
+        import tempfile
         with tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False) as temp_file:
             temp_file.write(file_data)
             temp_filepath = temp_file.name
 
+        logger.info(f"💾 Temporary file created: {temp_filepath}")
+
         try:
-            caption = f"🎥 YouTube\n📝 {title}\n📊 {label}\n🚀 @{callback.bot.username}"
+            caption = f"🎥 YouTube\n📝 {title}\n📊 {label}\n🚀 @{(await callback.bot.get_me()).username}"
+            logger.info(f"📝 Caption: {caption}")
 
             if media_type == 'video':
+                logger.info(f"📹 Sending as video...")
                 await callback.bot.send_video(
                     chat_id=callback.message.chat.id,
                     video=FSInputFile(temp_filepath),
@@ -2631,24 +2767,47 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
                     supports_streaming=True
                 )
             elif media_type == 'audio':
+                logger.info(f"🎵 Sending as audio...")
                 await callback.bot.send_audio(
                     chat_id=callback.message.chat.id,
                     audio=FSInputFile(temp_filepath),
                     caption=caption
                 )
+            else:
+                logger.info(f"📄 Sending as document...")
+                await callback.bot.send_document(
+                    chat_id=callback.message.chat.id,
+                    document=FSInputFile(temp_filepath),
+                    caption=caption
+                )
 
+            logger.info(f"✅ File sent successfully!")
             await callback.message.delete()
-            await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_data.get('url'))
+
+            # Analytics
+            try:
+                await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_data.get('url'))
+                logger.info(f"📊 Analytics updated")
+            except Exception as analytics_error:
+                logger.error(f"⚠️ Analytics error: {analytics_error}")
 
         finally:
+            # Cleanup
             try:
                 os.unlink(temp_filepath)
-            except:
-                pass
+                logger.info(f"🗑 Temporary file cleaned up")
+            except Exception as cleanup_error:
+                logger.error(f"⚠️ Cleanup error: {cleanup_error}")
 
     except Exception as e:
-        logger.error(f"YouTube download error: {e}")
-        await callback.message.edit_text("❌ Ошибка при скачивании")
+        logger.error(f"❌ CRITICAL ERROR in YouTube callback: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Full traceback: {traceback.format_exc()}")
+
+        try:
+            await callback.message.edit_text(f"❌ Критическая ошибка: {str(e)[:100]}...")
+        except:
+            pass
 
 
 async def handle_other_platforms_unified(message: Message, url: str, me, bot: Bot, state: FSMContext, platform: str):
