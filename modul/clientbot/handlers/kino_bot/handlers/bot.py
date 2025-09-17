@@ -2360,9 +2360,81 @@ class DownloaderBotFilter(Filter):
         bot_db = await shortcuts.get_bot(bot)
         return shortcuts.have_one_module(bot_db, "download")
 
+
+class UnifiedSocialDownloader:
+    """Unified social media downloader using RapidAPI"""
+
+    def __init__(self):
+        self.api_key = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
+        self.api_host = "social-download-all-in-one.p.rapidapi.com"
+        self.base_url = f"https://{self.api_host}/v1/social"
+
+        self.headers = {
+            "x-rapidapi-key": self.api_key,
+            "x-rapidapi-host": self.api_host,
+            "Content-Type": "application/json"
+        }
+
+    async def download_media(self, url: str):
+        """API orqali media ma'lumotlarini olish"""
+        try:
+            payload = {"url": url}
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                        f"{self.base_url}/autolink",
+                        json=payload,
+                        headers=self.headers,
+                        timeout=30
+                ) as response:
+
+                    if response.status == 200:
+                        data = await response.json()
+                        if not data.get('error', True):
+                            return {'success': True, 'data': data}
+                        else:
+                            return {'success': False, 'error': data.get('message', 'API error')}
+                    else:
+                        return {'success': False, 'error': f'HTTP {response.status}'}
+
+        except Exception as e:
+            logger.error(f"API request error: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def download_file(self, file_url: str, max_size_mb: int = 50):
+        """Fayl yuklab olish"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': '*/*',
+                'Connection': 'keep-alive'
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(file_url, headers=headers, timeout=60) as response:
+                    if response.status == 200:
+                        # Check file size
+                        content_length = response.headers.get('content-length')
+                        if content_length:
+                            size_mb = int(content_length) / (1024 * 1024)
+                            if size_mb > max_size_mb:
+                                return None
+
+                        return await response.read()
+                    else:
+                        return None
+        except Exception as e:
+            logger.error(f"File download error: {e}")
+            return None
+
+
+# Global instance
+unified_downloader = UnifiedSocialDownloader()
+
 @client_bot_router.message(DownloaderBotFilter())
 @client_bot_router.message(Download.download)
 async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+    """Главный handler для всех платформ"""
     if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
@@ -2370,14 +2442,133 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
     url = message.text.strip()
     me = await bot.get_me()
 
-    if 'tiktok.com' in url:
-        await handle_tiktok(message, url, me, bot, state)
+    # YouTube - оставляем существующую сложную систему с форматами
+    if 'youtube.com' in url or 'youtu.be' in url:
+        await handle_youtube(message, url, me, bot, state)  # Ваша существующая функция
+
+    # Instagram - новая API система
     elif 'instagram.com' in url or 'instagr.am' in url or 'inst.ae' in url:
-        await handle_instagram(message, url, me, bot)
-    elif 'youtube.com' in url or 'youtu.be' in url:
-        await handle_youtube(message, url, me, bot, state)  # Yangilangan funksiya
+        await handle_instagram(message, url, me, bot)  # Обновленная функция
+
+    # TikTok - новая API система
+    elif 'tiktok.com' in url:
+        await handle_tiktok(message, url, me, bot, state)  # Обновленная функция
+
+    # Новые платформы
+    elif any(domain in url.lower() for domain in
+             ['twitter.com', 'x.com', 'facebook.com', 'fb.watch', 'reddit.com', 'vimeo.com']):
+        await handle_new_platforms(message, url, me, bot, state)
+
     else:
-        await message.answer("❗ Поддерживаются только YouTube, Instagram и TikTok ссылки")
+        await message.answer(
+            "❗ Поддерживаются только YouTube, Instagram, TikTok, Twitter, Facebook, Reddit и Vimeo ссылки")
+
+
+async def handle_new_platforms(message: Message, url: str, me, bot: Bot, state: FSMContext):
+    """Handler для новых платформ (Twitter, Facebook, Reddit, Vimeo)"""
+
+    # Определение платформы
+    platform_map = {
+        'twitter.com': 'Twitter',
+        'x.com': 'Twitter',
+        'facebook.com': 'Facebook',
+        'fb.watch': 'Facebook',
+        'reddit.com': 'Reddit',
+        'vimeo.com': 'Vimeo'
+    }
+
+    platform = None
+    for domain, name in platform_map.items():
+        if domain in url.lower():
+            platform = name
+            break
+
+    if not platform:
+        await message.answer("❌ Неподдерживаемая платформа")
+        return
+
+    progress_msg = await message.answer(f"⏳ Загружаю медиа из {platform}...")
+
+    try:
+        # Получение данных через API
+        await progress_msg.edit_text(f"📡 Получаю информацию из {platform}...")
+
+        result = await unified_downloader.download_media(url)
+
+        if not result['success']:
+            await progress_msg.edit_text(f"❌ Не удалось получить данные из {platform}: {result['error']}")
+            return
+
+        data = result['data']
+
+        # Извлечение информации
+        title = data.get('title', f'{platform} медиа')
+        author = data.get('author', 'Неизвестно')
+        medias = data.get('medias', [])
+
+        if not medias:
+            await progress_msg.edit_text(f"❌ Медиа из {platform} не найдено")
+            return
+
+        # Выбор лучшего медиа
+        selected_media = medias[0]  # Берем первое
+        for media in medias:
+            if media.get('type') == 'video':
+                selected_media = media
+                break
+
+        # Показ информации и скачивание
+        await progress_msg.edit_text(f"✅ {platform} медиа найдено!\n\n📝 {title}\n👤 {author}\n\n📥 Скачиваю...")
+
+        # Скачивание файла
+        file_data = await unified_downloader.download_file(selected_media['url'])
+
+        if not file_data:
+            await progress_msg.edit_text(f"❌ Не удалось скачать файл из {platform}")
+            return
+
+        await progress_msg.edit_text("📤 Отправляю в Telegram...")
+
+        # Отправка
+        caption = f"🎥 {platform} медиа\n📝 {title}\n👤 {author}\nСкачано через @{me.username}"
+        media_type = selected_media.get('type', 'video')
+        extension = selected_media.get('extension', 'mp4')
+
+        with tempfile.NamedTemporaryFile(suffix=f'.{extension}', delete=False) as temp_file:
+            temp_file.write(file_data)
+            temp_filepath = temp_file.name
+
+        try:
+            if media_type == 'video':
+                await bot.send_video(
+                    chat_id=message.chat.id,
+                    video=FSInputFile(temp_filepath),
+                    caption=caption,
+                    supports_streaming=True
+                )
+            else:
+                await bot.send_document(
+                    chat_id=message.chat.id,
+                    document=FSInputFile(temp_filepath),
+                    caption=caption
+                )
+
+            await progress_msg.delete()
+            await shortcuts.add_to_analitic_data(me.username, url)
+            await state.set_state(Download.download)
+
+        finally:
+            try:
+                os.unlink(temp_filepath)
+            except:
+                pass
+
+    except Exception as e:
+        logger.error(f"{platform} handler error: {e}")
+        try:
+            await progress_msg.edit_text(f"❌ Ошибка при скачивании из {platform}")
+        except:
+            await message.answer(f"❌ Ошибка при скачивании из {platform}")
 
 
 async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
