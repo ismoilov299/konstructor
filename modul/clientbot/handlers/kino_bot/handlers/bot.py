@@ -2922,7 +2922,7 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
 
             link_message = f"""📝 {title}
 
-⚠️ Не удалось скачать файл, но вот прямая [ссылка]({download_url}) для загрузки
+⚠️ Не удалось скачать файл, но вот прямая <a href="{download_url}">ссылка</a> для загрузки
 
 💡 Нажмите на ссылку или используйте в своем загрузчике
 
@@ -2933,7 +2933,7 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
             await callback.message.edit_text(
                 link_message,
                 disable_web_page_preview=True,
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
 
             logger.info(f"✅ Download link sent to user")
