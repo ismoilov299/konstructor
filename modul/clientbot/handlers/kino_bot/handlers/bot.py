@@ -2394,19 +2394,46 @@ class UnifiedSocialDownloader:
         else:
             return 'unknown'
 
+    async def validate_url(self, url: str):
+        """URL ni tekshirish va redirect larni kuzatish"""
+        logger.info(f"🔍 Validating URL: {url[:100]}...")
+
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': '*/*',
+                'Connection': 'keep-alive',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate'
+            }
+
+            async with aiohttp.ClientSession() as session:
+                # HEAD request orqali URL ni tekshirish
+                async with session.head(url, headers=headers, timeout=30, allow_redirects=True) as response:
+                    logger.info(f"✅ URL validation - Status: {response.status}")
+                    logger.info(f"🔗 Final URL: {str(response.url)}")
+                    logger.info(f"📦 Content-Type: {response.headers.get('content-type', 'N/A')}")
+                    logger.info(f"📏 Content-Length: {response.headers.get('content-length', 'N/A')}")
+
+                    if response.status in [200, 206]:  # 206 = Partial Content
+                        return True, str(response.url)
+                    else:
+                        logger.warning(f"⚠️ URL validation failed: {response.status}")
+                        return False, None
+
+        except Exception as e:
+            logger.error(f"❌ URL validation error: {e}")
+            return False, None
+
     async def download_media(self, url: str):
-        """DEBUG: API запрос с подробным логированием"""
+        """API запрос с подробным логированием"""
         logger.info(f"🔍 API REQUEST START")
         logger.info(f"📍 URL: {url}")
-        logger.info(f"🌐 API Host: {self.api_host}")
 
         try:
             payload = {"url": url}
-            logger.info(f"📋 Payload: {payload}")
 
             async with aiohttp.ClientSession() as session:
-                logger.info(f"📡 Making POST request...")
-
                 async with session.post(f"{self.base_url}/autolink", json=payload, headers=self.headers,
                                         timeout=30) as response:
                     status = response.status
@@ -2415,17 +2442,9 @@ class UnifiedSocialDownloader:
                     if response.status == 200:
                         data = await response.json()
                         logger.info(f"✅ API SUCCESS")
-                        logger.info(f"🔍 Response keys: {list(data.keys())}")
                         logger.info(f"📝 Title: {data.get('title', 'N/A')}")
                         logger.info(f"📱 Source: {data.get('source', 'N/A')}")
                         logger.info(f"🎥 Medias count: {len(data.get('medias', []))}")
-                        logger.info(f"❌ Error flag: {data.get('error', 'N/A')}")
-
-                        # Log first few medias
-                        medias = data.get('medias', [])
-                        for i, media in enumerate(medias[:3]):
-                            logger.info(
-                                f"🎬 Media {i + 1}: {media.get('label', 'N/A')} - {media.get('type', 'N/A')} - FormatID: {media.get('formatId', 'N/A')}")
 
                         if not data.get('error', True):
                             return {'success': True, 'data': data}
@@ -2440,65 +2459,167 @@ class UnifiedSocialDownloader:
 
         except Exception as e:
             logger.error(f"❌ Exception in API request: {type(e).__name__}: {e}")
-            import traceback
-            logger.error(f"📍 Traceback: {traceback.format_exc()}")
             return {'success': False, 'error': str(e)}
 
-    async def download_file(self, file_url: str, max_size_mb: int = 50):
-        """DEBUG: Скачивание файла с подробным логированием"""
-        logger.info(f"⬇️ FILE DOWNLOAD START")
-        logger.info(f"🔗 URL: {file_url}")
+    async def download_file_with_retry(self, file_url: str, max_size_mb: int = 50, max_retries: int = 3):
+        """Qayta urinish bilan file download qilish"""
+        logger.info(f"⬇️ FILE DOWNLOAD START (with retry)")
+        logger.info(f"🔗 URL: {file_url[:100]}...")
         logger.info(f"📏 Max size: {max_size_mb} MB")
+        logger.info(f"🔄 Max retries: {max_retries}")
 
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': '*/*',
-                'Connection': 'keep-alive'
-            }
+        for attempt in range(max_retries):
+            logger.info(f"🔄 Attempt {attempt + 1}/{max_retries}")
 
-            logger.info(f"🌐 Creating session...")
-            async with aiohttp.ClientSession() as session:
-                logger.info(f"📡 Making GET request...")
-
-                async with session.get(file_url, headers=headers, timeout=60) as response:
-                    status = response.status
-                    logger.info(f"📊 Response status: {status}")
-
-                    # Headers info
-                    content_length = response.headers.get('content-length')
-                    content_type = response.headers.get('content-type')
-                    logger.info(f"📦 Content-Length: {content_length}")
-                    logger.info(f"📄 Content-Type: {content_type}")
-
-                    if response.status == 200:
-                        if content_length:
-                            size_mb = int(content_length) / (1024 * 1024)
-                            logger.info(f"📏 File size: {size_mb:.2f} MB")
-
-                            if size_mb > max_size_mb:
-                                logger.error(f"❌ File too large: {size_mb:.2f} MB > {max_size_mb} MB")
-                                return None
-
-                            logger.info(f"✅ File size OK, downloading...")
-                        else:
-                            logger.warning(f"⚠️ No content-length header, downloading anyway...")
-
-                        data = await response.read()
-                        actual_size = len(data) / (1024 * 1024)
-                        logger.info(f"✅ Downloaded successfully: {actual_size:.2f} MB")
-                        return data
-
+            try:
+                # URL ni validatsiya qilish
+                is_valid, final_url = await self.validate_url(file_url)
+                if not is_valid:
+                    logger.warning(f"⚠️ URL validation failed on attempt {attempt + 1}")
+                    if attempt < max_retries - 1:
+                        logger.info(f"⏳ Waiting 2 seconds before retry...")
+                        await asyncio.sleep(2)
+                        continue
                     else:
-                        logger.error(f"❌ Download failed with status: {status}")
-                        response_text = await response.text()
-                        logger.error(f"📄 Response: {response_text}")
+                        logger.error(f"❌ All validation attempts failed")
                         return None
 
+                # Final URL ishlatish
+                download_url = final_url or file_url
+                logger.info(f"🎯 Using URL: {download_url[:100]}...")
+
+                # Enhanced headers
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Sec-Fetch-Dest': 'video',
+                    'Sec-Fetch-Mode': 'no-cors',
+                    'Sec-Fetch-Site': 'cross-site',
+                    'Range': 'bytes=0-'  # Range request qo'llash
+                }
+
+                # SSL context
+                import ssl
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+
+                connector = aiohttp.TCPConnector(ssl=ssl_context, limit_per_host=5)
+
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    logger.info(f"📡 Making GET request with enhanced headers...")
+
+                    async with session.get(download_url, headers=headers, timeout=120,
+                                           allow_redirects=True) as response:
+                        status = response.status
+                        logger.info(f"📊 Response status: {status}")
+
+                        # Headers info
+                        content_length = response.headers.get('content-length')
+                        content_type = response.headers.get('content-type')
+                        logger.info(f"📦 Content-Type: {content_type}")
+                        logger.info(f"📦 Content-Length: {content_length}")
+
+                        if response.status in [200, 206]:  # 200 OK yoki 206 Partial Content
+                            if content_length:
+                                size_mb = int(content_length) / (1024 * 1024)
+                                logger.info(f"📏 File size: {size_mb:.2f} MB")
+
+                                if size_mb > max_size_mb:
+                                    logger.error(f"❌ File too large: {size_mb:.2f} MB > {max_size_mb} MB")
+                                    return None
+
+                            logger.info(f"✅ Starting download...")
+
+                            # Stream download with progress
+                            data_chunks = []
+                            downloaded_size = 0
+
+                            async for chunk in response.content.iter_chunked(8192):  # 8KB chunks
+                                data_chunks.append(chunk)
+                                downloaded_size += len(chunk)
+
+                                # Log progress every 5MB
+                                if downloaded_size % (5 * 1024 * 1024) < 8192:
+                                    logger.info(f"📥 Downloaded: {downloaded_size / (1024 * 1024):.1f} MB")
+
+                            # Combine all chunks
+                            final_data = b''.join(data_chunks)
+                            actual_size = len(final_data) / (1024 * 1024)
+                            logger.info(f"✅ Download completed: {actual_size:.2f} MB")
+
+                            return final_data
+
+                        elif response.status == 403:
+                            logger.warning(f"⚠️ 403 Forbidden - URL might be expired")
+                            if attempt < max_retries - 1:
+                                logger.info(f"⏳ Waiting 5 seconds before retry...")
+                                await asyncio.sleep(5)
+                                continue
+                            else:
+                                logger.error(f"❌ 403 error persists after all retries")
+                                return None
+
+                        elif response.status == 404:
+                            logger.error(f"❌ 404 Not Found - URL is invalid")
+                            return None
+
+                        else:
+                            logger.warning(f"⚠️ Unexpected status: {status}")
+                            if attempt < max_retries - 1:
+                                response_text = await response.text()
+                                logger.warning(f"📄 Response: {response_text[:200]}...")
+                                logger.info(f"⏳ Waiting 3 seconds before retry...")
+                                await asyncio.sleep(3)
+                                continue
+                            else:
+                                logger.error(f"❌ Failed after all retries")
+                                return None
+
+            except asyncio.TimeoutError:
+                logger.warning(f"⏰ Timeout on attempt {attempt + 1}")
+                if attempt < max_retries - 1:
+                    logger.info(f"⏳ Waiting 3 seconds before retry...")
+                    await asyncio.sleep(3)
+                    continue
+                else:
+                    logger.error(f"❌ Timeout after all retries")
+                    return None
+
+            except Exception as e:
+                logger.error(f"❌ Exception on attempt {attempt + 1}: {type(e).__name__}: {e}")
+                if attempt < max_retries - 1:
+                    logger.info(f"⏳ Waiting 2 seconds before retry...")
+                    await asyncio.sleep(2)
+                    continue
+                else:
+                    logger.error(f"❌ Exception after all retries")
+                    return None
+
+        logger.error(f"❌ All download attempts failed")
+        return None
+
+    async def get_fresh_youtube_url(self, original_url: str, format_id: int):
+        """YouTube uchun yangi URL olish"""
+        logger.info(f"🔄 Getting fresh YouTube URL for format_id: {format_id}")
+
+        try:
+            result = await self.download_media(original_url)
+            if result['success']:
+                medias = result['data'].get('medias', [])
+                for media in medias:
+                    if media.get('formatId') == format_id:
+                        logger.info(f"✅ Found fresh URL for format_id: {format_id}")
+                        return media.get('url')
+
+            logger.warning(f"⚠️ Could not find fresh URL for format_id: {format_id}")
+            return None
+
         except Exception as e:
-            logger.error(f"❌ Exception in file download: {type(e).__name__}: {e}")
-            import traceback
-            logger.error(f"📍 Traceback: {traceback.format_exc()}")
+            logger.error(f"❌ Error getting fresh URL: {e}")
             return None
 
 
@@ -2679,107 +2800,90 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
 async def process_youtube_download_unified(callback: CallbackQuery, state: FSMContext):
-    """YouTube download callback с логированием"""
+    """YouTube download callback - URL muammolarini hal qilish bilan"""
     logger.info(f"🎯 YOUTUBE CALLBACK START")
     logger.info(f"📋 Callback data: {callback.data}")
-    logger.info(f"👤 User: {callback.from_user.id}")
 
     try:
         await callback.answer()
 
-        # Получаем format_id
+        # Format ID olish
         format_id_str = callback.data.replace("yt_dl_", "")
-        logger.info(f"🔢 Format ID string: '{format_id_str}'")
-
         try:
             format_id = int(format_id_str)
-            logger.info(f"🔢 Format ID integer: {format_id}")
-        except ValueError as e:
-            logger.error(f"❌ Cannot convert format_id to int: {e}")
+        except ValueError:
             await callback.message.edit_text("❌ Ошибка формата ID")
             return
 
-        # Получаем данные из state
-        logger.info(f"📊 Getting data from state...")
+        # State dan ma'lumotlar olish
         data = await state.get_data()
-        logger.info(f"🗂 State keys: {list(data.keys())}")
-
         youtube_data = data.get('youtube_data', {})
+        youtube_url = data.get('youtube_url', '')
         medias = data.get('youtube_medias', [])
 
-        logger.info(f"📝 YouTube title: {youtube_data.get('title', 'N/A')}")
-        logger.info(f"🎥 Total medias: {len(medias)}")
-
-        # Находим выбранный формат
-        logger.info(f"🔍 Searching for format_id: {format_id}")
+        # Tanlangan formatni topish
         selected_media = None
-
-        for i, media in enumerate(medias):
-            media_format_id = media.get('formatId')
-            logger.info(f"🎬 Media {i}: formatId={media_format_id}, label={media.get('label', 'N/A')}")
-
-            if media_format_id == format_id:
+        for media in medias:
+            if media.get('formatId') == format_id:
                 selected_media = media
-                logger.info(f"✅ FOUND matching media!")
                 break
 
         if not selected_media:
-            logger.error(f"❌ Selected media not found for format_id: {format_id}")
             await callback.message.edit_text("❌ Выбранный формат не найден")
             return
 
-        # Детали выбранного медиа
-        logger.info(f"📋 SELECTED MEDIA DETAILS:")
-        logger.info(f"🏷 Label: {selected_media.get('label', 'N/A')}")
-        logger.info(f"🎭 Type: {selected_media.get('type', 'N/A')}")
-        logger.info(f"📦 Extension: {selected_media.get('ext', 'N/A')}")
-        logger.info(f"🔗 URL length: {len(selected_media.get('url', ''))}")
-        logger.info(f"🔗 URL preview: {selected_media.get('url', '')}")
-
         title = youtube_data.get('title', 'YouTube видео')
-        download_url = selected_media.get('url')
         label = selected_media.get('label', 'Unknown')
+        original_url = selected_media.get('url')
 
-        if not download_url:
-            logger.error(f"❌ No download URL in selected media!")
+        if not original_url:
             await callback.message.edit_text("❌ URL для скачивания не найден")
             return
 
         await callback.message.edit_text(f"⏬ Скачиваю: {label}\n📝 {title}")
 
-        # Скачиваем файл
-        logger.info(f"⬇️ Starting file download...")
-        file_data = await unified_downloader.download_file(download_url)
+        # Avval original URL bilan urinish
+        logger.info(f"🎯 Trying original URL first...")
+        file_data = await unified_downloader.download_file_with_retry(original_url)
+
+        # Agar original URL ishlamasa, yangi URL olish
+        if not file_data:
+            logger.info(f"🔄 Original URL failed, getting fresh URL...")
+            await callback.message.edit_text(f"🔄 Обновляю ссылку...\n📝 {title}")
+
+            fresh_url = await unified_downloader.get_fresh_youtube_url(youtube_url, format_id)
+            if fresh_url and fresh_url != original_url:
+                logger.info(f"✅ Got fresh URL, trying again...")
+                await callback.message.edit_text(f"⏬ Скачиваю (обновленная ссылка): {label}\n📝 {title}")
+                file_data = await unified_downloader.download_file_with_retry(fresh_url)
 
         if not file_data:
-            logger.error(f"❌ File download failed!")
-            await callback.message.edit_text("❌ Не удалось скачать файл (см. логи для деталей)")
+            error_msg = """❌ Не удалось скачать файл
+
+Возможные причины:
+• Ссылка устарела
+• Файл слишком большой 
+• Проблемы с YouTube
+
+Попробуйте позже или выберите другой формат."""
+            await callback.message.edit_text(error_msg)
             return
 
-        logger.info(f"✅ File downloaded successfully!")
         await callback.message.edit_text("📤 Отправляю в Telegram...")
 
-        # Определяем тип и расширение
+        # File type va extension aniqlash
         media_type = selected_media.get('type', 'video')
         ext = selected_media.get('ext', 'mp4')
 
-        logger.info(f"📄 Media type: {media_type}")
-        logger.info(f"📎 Extension: {ext}")
-
-        # Создаем временный файл
-        import tempfile
+        # Temporary file yaratish
         with tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False) as temp_file:
             temp_file.write(file_data)
             temp_filepath = temp_file.name
 
-        logger.info(f"💾 Temporary file created: {temp_filepath}")
-
         try:
             caption = f"🎥 YouTube\n📝 {title}\n📊 {label}\n🚀 @{(await callback.bot.get_me()).username}"
-            logger.info(f"📝 Caption: {caption}")
 
             if media_type == 'video':
-                logger.info(f"📹 Sending as video...")
                 await callback.bot.send_video(
                     chat_id=callback.message.chat.id,
                     video=FSInputFile(temp_filepath),
@@ -2787,27 +2891,23 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
                     supports_streaming=True
                 )
             elif media_type == 'audio':
-                logger.info(f"🎵 Sending as audio...")
                 await callback.bot.send_audio(
                     chat_id=callback.message.chat.id,
                     audio=FSInputFile(temp_filepath),
                     caption=caption
                 )
             else:
-                logger.info(f"📄 Sending as document...")
                 await callback.bot.send_document(
                     chat_id=callback.message.chat.id,
                     document=FSInputFile(temp_filepath),
                     caption=caption
                 )
 
-            logger.info(f"✅ File sent successfully!")
             await callback.message.delete()
 
             # Analytics
             try:
-                await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_data.get('url'))
-                logger.info(f"📊 Analytics updated")
+                await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_url)
             except Exception as analytics_error:
                 logger.error(f"⚠️ Analytics error: {analytics_error}")
 
@@ -2815,7 +2915,6 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
             # Cleanup
             try:
                 os.unlink(temp_filepath)
-                logger.info(f"🗑 Temporary file cleaned up")
             except Exception as cleanup_error:
                 logger.error(f"⚠️ Cleanup error: {cleanup_error}")
 
@@ -2825,7 +2924,15 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
         logger.error(f"📍 Full traceback: {traceback.format_exc()}")
 
         try:
-            await callback.message.edit_text(f"❌ Критическая ошибка: {str(e)[:100]}...")
+            error_msg = f"""❌ Произошла ошибка при скачивании
+
+Детали: {str(e)[:100]}...
+
+Попробуйте:
+• Выбрать другой формат
+• Повторить попытку позже
+• Использовать другую ссылку"""
+            await callback.message.edit_text(error_msg)
         except:
             pass
 
