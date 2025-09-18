@@ -2447,7 +2447,7 @@ class UnifiedSocialDownloader:
     async def download_file(self, file_url: str, max_size_mb: int = 50):
         """DEBUG: Скачивание файла с подробным логированием"""
         logger.info(f"⬇️ FILE DOWNLOAD START")
-        logger.info(f"🔗 URL: {file_url[:100]}...")
+        logger.info(f"🔗 URL: {file_url}")
         logger.info(f"📏 Max size: {max_size_mb} MB")
 
         try:
@@ -2492,7 +2492,7 @@ class UnifiedSocialDownloader:
                     else:
                         logger.error(f"❌ Download failed with status: {status}")
                         response_text = await response.text()
-                        logger.error(f"📄 Response: {response_text[:200]}...")
+                        logger.error(f"📄 Response: {response_text}")
                         return None
 
         except Exception as e:
