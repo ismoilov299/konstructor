@@ -2917,19 +2917,21 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
                     logger.error(f"⚠️ Cleanup error: {cleanup_error}")
 
         else:
-            # Download muvaffaqiyatsiz bo'lsa - link yuborish
-            logger.info(f"❌ Download failed, sending direct link...")
+            # Download muvaffaqiyatsiz bo'lsa - API dan qaytgan URL ni yuborish
+            logger.info(f"❌ Download failed, sending API download URL...")
 
             link_message = f"""🎥 **YouTube Video**
 
 📝 **{title}**
 📊 **Формат:** {label}
 
-⚠️ Не удалось скачать файл, но вот прямая ссылка:
+⚠️ Не удалось скачать файл, но вот прямая ссылка для загрузки:
 
-🔗 **[Открыть видео]({download_url})**
+🔗 **[Скачать видео]({download_url})**
 
-💡 **Совет:** Скопируйте ссылку и откройте в браузере или используйте другой загрузчик.
+💡 **Совет:** Скопируйте ссылку и используйте в своем загрузчике (IDM, wget, curl и т.д.)
+
+📱 **Размер:** {selected_media.get('ext', 'mp4').upper()} • {label}
 
 🚀 @{(await callback.bot.get_me()).username}"""
 
@@ -2939,7 +2941,8 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
                 disable_web_page_preview=True
             )
 
-            logger.info(f"✅ Direct link sent to user")
+            logger.info(f"✅ API download URL sent to user")
+            logger.info(f"🔗 Sent URL: {download_url}")
 
         # Analytics
         try:
