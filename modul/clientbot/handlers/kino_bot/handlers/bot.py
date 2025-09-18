@@ -2920,24 +2920,23 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
             # Download muvaffaqiyatsiz bo'lsa - API dan qaytgan URL ni yuborish
             logger.info(f"❌ Download failed, sending API download URL...")
 
-            link_message = f"""🎥 **YouTube Video**
+            link_message = f"""🎥 YouTube Video
 
-📝 **{title}**
-📊 **Формат:** {label}
+📝 {title}
+📊 Формат: {label}
 
 ⚠️ Не удалось скачать файл, но вот прямая ссылка для загрузки:
 
-🔗 **[Скачать видео]({download_url})**
+{download_url}
 
-💡 **Совет:** Скопируйте ссылку и используйте в своем загрузчике (IDM, wget, curl и т.д.)
+💡 Совет: Скопируйте ссылку и используйте в своем загрузчике (IDM, wget, curl и т.д.)
 
-📱 **Размер:** {selected_media.get('ext', 'mp4').upper()} • {label}
+📱 Размер: {selected_media.get('ext', 'mp4').upper()} • {label}
 
 🚀 @{(await callback.bot.get_me()).username}"""
 
             await callback.message.edit_text(
                 link_message,
-                parse_mode="Markdown",
                 disable_web_page_preview=True
             )
 
@@ -2947,26 +2946,12 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
         # Analytics
         try:
             await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_url)
-        except Exception as analytics_error:
-            logger.error(f"⚠️ Analytics error: {analytics_error}")
-
-    except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR in YouTube callback: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"📍 Full traceback: {traceback.format_exc()}")
-
-        try:
-            error_msg = f"""❌ Произошла ошибка
-
-Попробуйте:
-• Выбрать другой формат
-• Повторить попытку позже
-• Использовать другую ссылку
-
-🔗 Оригинальная ссылка: {youtube_url}"""
-            await callback.message.edit_text(error_msg)
         except:
             pass
+
+    except Exception as e:
+        logger.error(f"❌ Error in YouTube callback: {e}")
+        await callback.message.edit_text("❌ Произошла ошибка")
 
 
 async def handle_other_platforms_unified(message: Message, url: str, me, bot: Bot, state: FSMContext, platform: str):
