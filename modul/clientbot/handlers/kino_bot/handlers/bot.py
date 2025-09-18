@@ -2823,7 +2823,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
 async def process_youtube_download_unified(callback: CallbackQuery, state: FSMContext):
-    """YouTube download callback - URL muammolarini hal qilish bilan"""
+    """YouTube download callback - link yuborish bilan fallback"""
     logger.info(f"🎯 YOUTUBE CALLBACK START")
     logger.info(f"📋 Callback data: {callback.data}")
 
@@ -2857,90 +2857,95 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
 
         title = youtube_data.get('title', 'YouTube видео')
         label = selected_media.get('label', 'Unknown')
-        original_url = selected_media.get('url')
+        download_url = selected_media.get('url')
 
-        if not original_url:
+        if not download_url:
             await callback.message.edit_text("❌ URL для скачивания не найден")
             return
 
         await callback.message.edit_text(f"⏬ Скачиваю: {label}\n📝 {title}")
 
-        # YouTube URL lari ko'pincha 403 beradi, shuning uchun darhol fresh URL olamiz
-        logger.info(f"🎥 YouTube URL detected, getting fresh URL immediately...")
-        await callback.message.edit_text(f"🔄 Получаю свежую ссылку...\n📝 {title}")
+        # Download urinish
+        logger.info(f"🎯 Attempting download...")
+        file_data = await unified_downloader.download_file_with_retry(download_url, max_retries=2)
 
-        fresh_url = await unified_downloader.get_fresh_youtube_url(youtube_url, format_id)
-        if not fresh_url:
-            logger.error(f"❌ Could not get fresh URL")
-            await callback.message.edit_text("❌ Не удалось получить ссылку для скачивания")
-            return
+        if file_data:
+            # Download muvaffaqiyatli bo'lsa - file yuborish
+            logger.info(f"✅ Download successful, sending file...")
+            await callback.message.edit_text("📤 Отправляю в Telegram...")
 
-        logger.info(f"✅ Got fresh URL: {fresh_url}")
-        await callback.message.edit_text(f"⏬ Скачиваю: {label}\n📝 {title}")
+            # File type va extension aniqlash
+            media_type = selected_media.get('type', 'video')
+            ext = selected_media.get('ext', 'mp4')
 
-        # Fresh URL bilan download qilish
-        file_data = await unified_downloader.download_file_with_retry(fresh_url)
+            # Temporary file yaratish
+            with tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False) as temp_file:
+                temp_file.write(file_data)
+                temp_filepath = temp_file.name
 
-        if not file_data:
-            error_msg = """❌ Не удалось скачать файл
+            try:
+                caption = f"🎥 YouTube\n📝 {title}\n📊 {label}\n🚀 @{(await callback.bot.get_me()).username}"
 
-Возможные причины:
-• Ссылка устарела
-• Файл слишком большой 
-• Проблемы с YouTube
+                if media_type == 'video':
+                    await callback.bot.send_video(
+                        chat_id=callback.message.chat.id,
+                        video=FSInputFile(temp_filepath),
+                        caption=caption,
+                        supports_streaming=True
+                    )
+                elif media_type == 'audio':
+                    await callback.bot.send_audio(
+                        chat_id=callback.message.chat.id,
+                        audio=FSInputFile(temp_filepath),
+                        caption=caption
+                    )
+                else:
+                    await callback.bot.send_document(
+                        chat_id=callback.message.chat.id,
+                        document=FSInputFile(temp_filepath),
+                        caption=caption
+                    )
 
-Попробуйте позже или выберите другой формат."""
-            await callback.message.edit_text(error_msg)
-            return
+                await callback.message.delete()
+                logger.info(f"✅ File sent successfully!")
 
-        await callback.message.edit_text("📤 Отправляю в Telegram...")
+            finally:
+                # Cleanup
+                try:
+                    os.unlink(temp_filepath)
+                except Exception as cleanup_error:
+                    logger.error(f"⚠️ Cleanup error: {cleanup_error}")
 
-        # File type va extension aniqlash
-        media_type = selected_media.get('type', 'video')
-        ext = selected_media.get('ext', 'mp4')
+        else:
+            # Download muvaffaqiyatsiz bo'lsa - link yuborish
+            logger.info(f"❌ Download failed, sending direct link...")
 
-        # Temporary file yaratish
-        with tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False) as temp_file:
-            temp_file.write(file_data)
-            temp_filepath = temp_file.name
+            link_message = f"""🎥 **YouTube Video**
 
+📝 **{title}**
+📊 **Формат:** {label}
+
+⚠️ Не удалось скачать файл, но вот прямая ссылка:
+
+🔗 **[Открыть видео]({download_url})**
+
+💡 **Совет:** Скопируйте ссылку и откройте в браузере или используйте другой загрузчик.
+
+🚀 @{(await callback.bot.get_me()).username}"""
+
+            await callback.message.edit_text(
+                link_message,
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            )
+
+            logger.info(f"✅ Direct link sent to user")
+
+        # Analytics
         try:
-            caption = f"🎥 YouTube\n📝 {title}\n📊 {label}\n🚀 @{(await callback.bot.get_me()).username}"
-
-            if media_type == 'video':
-                await callback.bot.send_video(
-                    chat_id=callback.message.chat.id,
-                    video=FSInputFile(temp_filepath),
-                    caption=caption,
-                    supports_streaming=True
-                )
-            elif media_type == 'audio':
-                await callback.bot.send_audio(
-                    chat_id=callback.message.chat.id,
-                    audio=FSInputFile(temp_filepath),
-                    caption=caption
-                )
-            else:
-                await callback.bot.send_document(
-                    chat_id=callback.message.chat.id,
-                    document=FSInputFile(temp_filepath),
-                    caption=caption
-                )
-
-            await callback.message.delete()
-
-            # Analytics
-            try:
-                await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_url)
-            except Exception as analytics_error:
-                logger.error(f"⚠️ Analytics error: {analytics_error}")
-
-        finally:
-            # Cleanup
-            try:
-                os.unlink(temp_filepath)
-            except Exception as cleanup_error:
-                logger.error(f"⚠️ Cleanup error: {cleanup_error}")
+            await shortcuts.add_to_analitic_data((await callback.bot.get_me()).username, youtube_url)
+        except Exception as analytics_error:
+            logger.error(f"⚠️ Analytics error: {analytics_error}")
 
     except Exception as e:
         logger.error(f"❌ CRITICAL ERROR in YouTube callback: {type(e).__name__}: {e}")
@@ -2948,14 +2953,14 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
         logger.error(f"📍 Full traceback: {traceback.format_exc()}")
 
         try:
-            error_msg = f"""❌ Произошла ошибка при скачивании
-
-Детали: {str(e)[:100]}...
+            error_msg = f"""❌ Произошла ошибка
 
 Попробуйте:
 • Выбрать другой формат
 • Повторить попытку позже
-• Использовать другую ссылку"""
+• Использовать другую ссылку
+
+🔗 Оригинальная ссылка: {youtube_url}"""
             await callback.message.edit_text(error_msg)
         except:
             pass
