@@ -2396,7 +2396,12 @@ class UnifiedSocialDownloader:
 
     async def validate_url(self, url: str):
         """URL ni tekshirish va redirect larni kuzatish"""
-        logger.info(f"🔍 Validating URL: {url[:100]}...")
+        logger.info(f"🔍 Validating URL: {url}")
+
+        # YouTube URL lari uchun maxsus boshqaruv
+        if 'googlevideo.com' in url or 'youtube.com' in url:
+            logger.info(f"🎥 YouTube URL detected, skipping HEAD validation")
+            return True, url
 
         try:
             headers = {
@@ -2464,42 +2469,52 @@ class UnifiedSocialDownloader:
     async def download_file_with_retry(self, file_url: str, max_size_mb: int = 50, max_retries: int = 3):
         """Qayta urinish bilan file download qilish"""
         logger.info(f"⬇️ FILE DOWNLOAD START (with retry)")
-        logger.info(f"🔗 URL: {file_url[:100]}...")
+        logger.info(f"🔗 URL: {file_url}")
         logger.info(f"📏 Max size: {max_size_mb} MB")
         logger.info(f"🔄 Max retries: {max_retries}")
+
+        # YouTube URL lari uchun maxsus boshqaruv
+        is_youtube_url = 'googlevideo.com' in file_url or 'youtube.com' in file_url
 
         for attempt in range(max_retries):
             logger.info(f"🔄 Attempt {attempt + 1}/{max_retries}")
 
             try:
-                # URL ni validatsiya qilish
-                is_valid, final_url = await self.validate_url(file_url)
-                if not is_valid:
-                    logger.warning(f"⚠️ URL validation failed on attempt {attempt + 1}")
-                    if attempt < max_retries - 1:
-                        logger.info(f"⏳ Waiting 2 seconds before retry...")
-                        await asyncio.sleep(2)
-                        continue
-                    else:
-                        logger.error(f"❌ All validation attempts failed")
-                        return None
+                download_url = file_url
 
-                # Final URL ishlatish
-                download_url = final_url or file_url
-                logger.info(f"🎯 Using URL: {download_url[:100]}...")
+                # YouTube bo'lmagan URL lar uchun validation
+                if not is_youtube_url:
+                    is_valid, final_url = await self.validate_url(file_url)
+                    if not is_valid:
+                        logger.warning(f"⚠️ URL validation failed on attempt {attempt + 1}")
+                        if attempt < max_retries - 1:
+                            logger.info(f"⏳ Waiting 2 seconds before retry...")
+                            await asyncio.sleep(2)
+                            continue
+                        else:
+                            logger.error(f"❌ All validation attempts failed")
+                            return None
+                    download_url = final_url or file_url
+                else:
+                    logger.info(f"🎥 YouTube URL - skipping validation, using direct download")
+
+                logger.info(f"🎯 Using URL: {download_url}")
 
                 # Enhanced headers
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Accept': '*/*',
                     'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate',
+                    'Accept-Encoding': 'identity',  # YouTube uchun compression o'chirish
                     'Connection': 'keep-alive',
                     'Sec-Fetch-Dest': 'video',
                     'Sec-Fetch-Mode': 'no-cors',
-                    'Sec-Fetch-Site': 'cross-site',
-                    'Range': 'bytes=0-'  # Range request qo'llash
+                    'Sec-Fetch-Site': 'cross-site'
                 }
+
+                # YouTube uchun Range header qo'shish
+                if is_youtube_url:
+                    headers['Range'] = 'bytes=0-'
 
                 # SSL context
                 import ssl
@@ -2512,7 +2527,9 @@ class UnifiedSocialDownloader:
                 async with aiohttp.ClientSession(connector=connector) as session:
                     logger.info(f"📡 Making GET request with enhanced headers...")
 
-                    async with session.get(download_url, headers=headers, timeout=120,
+                    timeout = aiohttp.ClientTimeout(total=120, connect=30)
+
+                    async with session.get(download_url, headers=headers, timeout=timeout,
                                            allow_redirects=True) as response:
                         status = response.status
                         logger.info(f"📊 Response status: {status}")
@@ -2554,8 +2571,11 @@ class UnifiedSocialDownloader:
                             return final_data
 
                         elif response.status == 403:
-                            logger.warning(f"⚠️ 403 Forbidden - URL might be expired")
-                            if attempt < max_retries - 1:
+                            logger.warning(f"⚠️ 403 Forbidden")
+                            if is_youtube_url:
+                                logger.info(f"🎥 YouTube 403 - this is normal, trying fresh URL...")
+                                return None  # YouTube uchun fresh URL olishga o'tamiz
+                            elif attempt < max_retries - 1:
                                 logger.info(f"⏳ Waiting 5 seconds before retry...")
                                 await asyncio.sleep(5)
                                 continue
@@ -2605,6 +2625,7 @@ class UnifiedSocialDownloader:
     async def get_fresh_youtube_url(self, original_url: str, format_id: int):
         """YouTube uchun yangi URL olish"""
         logger.info(f"🔄 Getting fresh YouTube URL for format_id: {format_id}")
+        logger.info(f"🔗 Original URL: {original_url}")
 
         try:
             result = await self.download_media(original_url)
@@ -2612,8 +2633,10 @@ class UnifiedSocialDownloader:
                 medias = result['data'].get('medias', [])
                 for media in medias:
                     if media.get('formatId') == format_id:
+                        fresh_url = media.get('url')
                         logger.info(f"✅ Found fresh URL for format_id: {format_id}")
-                        return media.get('url')
+                        logger.info(f"🆕 Fresh URL: {fresh_url}")
+                        return fresh_url
 
             logger.warning(f"⚠️ Could not find fresh URL for format_id: {format_id}")
             return None
@@ -2842,20 +2865,21 @@ async def process_youtube_download_unified(callback: CallbackQuery, state: FSMCo
 
         await callback.message.edit_text(f"⏬ Скачиваю: {label}\n📝 {title}")
 
-        # Avval original URL bilan urinish
-        logger.info(f"🎯 Trying original URL first...")
-        file_data = await unified_downloader.download_file_with_retry(original_url)
+        # YouTube URL lari ko'pincha 403 beradi, shuning uchun darhol fresh URL olamiz
+        logger.info(f"🎥 YouTube URL detected, getting fresh URL immediately...")
+        await callback.message.edit_text(f"🔄 Получаю свежую ссылку...\n📝 {title}")
 
-        # Agar original URL ishlamasa, yangi URL olish
-        if not file_data:
-            logger.info(f"🔄 Original URL failed, getting fresh URL...")
-            await callback.message.edit_text(f"🔄 Обновляю ссылку...\n📝 {title}")
+        fresh_url = await unified_downloader.get_fresh_youtube_url(youtube_url, format_id)
+        if not fresh_url:
+            logger.error(f"❌ Could not get fresh URL")
+            await callback.message.edit_text("❌ Не удалось получить ссылку для скачивания")
+            return
 
-            fresh_url = await unified_downloader.get_fresh_youtube_url(youtube_url, format_id)
-            if fresh_url and fresh_url != original_url:
-                logger.info(f"✅ Got fresh URL, trying again...")
-                await callback.message.edit_text(f"⏬ Скачиваю (обновленная ссылка): {label}\n📝 {title}")
-                file_data = await unified_downloader.download_file_with_retry(fresh_url)
+        logger.info(f"✅ Got fresh URL: {fresh_url}")
+        await callback.message.edit_text(f"⏬ Скачиваю: {label}\n📝 {title}")
+
+        # Fresh URL bilan download qilish
+        file_data = await unified_downloader.download_file_with_retry(fresh_url)
 
         if not file_data:
             error_msg = """❌ Не удалось скачать файл
