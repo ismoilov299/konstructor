@@ -2422,13 +2422,52 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             'extract_flat': False,
             'listformats': True,
             'force_ipv4': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                              'AppleWebKit/537.36 (KHTML, like Gecko) '
+                              'Chrome/120.0.0.0 Safari/537.36',
+            },
         }
 
         try:
+            # Executor orqali yt-dlp ni async tarzda ishlatish
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ydl.extract_info(url, download=False)
-                )
+                try:
+                    info = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: ydl.extract_info(url, download=False)
+                    )
+                except Exception as extract_error:
+                    error_msg = str(extract_error).lower()
+
+                    # YouTube maxsus cheklovlari uchun
+                    if "not available on this app" in error_msg or "watch on the latest version" in error_msg:
+                        await progress_msg.edit_text(
+                            "❌ Это видео недоступно для скачивания\n\n"
+                            "YouTube ограничил доступ к этому контенту.\n"
+                            "Попробуйте другое видео."
+                        )
+                        return
+                    elif "age-restricted" in error_msg or "sign in" in error_msg:
+                        await progress_msg.edit_text(
+                            "❌ Видео требует возрастной проверки\n\n"
+                            "Это видео недоступно для скачивания без авторизации.\n"
+                            "Попробуйте другое видео."
+                        )
+                        return
+                    elif "private" in error_msg or "unavailable" in error_msg:
+                        await progress_msg.edit_text(
+                            "❌ Видео недоступно\n\n"
+                            "Возможно, видео приватное или удалено.\n"
+                            "Проверьте ссылку и попробуйте другое видео."
+                        )
+                        return
+                    else:
+                        # Общая ошибка
+                        await progress_msg.edit_text(
+                            f"❌ Ошибка при получении информации о видео\n\n"
+                            f"Попробуйте другое видео или повторите позже."
+                        )
+                        return
 
                 if not info:
                     await progress_msg.edit_text("Не удалось получить информацию о видео")
@@ -2458,7 +2497,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                     ext = fmt.get('ext', 'unknown')
                     quality = fmt.get('format_note', '')
 
-                    # Size check (50MB limit)
+                    # Size check (50MB limit for Telegram)
                     if filesize and filesize > 50 * 1024 * 1024:
                         continue
 
@@ -2564,10 +2603,11 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                 )
 
                 # Video haqida ma'lumot
+                duration_str = f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown"
                 info_text = (
                     f"📹 <b>{title[:50]}{'...' if len(title) > 50 else ''}</b>\n\n"
-                    f"👤 <b>Канал:</b> {uploader}\n"
-                    f"⏱ <b>Длительность:</b> {duration // 60}:{duration % 60:02d}\n"
+                    f"👤 <b>Канал:</b> {uploader[:30]}{'...' if len(uploader) > 30 else ''}\n"
+                    f"⏱ <b>Длительность:</b> {duration_str}\n"
                     f"🎯 <b>Доступно форматов:</b> {len(selected_formats)}\n\n"
                     f"Выберите качество для загрузки:"
                 )
@@ -2589,7 +2629,6 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         await message.answer("Ошибка при обработке YouTube видео")
-
 
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
 async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
@@ -2655,6 +2694,11 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                 'quiet': True,
                 'no_warnings': True,
                 'force_ipv4': True,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                                  'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                  'Chrome/120.0.0.0 Safari/537.36',
+                },
             }
 
             # Yuklab olish
