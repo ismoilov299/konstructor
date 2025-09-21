@@ -2422,11 +2422,6 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             'extract_flat': False,
             'listformats': True,
             'force_ipv4': True,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                              'AppleWebKit/537.36 (KHTML, like Gecko) '
-                              'Chrome/120.0.0.0 Safari/537.36',
-            },
         }
 
         try:
@@ -2630,6 +2625,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
         logger.error(f"Traceback: {traceback.format_exc()}")
         await message.answer("Ошибка при обработке YouTube видео")
 
+
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
 async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
     logger.info(f"YouTube download callback triggered")
@@ -2694,18 +2690,55 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                 'quiet': True,
                 'no_warnings': True,
                 'force_ipv4': True,
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                                  'AppleWebKit/537.36 (KHTML, like Gecko) '
-                                  'Chrome/120.0.0.0 Safari/537.36',
-                },
             }
 
             # Yuklab olish
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ydl.download([youtube_url])
-                )
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: ydl.download([youtube_url])
+                    )
+            except Exception as download_error:
+                error_msg = str(download_error).lower()
+
+                # YouTube maxsus cheklovlari uchun
+                if "not available on this app" in error_msg or "watch on the latest version" in error_msg:
+                    await callback.message.edit_text(
+                        "❌ Это видео недоступно для скачивания\n\n"
+                        "YouTube ограничил доступ к этому контенту."
+                    )
+                    return
+                elif "age-restricted" in error_msg or "sign in" in error_msg:
+                    await callback.message.edit_text(
+                        "❌ Видео требует возрастной проверки\n\n"
+                        "Это видео недоступно для скачивания без авторизации."
+                    )
+                    return
+                elif "private" in error_msg or "unavailable" in error_msg:
+                    await callback.message.edit_text(
+                        "❌ Видео недоступно\n\n"
+                        "Возможно, видео приватное или удалено."
+                    )
+                    return
+                elif "http error 403" in error_msg or "forbidden" in error_msg:
+                    await callback.message.edit_text(
+                        "❌ Доступ к видео запрещен\n\n"
+                        "YouTube заблокировал скачивание этого видео."
+                    )
+                    return
+                elif "http error 429" in error_msg or "too many requests" in error_msg:
+                    await callback.message.edit_text(
+                        "❌ Слишком много запросов\n\n"
+                        "Попробуйте позже (через 10-15 минут)."
+                    )
+                    return
+                else:
+                    # Общая ошибка загрузки
+                    await callback.message.edit_text(
+                        f"❌ Ошибка при загрузке видео\n\n"
+                        f"Попробуйте другое видео или повторите позже."
+                    )
+                    return
 
             # Yuklab olingan faylni topish
             downloaded_files = os.listdir(temp_dir)
