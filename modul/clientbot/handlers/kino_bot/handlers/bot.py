@@ -2690,6 +2690,7 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                 'quiet': True,
                 'no_warnings': True,
                 'force_ipv4': True,
+                'cookiefile': '/var/www/konstructor/all_cookies.txt'
             }
 
             # Yuklab olish
@@ -4008,7 +4009,6 @@ async def send_instagram_files(message, directory, files, me, bot):
                 logger.error(f"Fallback error for file {filepath}: {fallback_error}")
 
     return sent_count > 0
-
 
 async def download_and_send_video(message: Message, url: str, ydl_opts: dict, me, bot: Bot, platform: str,state: FSMContext):
     try:
