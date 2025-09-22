@@ -2685,11 +2685,11 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             output_template = os.path.join(temp_dir, f"youtube_{format_id}.%(ext)s")
 
             ydl_opts = {
-                'format': 'best',
+                'format': format_id,
                 'quiet': True,
                 'no_warnings': True,
                 'force_ipv4': True,
-                'cookiefile': '/var/www/konstructor/youtube_cookies.txt',  # 👈 путь к cookies
+                'cookiefile': '/var/www/konstructor/all_cookies.txt',  # 👈 путь к cookies
                 'http_headers': {
                     'User-Agent': (
                         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
