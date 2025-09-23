@@ -2985,7 +2985,7 @@ class FastYouTubeHandler:
                     self._extract_info_sync,
                     url
                 ),
-                timeout=20.0  # Максимум 20 секунд
+                timeout=60.0  # Максимум 20 секунд
             )
 
             if info:
@@ -4149,4 +4149,3 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMConte
     except Exception as e:
         logger.error(f"TikTok handler error: {e}")
         await message.answer("❌ Ошибка при обработке TikTok видео")
-        
