@@ -3151,10 +3151,6 @@ class FastYouTubeHandler:
 
         return out_file
 
-    def _download_sync(self, url: str, opts: dict):
-        """Синхронная загрузка в executor"""
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
 
 
 fast_youtube = FastYouTubeHandler()
