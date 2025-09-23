@@ -2973,41 +2973,53 @@ class FastYouTubeHandler:
         # Проверяем кэш
         if video_id in self._info_cache:
             cache_time, info = self._info_cache[video_id]
-            # Кэш действует 5 минут
-            if time.time() - cache_time < 300:
+            if time.time() - cache_time < 300:  # 5 минут
                 return info
 
         try:
-            # Используем asyncio.wait_for для жесткого timeout
             info = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
                     YT_EXECUTOR,
                     self._extract_info_sync,
                     url
                 ),
-                timeout=60.0  # Максимум 20 секунд
+                timeout=60.0
             )
 
-            if info:
-                # Кэшируем результат
-                self._info_cache[video_id] = (time.time(), info)
-                return info
+            if not info:
+                logger.warning(f"⚠️ yt-dlp не вернул данных для {url}")
+                return None
+
+            if "formats" not in info or not info["formats"]:
+                logger.warning(f"⚠️ У видео {url} нет доступных форматов (возможно приватное/ограниченное)")
+                return None
+
+            # Кэшируем
+            self._info_cache[video_id] = (time.time(), info)
+            return info
 
         except asyncio.TimeoutError:
-            logger.error(f"Timeout getting video info for: {url}")
+            logger.error(f"⏰ Timeout getting video info for: {url}")
+            return None
         except Exception as e:
-            logger.error(f"Error getting video info: {e}")
-
-        return None
+            logger.error(f"❌ Error getting video info: {e}")
+            return None
 
     def _extract_info_sync(self, url: str) -> dict:
         """Синхронное извлечение информации в executor"""
         try:
             with yt_dlp.YoutubeDL(self.info_opts) as ydl:
-                return ydl.extract_info(url, download=False)
+                info = ydl.extract_info(url, download=False)
+
+            if not info or "formats" not in info:
+                raise Exception("yt-dlp не смог извлечь форматы (возможно нужна авторизация)")
+
+            return info
         except Exception as e:
             logger.error(f"yt-dlp extract error: {e}")
             return None
+
+
 
     def get_optimal_formats(self, info: dict, max_formats: int = 8) -> list:
         """Получить оптимальные форматы для быстрого выбора"""
@@ -3111,16 +3123,33 @@ class FastYouTubeHandler:
                     url,
                     download_opts
                 ),
-                timeout=120.0  # Максимум 2 минуты на загрузку
+                timeout=120.0  # максимум 2 минуты
             )
+
+            # Проверяем, что файл реально скачался
+            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                raise Exception("Видео не удалось скачать (пустой файл). Возможно, требуется авторизация.")
+
             return output_path
 
         except asyncio.TimeoutError:
             logger.error(f"Download timeout for format {format_id}")
-            raise Exception("Timeout при загрузке видео")
+            raise Exception("⏰ Timeout при загрузке видео")
         except Exception as e:
             logger.error(f"Download error: {e}")
             raise
+
+    def _download_sync(self, url: str, opts: dict):
+        """Синхронная загрузка в executor"""
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+
+        # Проверяем результат скачивания
+        out_file = opts["outtmpl"]
+        if not os.path.exists(out_file) or os.path.getsize(out_file) == 0:
+            raise Exception("The downloaded file is empty (YouTube вернул пустой ответ)")
+
+        return out_file
 
     def _download_sync(self, url: str, opts: dict):
         """Синхронная загрузка в executor"""
