@@ -2489,6 +2489,69 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
         await message.answer("❌ Ошибка YouTube handler'а")
 
 
+def extract_video_info_sync(url: str, request_id: str) -> dict:
+    """Sync function for executor"""
+    logger.info(f"[{request_id}] Starting yt-dlp extract...")
+
+    try:
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'socket_timeout': 10,  # 10 sekund socket timeout
+            'retries': 1,
+            'fragment_retries': 1,
+            'force_ipv4': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            start = time.time()
+            info = ydl.extract_info(url, download=False)
+            duration = time.time() - start
+            logger.info(f"[{request_id}] yt-dlp extract took {duration:.1f}s")
+            return info
+
+    except Exception as e:
+        logger.error(f"[{request_id}] yt-dlp error: {e}")
+        return None
+
+
+def get_quick_formats(info: dict) -> list:
+    """Faqat 3ta eng yaxshi format"""
+    if not info or not info.get('formats'):
+        return []
+
+    formats = info['formats']
+    selected = []
+
+    # Priority order
+    priorities = [
+        ('18', '360p MP4'),  # Most compatible
+        ('22', '720p MP4'),  # Good quality
+        ('136', '720p Video')  # High quality video-only
+    ]
+
+    for format_id, desc in priorities:
+        for fmt in formats:
+            if fmt.get('format_id') == format_id:
+                filesize = fmt.get('filesize') or fmt.get('filesize_approx') or 0
+                size_mb = filesize / (1024 * 1024) if filesize else 10  # Default 10MB
+
+                if size_mb <= 50:  # Telegram limit
+                    selected.append({
+                        'id': format_id,
+                        'quality': desc,
+                        'size_mb': size_mb,
+                        'url': fmt.get('url')
+                    })
+                    break
+
+        if len(selected) >= 3:
+            break
+
+    return selected
+
+
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
 async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
     """Optimallashtirilgan YouTube download (eski nom bilan)"""
@@ -2599,7 +2662,6 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             main_file = max(downloaded_files, key=lambda f: os.path.getsize(os.path.join(temp_dir, f)))
             filepath = os.path.join(temp_dir, main_file)
 
-            # Fayl hajmini tekshirish
             file_size = os.path.getsize(filepath)
             file_size_mb = file_size / (1024 * 1024)
 
