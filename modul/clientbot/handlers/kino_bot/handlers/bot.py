@@ -2399,94 +2399,112 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
 
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
-    """YANGI OPTIMIZED VERSION - FAQAT BUNI QOLDIRING"""
-
-    request_id = str(time.time())[-6:]  # Debug uchun unique ID
-    logger.info(f"[{request_id}] YouTube handler STARTED - OPTIMIZED VERSION")
-    logger.info(f"[{request_id}] URL: {url}")
+    """Optimallashtirilgan YouTube handler (eski nom bilan)"""
+    logger.info(f"YouTube handler started with yt-dlp")
+    logger.info(f"URL: {url}")
 
     start_time = time.time()
+    progress_msg = None
 
     try:
-        progress_msg = await message.answer("🔍 Анализирую YouTube видео...")
-        logger.info(f"[{request_id}] Progress message sent")
+        progress_msg = await message.answer("Анализирую YouTube видео...")
+        logger.info("Progress message sent")
 
-        # Video ID
+        # Video ID ni olish
         video_id = extract_youtube_id(url)
         if not video_id:
-            logger.error(f"[{request_id}] Could not extract video ID")
-            await progress_msg.edit_text("❌ Неверная ссылка YouTube")
+            logger.error("Could not extract video ID")
+            await progress_msg.edit_text("Неверная ссылка YouTube")
             return
 
-        logger.info(f"[{request_id}] Video ID: {video_id}")
-        await progress_msg.edit_text("⏳ Получаю информацию о видео...")
+        await progress_msg.edit_text("Получаю информацию о видео...")
+        logger.info("Check info logger HATO!!")
 
-        # TEZLIK TEST: Faqat 15 sekund timeout
-        try:
-            info = await asyncio.wait_for(
-                asyncio.get_event_loop().run_in_executor(
-                    YT_EXECUTOR,
-                    extract_video_info_sync,
-                    url,
-                    request_id
-                ),
-                timeout=15.0  # QATTIQ TIMEOUT
-            )
-        except asyncio.TimeoutError:
-            logger.error(f"[{request_id}] TIMEOUT after 15 seconds")
-            await progress_msg.edit_text("❌ Timeout - видео недоступно или медленное соединение")
-            return
-        except Exception as e:
-            logger.error(f"[{request_id}] Extract error: {e}")
-            await progress_msg.edit_text("❌ Ошибка получения информации")
-            return
-
+        # Быстрое получение информации о видео
+        info = await fast_youtube.get_video_info_fast(url)
         if not info:
-            logger.error(f"[{request_id}] No info received")
-            await progress_msg.edit_text("❌ Видео недоступно")
+            await progress_msg.edit_text(
+                "❌ Не удалось получить информацию о видео\n\n"
+                "Возможно, видео приватное, удалено или недоступно."
+            )
             return
 
-        # Quick format selection - FAQAT 3 ta format
-        formats = get_quick_formats(info)
-        if not formats:
-            await progress_msg.edit_text("❌ Форматы не найдены")
+        # Video title va duration
+        title = info.get('title', 'Unknown')
+        duration = info.get('duration', 0)
+        uploader = info.get('uploader', 'Unknown')
+
+        # Быстрое получение форматов
+        selected_formats = fast_youtube.get_optimal_formats(info)
+
+        if not selected_formats:
+            await progress_msg.edit_text("Подходящие форматы не найдены")
             return
 
-        logger.info(f"[{request_id}] Found {len(formats)} formats")
-
-        # Simple keyboard
+        # Klaviatura yaratish
         keyboard = InlineKeyboardBuilder()
-        for fmt in formats:
+
+        for fmt in selected_formats:
+            size_str = f" ({fmt['size_mb']:.1f} MB)" if fmt['size_mb'] > 0 else ""
+
+            # Icon tanlash
+            if fmt['type'] == 'progressive':
+                icon = "📹"
+            elif fmt['type'] == 'video_only':
+                icon = "🎬"
+            else:  # audio_only
+                icon = "🎵"
+
+            button_text = f"{icon} {fmt['description']}{size_str}"
+
+            # Agar fayl katta bo'lsa, ogohlantirish
+            if fmt['size_mb'] > 40:
+                button_text += " ⚠️"
+
             keyboard.row(InlineKeyboardButton(
-                text=f"📹 {fmt['quality']} ({fmt['size_mb']:.1f}MB)",
-                callback_data=f"yt_dl_{fmt['id']}"
+                text=button_text,
+                callback_data=f"yt_dl_{fmt['id']}"  # Eski pattern saqlanadi
             ))
+
         keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
 
-        # State'ga saqlash
+        # Ma'lumotlarni state'ga saqlash
         await state.update_data(
             youtube_url=url,
             youtube_video_id=video_id,
             youtube_info=info,
-            youtube_formats=formats,
-            request_id=request_id
+            youtube_formats=selected_formats
         )
 
+        # Video haqida ma'lumot
+        duration_str = f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown"
         processing_time = time.time() - start_time
-        logger.info(f"[{request_id}] COMPLETED in {processing_time:.1f}s")
 
-        title = info.get('title', 'Unknown')[:40]
+        info_text = (
+            f"📹 <b>{title[:50]}{'...' if len(title) > 50 else ''}</b>\n\n"
+            f"👤 <b>Канал:</b> {uploader[:30]}{'...' if len(uploader) > 30 else ''}\n"
+            f"⏱ <b>Длительность:</b> {duration_str}\n"
+            f"🎯 <b>Доступно форматов:</b> {len(selected_formats)}\n"
+            f"⚡ <b>Обработано за:</b> {processing_time:.1f}с\n\n"
+            f"Выберите качество для загрузки:"
+        )
+
         await progress_msg.edit_text(
-            f"📹 <b>{title}</b>\n\n"
-            f"⚡ Обработано за: {processing_time:.1f}с\n"
-            f"🎯 Выберите качество:",
+            info_text,
             reply_markup=keyboard.as_markup(),
             parse_mode="HTML"
         )
 
+        logger.info("YouTube handler completed successfully")
+
     except Exception as e:
-        logger.error(f"[{request_id}] MAIN ERROR: {e}")
-        await message.answer("❌ Ошибка YouTube handler'а")
+        logger.error(f"YouTube handler error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        if progress_msg:
+            await progress_msg.edit_text("Ошибка при анализе видео")
+        else:
+            await message.answer("Ошибка при обработке YouTube видео")
 
 
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
@@ -2912,7 +2930,7 @@ import json
 RAPIDAPI_KEY = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
 RAPIDAPI_HOST = "youtube-video-fast-downloader-24-7.p.rapidapi.com"
 
-YT_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="yt-dlp")
+YT_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="yt-dlp")
 
 
 class FastYouTubeHandler:
