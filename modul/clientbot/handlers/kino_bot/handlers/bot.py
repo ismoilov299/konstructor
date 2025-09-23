@@ -1,4 +1,4 @@
-import glob 
+import glob
 import asyncio
 import json
 import subprocess
@@ -2399,8 +2399,12 @@ async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot
 
 
 async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMContext):
+    """Optimallashtirilgan YouTube handler (eski nom bilan)"""
     logger.info(f"YouTube handler started with yt-dlp")
     logger.info(f"URL: {url}")
+
+    start_time = time.time()
+    progress_msg = None
 
     try:
         progress_msg = await message.answer("Анализирую YouTube видео...")
@@ -2414,222 +2418,98 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             return
 
         await progress_msg.edit_text("Получаю информацию о видео...")
-
-        # yt-dlp bilan video ma'lumotlarini olish
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'listformats': True,
-            'force_ipv4': True,
-            'cookiefile': '/var/www/konstructor/all_cookies.txt',
-        }
-
         logger.info("Check info logger HATO!!")
-        try:
-            # Executor orqali yt-dlp ni async tarzda ishlatish
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    info = await asyncio.get_event_loop().run_in_executor(
-                        None, lambda: ydl.extract_info(url, download=False)
-                    )
-                except Exception as extract_error:
-                    error_msg = str(extract_error).lower()
 
-                    # YouTube maxsus cheklovlari uchun
-                    if "not available on this app" in error_msg or "watch on the latest version" in error_msg:
-                        await progress_msg.edit_text(
-                            "❌ Это видео недоступно для скачивания\n\n"
-                            "YouTube ограничил доступ к этому контенту.\n"
-                            "Попробуйте другое видео."
-                        )
-                        return
-                    elif "age-restricted" in error_msg or "sign in" in error_msg:
-                        await progress_msg.edit_text(
-                            "❌ Видео требует возрастной111 проверки\n\n"
-                            "Это видео недоступно для скачивания без авторизации.\n"
-                            "Попробуйте другое видео."
-                        )
-                        return
-                    elif "private" in error_msg or "unavailable" in error_msg:
-                        await progress_msg.edit_text(
-                            "❌ Видео недоступно\n\n"
-                            "Возможно, видео приватное или удалено.\n"
-                            "Проверьте ссылку и попробуйте другое видео."
-                        )
-                        return
-                    else:
-                        # Общая ошибка
-                        await progress_msg.edit_text(
-                            f"❌ Ошибка при получении информации о видео\n\n"
-                            f"Попробуйте другое видео или повторите позже."
-                        )
-                        return
+        # Быстрое получение информации о видео
+        info = await fast_youtube.get_video_info_fast(url)
+        if not info:
+            await progress_msg.edit_text(
+                "❌ Не удалось получить информацию о видео\n\n"
+                "Возможно, видео приватное, удалено или недоступно."
+            )
+            return
 
-                if not info:
-                    await progress_msg.edit_text("Не удалось получить информацию о видео")
-                    return
+        # Video title va duration
+        title = info.get('title', 'Unknown')
+        duration = info.get('duration', 0)
+        uploader = info.get('uploader', 'Unknown')
 
-                # Video title va duration
-                title = info.get('title', 'Unknown')
-                duration = info.get('duration', 0)
-                uploader = info.get('uploader', 'Unknown')
+        # Быстрое получение форматов
+        selected_formats = fast_youtube.get_optimal_formats(info)
 
-                # Mavjud formatlarni olish
-                formats = info.get('formats', [])
-                if not formats:
-                    await progress_msg.edit_text("Форматы видео не найдены")
-                    return
+        if not selected_formats:
+            await progress_msg.edit_text("Подходящие форматы не найдены")
+            return
 
-                # Formatlarni tahlil qilish va saralash
-                video_formats = []
-                audio_formats = []
+        # Klaviatura yaratish
+        keyboard = InlineKeyboardBuilder()
 
-                for fmt in formats:
-                    format_id = fmt.get('format_id', '')
-                    height = fmt.get('height')
-                    acodec = fmt.get('acodec', 'none')
-                    vcodec = fmt.get('vcodec', 'none')
-                    filesize = fmt.get('filesize') or fmt.get('filesize_approx') or 0
-                    ext = fmt.get('ext', 'unknown')
-                    quality = fmt.get('format_note', '')
+        for fmt in selected_formats:
+            size_str = f" ({fmt['size_mb']:.1f} MB)" if fmt['size_mb'] > 0 else ""
 
-                    # Size check (50MB limit for Telegram)
-                    if filesize and filesize > 50 * 1024 * 1024:
-                        continue
+            # Icon tanlash
+            if fmt['type'] == 'progressive':
+                icon = "📹"
+            elif fmt['type'] == 'video_only':
+                icon = "🎬"
+            else:  # audio_only
+                icon = "🎵"
 
-                    # Video + Audio formats (progressive)
-                    if vcodec != 'none' and acodec != 'none' and height:
-                        video_formats.append({
-                            'id': format_id,
-                            'quality': f"{height}p",
-                            'type': 'progressive',
-                            'ext': ext,
-                            'size_mb': filesize / (1024 * 1024) if filesize else 0,
-                            'note': quality,
-                            'description': f"{height}p {ext.upper()} (Video+Audio)"
-                        })
+            button_text = f"{icon} {fmt['description']}{size_str}"
 
-                    # Video only formats
-                    elif vcodec != 'none' and acodec == 'none' and height:
-                        video_formats.append({
-                            'id': format_id,
-                            'quality': f"{height}p",
-                            'type': 'video_only',
-                            'ext': ext,
-                            'size_mb': filesize / (1024 * 1024) if filesize else 0,
-                            'note': quality,
-                            'description': f"{height}p {ext.upper()} (Video only)"
-                        })
+            # Agar fayl katta bo'lsa, ogohlantirish
+            if fmt['size_mb'] > 40:
+                button_text += " ⚠️"
 
-                    # Audio only formats
-                    elif acodec != 'none' and vcodec == 'none':
-                        abr = fmt.get('abr', 0)
-                        audio_formats.append({
-                            'id': format_id,
-                            'quality': f"{abr}kbps" if abr else "Audio",
-                            'type': 'audio_only',
-                            'ext': ext,
-                            'size_mb': filesize / (1024 * 1024) if filesize else 0,
-                            'note': quality,
-                            'description': f"{abr}kbps {ext.upper()} (Audio only)" if abr else f"{ext.upper()} (Audio only)"
-                        })
+            keyboard.row(InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"yt_dl_{fmt['id']}"  # Eski pattern saqlanadi
+            ))
 
-                # Formatlarni sifat bo'yicha saralash
-                def sort_key(fmt):
-                    quality_str = fmt['quality'].replace('p', '').replace('kbps', '')
-                    try:
-                        quality_num = int(quality_str)
-                    except:
-                        quality_num = 0
+        keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
 
-                    # Type priority: progressive > video_only > audio_only
-                    type_priority = {'progressive': 0, 'video_only': 1, 'audio_only': 2}
-                    return (type_priority.get(fmt['type'], 3), -quality_num)
+        # Ma'lumotlarni state'ga saqlash
+        await state.update_data(
+            youtube_url=url,
+            youtube_video_id=video_id,
+            youtube_info=info,
+            youtube_formats=selected_formats
+        )
 
-                all_formats = video_formats + audio_formats
-                all_formats.sort(key=sort_key)
+        # Video haqida ma'lumot
+        duration_str = f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown"
+        processing_time = time.time() - start_time
 
-                # Eng yaxshi formatlarni tanlash (maksimum 8 ta)
-                selected_formats = []
-                seen_qualities = set()
+        info_text = (
+            f"📹 <b>{title[:50]}{'...' if len(title) > 50 else ''}</b>\n\n"
+            f"👤 <b>Канал:</b> {uploader[:30]}{'...' if len(uploader) > 30 else ''}\n"
+            f"⏱ <b>Длительность:</b> {duration_str}\n"
+            f"🎯 <b>Доступно форматов:</b> {len(selected_formats)}\n"
+            f"⚡ <b>Обработано за:</b> {processing_time:.1f}с\n\n"
+            f"Выберите качество для загрузки:"
+        )
 
-                for fmt in all_formats:
-                    unique_key = f"{fmt['quality']}_{fmt['type']}"
-                    if unique_key not in seen_qualities and len(selected_formats) < 8:
-                        selected_formats.append(fmt)
-                        seen_qualities.add(unique_key)
+        await progress_msg.edit_text(
+            info_text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode="HTML"
+        )
 
-                if not selected_formats:
-                    await progress_msg.edit_text("Подходящие форматы не найдены")
-                    return
-
-                # Klaviatura yaratish
-                keyboard = InlineKeyboardBuilder()
-
-                for fmt in selected_formats:
-                    size_str = f" ({fmt['size_mb']:.1f} MB)" if fmt['size_mb'] > 0 else ""
-
-                    # Icon tanlash
-                    if fmt['type'] == 'progressive':
-                        icon = "📹"
-                    elif fmt['type'] == 'video_only':
-                        icon = "🎬"
-                    else:  # audio_only
-                        icon = "🎵"
-
-                    button_text = f"{icon} {fmt['description']}{size_str}"
-
-                    # Agar fayl katta bo'lsa, ogohlantirish
-                    if fmt['size_mb'] > 40:
-                        button_text += " ⚠️"
-
-                    keyboard.row(InlineKeyboardButton(
-                        text=button_text,
-                        callback_data=f"yt_dl_{fmt['id']}"
-                    ))
-
-                keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
-
-                # Ma'lumotlarni state'ga saqlash
-                await state.update_data(
-                    youtube_url=url,
-                    youtube_video_id=video_id,
-                    youtube_info=info,
-                    youtube_formats=selected_formats
-                )
-
-                # Video haqida ma'lumot
-                duration_str = f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown"
-                info_text = (
-                    f"📹 <b>{title[:50]}{'...' if len(title) > 50 else ''}</b>\n\n"
-                    f"👤 <b>Канал:</b> {uploader[:30]}{'...' if len(uploader) > 30 else ''}\n"
-                    f"⏱ <b>Длительность:</b> {duration_str}\n"
-                    f"🎯 <b>Доступно форматов:</b> {len(selected_formats)}\n\n"
-                    f"Выберите качество для загрузки:"
-                )
-
-                await progress_msg.edit_text(
-                    info_text,
-                    reply_markup=keyboard.as_markup(),
-                    parse_mode="HTML"
-                )
-
-                logger.info("YouTube handler completed successfully")
-
-        except Exception as e:
-            logger.error(f"yt-dlp extraction error: {e}")
-            await progress_msg.edit_text("Ошибка при анализе видео")
+        logger.info("YouTube handler completed successfully")
 
     except Exception as e:
         logger.error(f"YouTube handler error: {type(e).__name__}: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        await message.answer("Ошибка при обработке YouTube видео")
+        if progress_msg:
+            await progress_msg.edit_text("Ошибка при анализе видео")
+        else:
+            await message.answer("Ошибка при обработке YouTube видео")
 
 
 @client_bot_router.callback_query(F.data.startswith("yt_dl_"))
 async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
+    """Optimallashtirilgan YouTube download (eski nom bilan)"""
     logger.info(f"YouTube download callback triggered")
     logger.info(f"Callback data: {callback.data}")
 
@@ -2637,7 +2517,7 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
         await callback.answer()
 
         # Format ID olish
-        format_id = callback.data.replace("yt_dl_", "")
+        format_id = callback.data.replace("yt_dl_", "")  # Eski pattern saqlanadi
         logger.info(f"Selected format ID: {format_id}")
 
         # State dan ma'lumot olish
@@ -2686,21 +2566,11 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             # yt-dlp download options
             output_template = os.path.join(temp_dir, f"youtube_{format_id}.%(ext)s")
 
-            ydl_opts = {
-                'format': format_id,
-                'outtmpl': output_template,
-                'quiet': False,
-                'no_warnings': False,
-                'force_ipv4': True,
-                'cookiefile': '/var/www/konstructor/all_cookies.txt'
-            }
+            start_time = time.time()
 
-            # Yuklab olish
+            # Быстрая загрузка через оптимизированный handler
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    await asyncio.get_event_loop().run_in_executor(
-                        None, lambda: ydl.download([youtube_url])
-                    )
+                await fast_youtube.download_format_fast(youtube_url, format_id, output_template)
             except Exception as download_error:
                 error_msg = str(download_error).lower()
 
@@ -2713,7 +2583,7 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                     return
                 elif "age-restricted" in error_msg or "sign in" in error_msg:
                     await callback.message.edit_text(
-                        "❌ Видео требует возрастной2222 проверки\n\n"
+                        "❌ Видео требует возрастной проверки\n\n"
                         "Это видео недоступно для скачивания без авторизации."
                     )
                     return
@@ -2723,16 +2593,10 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                         "Возможно, видео приватное или удалено."
                     )
                     return
-                elif "http error 403" in error_msg or "forbidden" in error_msg:
+                elif "timeout" in error_msg:
                     await callback.message.edit_text(
-                        "❌ Доступ к видео запрещен\n\n"
-                        "YouTube заблокировал скачивание этого видео."
-                    )
-                    return
-                elif "http error 429" in error_msg or "too many requests" in error_msg:
-                    await callback.message.edit_text(
-                        "❌ Слишком много запросов\n\n"
-                        "Попробуйте позже (через 10-15 минут)."
+                        "❌ Превышено время ожидания\n\n"
+                        "Попробуйте позже или выберите другой формат."
                     )
                     return
                 else:
@@ -2766,9 +2630,12 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                 )
                 return
 
+            download_time = time.time() - start_time
+
             await callback.message.edit_text(
                 f"📤 <b>Отправляю в Telegram...</b>\n\n"
-                f"📹 <b>Видео:</b> {title[:30]}{'...' if len(title) > 30 else ''}",
+                f"📹 <b>Видео:</b> {title[:30]}{'...' if len(title) > 30 else ''}\n"
+                f"⚡ <b>Загружено за:</b> {download_time:.1f}с",
                 parse_mode="HTML"
             )
 
@@ -2799,7 +2666,9 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                     )
 
                 await callback.message.delete()
-                logger.info("File sent successfully!")
+
+                total_time = time.time() - start_time
+                logger.info(f"File sent successfully! Total time: {total_time:.2f}s")
 
                 # Analytics
                 try:
@@ -2846,7 +2715,6 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             f"📋 <b>Ошибка:</b> {str(e)[:100]}...",
             parse_mode="HTML"
         )
-
 
 @client_bot_router.callback_query(F.data == "yt_more_formats")
 async def show_more_formats(callback: CallbackQuery):
@@ -3062,8 +2930,208 @@ import json
 RAPIDAPI_KEY = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
 RAPIDAPI_HOST = "youtube-video-fast-downloader-24-7.p.rapidapi.com"
 
+YT_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="yt-dlp")
 
-def extract_youtube_id(url):
+
+class FastYouTubeHandler:
+    def __init__(self):
+        # Базовые настройки для быстрого извлечения информации
+        self.info_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'socket_timeout': 15,  # Быстрый timeout
+            'retries': 1,  # Минимум попыток
+            'fragment_retries': 1,
+            'skip_download': True,  # Не загружать, только информация
+            'force_ipv4': True,
+            'no_check_certificate': True,
+            'cookiefile': '/var/www/konstructor/all_cookies.txt',
+        }
+
+        # Настройки для загрузки
+        self.download_opts_base = {
+            'quiet': False,
+            'no_warnings': False,
+            'socket_timeout': 30,
+            'retries': 2,
+            'fragment_retries': 2,
+            'force_ipv4': True,
+            'no_check_certificate': True,
+            'cookiefile': '/var/www/konstructor/all_cookies.txt',
+        }
+
+        # Кэш для информации о видео
+        self._info_cache = {}
+
+    async def get_video_info_fast(self, url: str) -> dict:
+        """Быстрое получение информации о видео с кэшированием"""
+        video_id = extract_youtube_id(url)
+        if not video_id:
+            return None
+
+        # Проверяем кэш
+        if video_id in self._info_cache:
+            cache_time, info = self._info_cache[video_id]
+            # Кэш действует 5 минут
+            if time.time() - cache_time < 300:
+                return info
+
+        try:
+            # Используем asyncio.wait_for для жесткого timeout
+            info = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    YT_EXECUTOR,
+                    self._extract_info_sync,
+                    url
+                ),
+                timeout=20.0  # Максимум 20 секунд
+            )
+
+            if info:
+                # Кэшируем результат
+                self._info_cache[video_id] = (time.time(), info)
+                return info
+
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout getting video info for: {url}")
+        except Exception as e:
+            logger.error(f"Error getting video info: {e}")
+
+        return None
+
+    def _extract_info_sync(self, url: str) -> dict:
+        """Синхронное извлечение информации в executor"""
+        try:
+            with yt_dlp.YoutubeDL(self.info_opts) as ydl:
+                return ydl.extract_info(url, download=False)
+        except Exception as e:
+            logger.error(f"yt-dlp extract error: {e}")
+            return None
+
+    def get_optimal_formats(self, info: dict, max_formats: int = 8) -> list:
+        """Получить оптимальные форматы для быстрого выбора"""
+        if not info or not info.get('formats'):
+            return []
+
+        formats = info['formats']
+        selected_formats = []
+        seen_qualities = set()
+
+        # Фильтрация и сортировка форматов
+        for fmt in formats:
+            format_id = fmt.get('format_id', '')
+            height = fmt.get('height')
+            acodec = fmt.get('acodec', 'none')
+            vcodec = fmt.get('vcodec', 'none')
+            filesize = fmt.get('filesize') or fmt.get('filesize_approx') or 0
+            ext = fmt.get('ext', 'unknown')
+            quality = fmt.get('format_note', '')
+
+            # Size check (50MB limit for Telegram)
+            if filesize and filesize > 50 * 1024 * 1024:
+                continue
+
+            # Video + Audio formats (progressive)
+            if vcodec != 'none' and acodec != 'none' and height:
+                unique_key = f"{height}p_progressive"
+                if unique_key not in seen_qualities:
+                    selected_formats.append({
+                        'id': format_id,
+                        'quality': f"{height}p",
+                        'type': 'progressive',
+                        'ext': ext,
+                        'size_mb': filesize / (1024 * 1024) if filesize else 0,
+                        'note': quality,
+                        'description': f"{height}p {ext.upper()} (Video+Audio)"
+                    })
+                    seen_qualities.add(unique_key)
+
+            # Video only formats
+            elif vcodec != 'none' and acodec == 'none' and height:
+                unique_key = f"{height}p_video_only"
+                if unique_key not in seen_qualities:
+                    selected_formats.append({
+                        'id': format_id,
+                        'quality': f"{height}p",
+                        'type': 'video_only',
+                        'ext': ext,
+                        'size_mb': filesize / (1024 * 1024) if filesize else 0,
+                        'note': quality,
+                        'description': f"{height}p {ext.upper()} (Video only)"
+                    })
+                    seen_qualities.add(unique_key)
+
+            # Audio only formats
+            elif acodec != 'none' and vcodec == 'none':
+                abr = fmt.get('abr', 0)
+                unique_key = f"{abr}kbps_audio"
+                if unique_key not in seen_qualities and len(
+                        [f for f in selected_formats if f['type'] == 'audio_only']) < 2:
+                    selected_formats.append({
+                        'id': format_id,
+                        'quality': f"{abr}kbps" if abr else "Audio",
+                        'type': 'audio_only',
+                        'ext': ext,
+                        'size_mb': filesize / (1024 * 1024) if filesize else 0,
+                        'note': quality,
+                        'description': f"{abr}kbps {ext.upper()} (Audio only)" if abr else f"{ext.upper()} (Audio only)"
+                    })
+                    seen_qualities.add(unique_key)
+
+        # Сортировка форматов
+        def sort_key(fmt):
+            quality_str = fmt['quality'].replace('p', '').replace('kbps', '')
+            try:
+                quality_num = int(quality_str)
+            except:
+                quality_num = 0
+
+            # Type priority: progressive > video_only > audio_only
+            type_priority = {'progressive': 0, 'video_only': 1, 'audio_only': 2}
+            return (type_priority.get(fmt['type'], 3), -quality_num)
+
+        selected_formats.sort(key=sort_key)
+        return selected_formats[:max_formats]
+
+    async def download_format_fast(self, url: str, format_id: str, output_path: str) -> str:
+        """Быстрая загрузка конкретного формата"""
+        download_opts = self.download_opts_base.copy()
+        download_opts.update({
+            'format': format_id,
+            'outtmpl': output_path,
+        })
+
+        try:
+            # Загрузка с timeout
+            await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    YT_EXECUTOR,
+                    self._download_sync,
+                    url,
+                    download_opts
+                ),
+                timeout=120.0  # Максимум 2 минуты на загрузку
+            )
+            return output_path
+
+        except asyncio.TimeoutError:
+            logger.error(f"Download timeout for format {format_id}")
+            raise Exception("Timeout при загрузке видео")
+        except Exception as e:
+            logger.error(f"Download error: {e}")
+            raise
+
+    def _download_sync(self, url: str, opts: dict):
+        """Синхронная загрузка в executor"""
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+
+
+fast_youtube = FastYouTubeHandler()
+
+
+def extract_youtube_id(url: str) -> str:
     """YouTube URL dan video ID ni olish"""
     logger.info(f"Extracting video ID from URL: {url}")
 
@@ -4081,3 +4149,4 @@ async def handle_tiktok(message: Message, url: str, me, bot: Bot,state: FSMConte
     except Exception as e:
         logger.error(f"TikTok handler error: {e}")
         await message.answer("❌ Ошибка при обработке TikTok видео")
+        
