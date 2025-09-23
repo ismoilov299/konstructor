@@ -2422,8 +2422,10 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
             'extract_flat': False,
             'listformats': True,
             'force_ipv4': True,
+            'cookiefile': '/var/www/konstructor/all_cookies.txt',
         }
 
+        logger.info("Check info logger HATO!!")
         try:
             # Executor orqali yt-dlp ni async tarzda ishlatish
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -2444,7 +2446,7 @@ async def handle_youtube(message: Message, url: str, me, bot: Bot, state: FSMCon
                         return
                     elif "age-restricted" in error_msg or "sign in" in error_msg:
                         await progress_msg.edit_text(
-                            "❌ Видео требует возрастной проверки\n\n"
+                            "❌ Видео требует возрастной111 проверки\n\n"
                             "Это видео недоступно для скачивания без авторизации.\n"
                             "Попробуйте другое видео."
                         )
@@ -2686,22 +2688,11 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
 
             ydl_opts = {
                 'format': format_id,
-                'quiet': True,
-                'no_warnings': True,
+                'outtmpl': output_template,
+                'quiet': False,
+                'no_warnings': False,
                 'force_ipv4': True,
-                'cookiefile': '/var/www/konstructor/all_cookies.txt',  # 👈 путь к cookies
-                'http_headers': {
-                    'User-Agent': (
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                        'AppleWebKit/537.36 (KHTML, like Gecko) '
-                        'Chrome/120.0.0.0 Safari/537.36'
-                    )
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['web']
-                    }
-                }
+                'cookiefile': '/var/www/konstructor/all_cookies.txt'
             }
 
             # Yuklab olish
@@ -2722,7 +2713,7 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
                     return
                 elif "age-restricted" in error_msg or "sign in" in error_msg:
                     await callback.message.edit_text(
-                        "❌ Видео требует возрастной проверки\n\n"
+                        "❌ Видео требует возрастной2222 проверки\n\n"
                         "Это видео недоступно для скачивания без авторизации."
                     )
                     return
