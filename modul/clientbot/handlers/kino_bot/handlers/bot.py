@@ -2633,21 +2633,22 @@ download_tasks = {}
 @client_bot_router.callback_query(F.data.startswith("yt_fast_dl_"))
 async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
     logger.info(f"📱 Fast download callback triggered")
+    logger.info(f"📋 Callback data: {callback.data}")
 
     try:
-        # 1️⃣ DARHOL javob berish - timeout xatosini oldini oladi
+        # Callback answer
         try:
             await callback.answer("⏳ Загрузка начата...")
         except:
-            pass  # Callback javob bermasa ham davom etamiz
+            pass
 
-        # 2️⃣ Ma'lumotlarni olish
+        # Ma'lumotlarni olish
         parts = callback.data.split('_')
         if len(parts) < 4:
             await callback.message.edit_text("❌ Неверный формат данных")
             return
 
-        quality_id = parts[3]
+        requested_quality = parts[3]  # Foydalanuvchi tanlagan sifat
         data = await state.get_data()
         video_id = data.get('youtube_video_id')
 
@@ -2655,42 +2656,284 @@ async def process_youtube_fast_download(callback: CallbackQuery, state: FSMConte
             await callback.message.edit_text("❌ Данные видео не найдены")
             return
 
-        # 3️⃣ Unique task ID yaratish
-        task_id = f"{callback.from_user.id}_{video_id}_{quality_id}_{int(datetime.now().timestamp())}"
+        qualities = get_available_youtube_qualities()
+        if requested_quality not in qualities:
+            await callback.message.edit_text("❌ Неверный формат выбран")
+            return
 
-        # 4️⃣ Darhol progress message yuborish
+        selected_format = qualities[requested_quality]
+
         await callback.message.edit_text(
-            f"⏳ <b>Загрузка начата</b>\n\n"
-            f"🎬 <b>Видео ID:</b> {video_id}\n"
-            f"📋 <b>Качество:</b> {quality_id}\n"
-            f"⏱ <b>Статус:</b> Подготовка...\n\n"
-            f"💡 <i>Процесс может занять до 3 минут</i>",
+            f"⏳ <b>Отправляю запрос на загрузку...</b>\n\n"
+            f"🆔 <b>ID видео:</b> {video_id}\n"
+            f"📋 <b>Запрошенное качество:</b> {requested_quality}p\n"
+            f"⚙️ <b>Формат:</b> {selected_format['desc']}",
             parse_mode="HTML"
         )
 
-        # 5️⃣ Background task yaratish
-        task = asyncio.create_task(
-            background_youtube_download(
-                task_id, callback, video_id, quality_id, state
-            )
-        )
-        download_tasks[task_id] = {
-            'task': task,
-            'status': 'starting',
-            'progress': 0,
-            'message': callback.message,
-            'start_time': datetime.now()
-        }
+        # API dan download URL olish
+        logger.info(f"🔍 Getting download URL for quality: {requested_quality}")
+        download_data = await get_youtube_info_via_fast_api(video_id, requested_quality)
 
-        logger.info(f"✅ Background task created: {task_id}")
+        if not download_data:
+            await callback.message.edit_text("❌ Данные для загрузки не получены")
+            return
+
+        if 'file' not in download_data:
+            await callback.message.edit_text("❌ URL для загрузки не найден")
+            return
+
+        # 🎯 QUALITY TEKSHIRISH - YANGI QO'SHILGAN
+        actual_quality = download_data.get('quality', '').replace('p', '')  # "144p" -> "144"
+        api_comment = download_data.get('comment', '')
+
+        logger.info(f"🎯 Requested quality: {requested_quality}p")
+        logger.info(f"📥 API returned quality: {download_data.get('quality')}")
+        logger.info(f"💬 API comment: {api_comment}")
+
+        # Agar quality mos kelmasa
+        if actual_quality != requested_quality:
+            logger.warning(f"⚠️ Quality mismatch: requested {requested_quality}, got {actual_quality}")
+
+            # Avtomatik pastroq sifat tanlanganini tekshirish
+            if "not found" in api_comment.lower() or "automatically selected" in api_comment.lower():
+
+                # Mavjud quality'larni topish
+                available_qualities = await find_available_qualities(video_id)
+                quality_text = ", ".join(
+                    [f"{q}p" for q in available_qualities]) if available_qualities else "неизвестно"
+
+                await callback.message.edit_text(
+                    f"⚠️ <b>Запрошенное качество недоступно!</b>\n\n"
+                    f"🎯 <b>Вы выбрали:</b> {requested_quality}p\n"
+                    f"📥 <b>API вернул:</b> {download_data.get('quality', 'неизвестно')}\n"
+                    f"✅ <b>Доступные качества:</b> {quality_text}\n\n"
+                    f"❓ <b>Скачать доступное качество ({download_data.get('quality', 'неизвестно')})?</b>",
+                    parse_mode="HTML",
+                    reply_markup=create_quality_choice_keyboard(video_id, actual_quality, requested_quality)
+                )
+                return
+            else:
+                # Boshqa sabab bo'lsa
+                await callback.message.edit_text(
+                    f"⚠️ <b>Качество не совпадает</b>\n\n"
+                    f"🎯 <b>Запрошено:</b> {requested_quality}p\n"
+                    f"📥 <b>Получено:</b> {download_data.get('quality', 'неизвестно')}\n\n"
+                    f"💡 Попробуйте выбрать другое качество",
+                    parse_mode="HTML"
+                )
+                return
+
+        # Quality mos kelsa, davom etish
+        download_url = download_data['file']
+        size_mb = int(download_data.get('size', 0)) / (1024 * 1024)
+
+        logger.info(f"✅ Quality confirmed: {requested_quality}p")
+        logger.info(f"✅ Download URL obtained: {download_url[:50]}...")
+        logger.info(f"📦 File size: {size_mb:.1f} MB")
+
+        # Telegram limit tekshirish
+        if size_mb > 50:
+            await callback.message.edit_text(
+                f"❌ <b>Файл слишком большой!</b>\n\n"
+                f"📦 <b>Размер:</b> {size_mb:.1f} МБ\n"
+                f"📏 <b>Лимит Telegram:</b> 50 МБ\n\n"
+                f"💡 Выберите формат меньшего размера",
+                parse_mode="HTML"
+            )
+            return
+
+        await callback.message.edit_text(
+            f"⏳ <b>Жду готовности файла...</b>\n\n"
+            f"🆔 <b>ID видео:</b> {video_id}\n"
+            f"📋 <b>Качество:</b> {download_data.get('quality', requested_quality + 'p')} ✅\n"
+            f"📦 <b>Размер:</b> {size_mb:.1f} МБ\n\n"
+            f"⏱ <b>Максимальное ожидание:</b> 2 минуты",
+            parse_mode="HTML"
+        )
+
+        # Fayl tayyor bo'lishini kutish
+        logger.info("⏳ Starting file ready check...")
+        is_ready = await wait_for_youtube_file_ready(download_url, max_wait_minutes=2)
+
+        if not is_ready:
+            logger.error("⏰ File not ready after waiting")
+            await callback.message.edit_text(
+                f"⏰ <b>Файл не готов через 2 минуты</b>\n\n"
+                f"💡 Попробуйте позже или выберите другой формат",
+                parse_mode="HTML"
+            )
+            return
+
+        # Faylni yuklab olib yuborish
+        logger.info("📥 Starting file download and send...")
+        await download_and_send_youtube_fast(callback, download_url, selected_format, video_id, size_mb)
 
     except Exception as e:
-        logger.error(f"❌ Callback error: {e}")
-        try:
-            await callback.message.edit_text("❌ Ошибка при запуске загрузки")
-        except:
-            pass
+        logger.error(f"❌ Fast download callback error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Traceback: {traceback.format_exc()}")
+        await callback.message.edit_text("❌ Ошибка при загрузке")
 
+
+def create_quality_choice_keyboard(video_id, available_quality, requested_quality):
+    """Quality tanlash uchun keyboard"""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text=f"✅ Скачать {available_quality}p",
+                callback_data=f"yt_accept_quality_{available_quality}_{video_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔄 Показать все доступные",
+                callback_data=f"yt_show_available_{video_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Отмена",
+                callback_data="yt_cancel_download"
+            )
+        ]
+    ])
+    return keyboard
+
+
+@client_bot_router.callback_query(F.data.startswith("yt_accept_quality_"))
+async def accept_available_quality(callback: CallbackQuery, state: FSMContext):
+    """Mavjud quality'ni qabul qilish"""
+    try:
+        await callback.answer()
+
+        parts = callback.data.replace("yt_accept_quality_", "").split('_', 1)
+        if len(parts) < 2:
+            await callback.message.edit_text("❌ Неверные данные")
+            return
+
+        quality = parts[0]
+        video_id = parts[1]
+
+        logger.info(f"✅ User accepted quality: {quality}p for video: {video_id}")
+
+        # State yangilash
+        await state.update_data(youtube_video_id=video_id)
+
+        # Fake callback yaratish
+        callback.data = f"yt_fast_dl_{quality}"
+
+        # Qayta ishga tushirish
+        await process_youtube_fast_download(callback, state)
+
+    except Exception as e:
+        logger.error(f"❌ Accept quality error: {e}")
+        await callback.message.edit_text("❌ Ошибка")
+
+
+@client_bot_router.callback_query(F.data.startswith("yt_show_available_"))
+async def show_available_qualities(callback: CallbackQuery, state: FSMContext):
+    """Barcha mavjud quality'larni ko'rsatish"""
+    try:
+        await callback.answer()
+        video_id = callback.data.replace("yt_show_available_", "")
+
+        await callback.message.edit_text(
+            f"🔍 <b>Проверяю доступные качества...</b>\n\n"
+            f"🆔 <b>Видео:</b> {video_id}\n"
+            f"⏳ <b>Это займет несколько секунд</b>",
+            parse_mode="HTML"
+        )
+
+        # Available quality'larni topish
+        available = await find_available_qualities(video_id)
+
+        if not available:
+            await callback.message.edit_text(
+                f"❌ <b>Не удалось найти доступные качества</b>\n\n"
+                f"💡 Попробуйте позже",
+                parse_mode="HTML"
+            )
+            return
+
+        # Quality tanlash keyboard'i
+        keyboard_buttons = []
+        for quality in available:
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=f"📺 {quality}p",
+                    callback_data=f"yt_fast_dl_{quality}"
+                )
+            ])
+
+        keyboard_buttons.append([
+            InlineKeyboardButton(text="❌ Отмена", callback_data="yt_cancel_download")
+        ])
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+        # State yangilash
+        await state.update_data(youtube_video_id=video_id)
+
+        await callback.message.edit_text(
+            f"📋 <b>Доступные качества для скачивания:</b>\n\n"
+            f"🆔 <b>Видео:</b> {video_id}\n"
+            f"✅ <b>Найдено качеств:</b> {len(available)}\n"
+            f"📺 <b>Доступны:</b> {', '.join([f'{q}p' for q in available])}\n\n"
+            f"👆 <b>Выберите нужное качество:</b>",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Show available error: {e}")
+        await callback.message.edit_text("❌ Ошибка при проверке качества")
+
+
+async def find_available_qualities(video_id, max_check=5):
+    """
+    Video uchun mavjud quality'larni tezkor topish
+    """
+    available = []
+    # Eng keng tarqalgan quality'lar
+    test_qualities = ['144', '240', '360', '480', '720']
+
+    logger.info(f"🔍 Quick check for available qualities: {video_id}")
+
+    for i, quality in enumerate(test_qualities):
+        if i >= max_check:  # Maximum 5ta tekshirish
+            break
+
+        try:
+            data = await asyncio.wait_for(
+                get_youtube_info_via_fast_api(video_id, quality),
+                timeout=10  # 10 sekund timeout
+            )
+
+            if data and 'quality' in data:
+                actual_quality = data.get('quality', '').replace('p', '')
+                if actual_quality == quality:
+                    available.append(quality)
+                    logger.info(f"✅ {quality}p available")
+                elif actual_quality and actual_quality not in available:
+                    # Boshqa quality qaytgan bo'lsa, uni ham qo'shish
+                    available.append(actual_quality)
+                    logger.info(f"✅ {actual_quality}p available (alternate)")
+
+        except asyncio.TimeoutError:
+            logger.warning(f"⏰ Timeout checking {quality}p")
+        except Exception as e:
+            logger.warning(f"❌ Error checking {quality}p: {e}")
+
+        # Har tekshirishdan keyin biroz kutish
+        await asyncio.sleep(0.3)
+
+    # Takrorlarni olib tashlash va tartiblash
+    available = sorted(list(set(available)), key=lambda x: int(x))
+    logger.info(f"📋 Found available qualities: {available}")
+    return available
 
 async def background_youtube_download(task_id, callback, video_id, quality_id, state):
     """Background'da YouTube yuklab olish"""
