@@ -2435,128 +2435,122 @@ async def process_youtube_download(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text("❌ Yuklab olish xatoligi")
 
 
-async def download_and_send_youtube(callback: CallbackQuery, video_url: str, format_choice: str):
-    """YouTube videoni yuklab olib yuborish - yt-dlp bilan"""
+async def download_and_send_youtube(callback, download_url, format_data, video_data, title):
+    """YouTube faylni yuklab olib Telegram ga yuborish"""
     temp_dir = None
     try:
         # Temp directory yaratish
-        temp_dir = tempfile.mkdtemp(prefix='yt_download_')
+        temp_dir = tempfile.mkdtemp(prefix='yt_api_')
+        file_ext = format_data['ext']
+        filename = f"{title[:50]}.{file_ext}".replace('/', '_').replace('\\', '_')
+        filepath = os.path.join(temp_dir, filename)
 
-        # Format tanlov asosida yt-dlp options
-        if format_choice == "best":
-            format_selector = "best[ext=mp4][height<=720]/best[ext=mp4]/best"
-            media_type = "video"
-        elif format_choice == "medium":
-            format_selector = "best[height<=480]/best[ext=mp4][height<=480]/worst"
-            media_type = "video"
-        elif format_choice == "low":
-            format_selector = "worst[ext=mp4]/worst"
-            media_type = "video"
-        elif format_choice == "audio":
-            format_selector = "bestaudio[ext=m4a]/bestaudio/best[ext=mp4]/best"
-            media_type = "audio"
-        else:
-            format_selector = "best"
-            media_type = "video"
-
-        ydl_opts = {
-            'format': format_selector,
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-            'quiet': True,
-            'no_warnings': True,
-            'max_filesize': 50000000,  # 50MB limit
-        }
-
+        # Progress yangilash
         await callback.message.edit_text(
-            f"⏳ <b>Yuklab olmoqda...</b>\n\n"
-            f"🎯 <b>Sifat:</b> {format_choice}\n"
-            f"📋 <b>Turi:</b> {media_type}",
+            f"⏬ <b>Yuklab olmoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>\n"
+            f"📋 <b>Format:</b> {format_data['quality']} {format_data['ext'].upper()}\n"
+            f"📦 <b>Hajmi:</b> {format_data['size']:.1f} MB",
             parse_mode="HTML"
         )
 
-        # Video ma'lumotlarini olish
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            title = info.get('title', 'Video')
-            duration = info.get('duration', 0)
+        # Faylni yuklab olish
+        async with aiohttp.ClientSession() as session:
+            async with session.get(download_url) as response:
+                if response.status == 200:
+                    total_size = int(response.headers.get('content-length', 0))
+                    downloaded = 0
 
-            # Yuklab olingan faylni topish
-            for file_path in os.listdir(temp_dir):
-                full_path = os.path.join(temp_dir, file_path)
-                if os.path.isfile(full_path):
-                    file_size = os.path.getsize(full_path)
-                    file_size_mb = file_size / (1024 * 1024)
+                    with open(filepath, 'wb') as file:
+                        async for chunk in response.content.iter_chunked(8192):
+                            file.write(chunk)
+                            downloaded += len(chunk)
 
-                    logger.info(f"Downloaded file: {file_path}, size: {file_size_mb:.1f} MB")
+                            # Har 1MB da progress yangilash
+                            if downloaded % (1024 * 1024) == 0:
+                                progress = (downloaded / total_size) * 100 if total_size else 0
+                                await callback.message.edit_text(
+                                    f"⏬ <b>Yuklab olmoqda: {progress:.0f}%</b>\n\n"
+                                    f"🎥 <b>{title[:50]}...</b>\n"
+                                    f"📋 <b>Format:</b> {format_data['quality']} {format_data['ext'].upper()}\n"
+                                    f"📦 <b>Hajmi:</b> {format_data['size']:.1f} MB",
+                                    parse_mode="HTML"
+                                )
+                else:
+                    raise Exception(f"Download failed: HTTP {response.status}")
 
-                    if file_size_mb > 50:
-                        await callback.message.edit_text(
-                            f"❌ <b>Fayl juda katta!</b>\n\n"
-                            f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB\n"
-                            f"📏 <b>Telegram limiti:</b> 50 MB\n\n"
-                            f"💡 Past sifatni tanlang",
-                            parse_mode="HTML"
-                        )
-                        return
+        # Fayl hajmini tekshirish
+        file_size = os.path.getsize(filepath)
+        file_size_mb = file_size / (1024 * 1024)
 
-                    await callback.message.edit_text(
-                        f"📤 <b>Telegram ga yubormoqda...</b>\n\n"
-                        f"🎥 <b>{title[:50]}...</b>",
-                        parse_mode="HTML"
-                    )
+        if file_size_mb > 50:
+            await callback.message.edit_text(
+                f"❌ <b>Fayl juda katta</b>\n\n"
+                f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB\n"
+                f"📏 <b>Telegram limiti:</b> 50 MB\n\n"
+                f"💡 Kichikroq sifat tanlang",
+                parse_mode="HTML"
+            )
+            return
 
-                    caption = (
-                        f"🎥 {title}\n"
-                        f"⏱ Davomiyligi: {duration // 60}:{duration % 60:02d}\n"
-                        f"📦 Hajmi: {file_size_mb:.1f} MB\n"
-                        f"🎯 yt-dlp orqali yuklab olindi"
-                    )
+        # Telegram ga yuborish
+        await callback.message.edit_text(
+            f"📤 <b>Telegram ga yubormoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>",
+            parse_mode="HTML"
+        )
 
-                    try:
-                        if media_type == "audio":
-                            await callback.bot.send_audio(
-                                chat_id=callback.message.chat.id,
-                                audio=FSInputFile(full_path),
-                                caption=caption,
-                                title=title,
-                                duration=duration
-                            )
-                        else:
-                            await callback.bot.send_video(
-                                chat_id=callback.message.chat.id,
-                                video=FSInputFile(full_path),
-                                caption=caption,
-                                supports_streaming=True,
-                                duration=duration
-                            )
+        caption = (
+            f"🎥 {title}\n"
+            f"👤 {video_data.get('channelTitle', 'Unknown')}\n"
+            f"📋 {format_data['quality']} {format_data['ext'].upper()}\n"
+            f"📦 {file_size_mb:.1f} MB\n"
+            f"🎯 YouTube API orqali yuklab olindi"
+        )
 
-                        await callback.message.delete()
-                        logger.info("✅ YouTube video sent successfully!")
-                        return
+        try:
+            if format_data['type'] == 'audio':
+                await callback.bot.send_audio(
+                    chat_id=callback.message.chat.id,
+                    audio=FSInputFile(filepath),
+                    caption=caption,
+                    title=title,
+                    performer=video_data.get('channelTitle', 'Unknown'),
+                    duration=int(video_data.get('lengthSeconds', 0))
+                )
+            else:
+                await callback.bot.send_video(
+                    chat_id=callback.message.chat.id,
+                    video=FSInputFile(filepath),
+                    caption=caption,
+                    supports_streaming=True,
+                    duration=int(video_data.get('lengthSeconds', 0))
+                )
 
-                    except Exception as send_error:
-                        logger.error(f"Error sending file: {send_error}")
-                        # Document sifatida yuborishga harakat
-                        try:
-                            await callback.bot.send_document(
-                                chat_id=callback.message.chat.id,
-                                document=FSInputFile(full_path),
-                                caption=caption
-                            )
-                            await callback.message.delete()
-                            logger.info("✅ YouTube video sent as document!")
-                            return
-                        except Exception as doc_error:
-                            logger.error(f"Error sending as document: {doc_error}")
-                            raise send_error
+            await callback.message.delete()
 
-        await callback.message.edit_text("❌ Yuklab olingan fayl topilmadi")
+            # Analytics
+            try:
+                await shortcuts.add_to_analitic_data(
+                    (await callback.bot.get_me()).username,
+                    callback.message.chat.id
+                )
+            except:
+                pass
+
+        except Exception as send_error:
+            logger.error(f"Error sending file: {send_error}")
+            await callback.message.edit_text(
+                f"❌ <b>Faylni yuborishda xatolik</b>\n\n"
+                f"📋 <b>Xatolik:</b> {str(send_error)[:150]}...",
+                parse_mode="HTML"
+            )
 
     except Exception as e:
-        logger.error(f"YouTube download error: {e}")
+        logger.error(f"Download and send error: {e}")
         await callback.message.edit_text(
             f"❌ <b>Yuklab olishda xatolik</b>\n\n"
-            f"📋 <b>Xatolik:</b> {str(e)[:100]}...",
+            f"📋 <b>Xatolik:</b> {str(e)[:150]}...",
             parse_mode="HTML"
         )
     finally:
@@ -2567,56 +2561,47 @@ async def download_and_send_youtube(callback: CallbackQuery, video_url: str, for
             except:
                 pass
 
+
 async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
-    """YouTube handler - faqat yt-dlp bilan"""
-    logger.info(f"YouTube handler started for URL: {url}")
+    logger.info(f"🎬 YouTube handler started")
+    logger.info(f"🔗 URL: {url}")
 
     try:
-        progress_msg = await message.answer("🔍 YouTube videoni tekshiryapman...")
+        progress_msg = await message.answer("🔍 Анализирую YouTube видео...")
+        logger.info("✅ Progress message sent")
 
-        # Video ma'lumotlarini olish
-        video_info = await get_youtube_info_with_yt_dlp(url)
+        # Video ID ni olish
+        video_id = extract_youtube_id(url)
+        if not video_id:
+            logger.error("❌ Could not extract video ID")
+            await progress_msg.edit_text("❌ Неверная ссылка YouTube")
+            return
 
-        if not video_info:
+        # API dan ma'lumot olish
+        logger.info(f"🔍 Getting video info for ID: {video_id}")
+        video_data = await get_youtube_info_via_fast_api(video_id, "247")
+
+        if not video_data:
+            logger.error("❌ No video data received from API")
             await progress_msg.edit_text(
-                "❌ <b>YouTube videoni yuklab bo'lmadi</b>\n\n"
-                "💡 Video mavjudligini yoki URL to'g'riligini tekshiring",
+                "❌ <b>Не удалось получить данные видео</b>\n\n"
+                "💡 Проверьте ссылку или попробуйте позже",
                 parse_mode="HTML"
             )
             return
 
-        title = video_info.get('title', 'Video')
-        duration = video_info.get('duration', 0)
-        uploader = video_info.get('uploader', 'Unknown')
-        view_count = video_info.get('view_count', 0)
-
-        # Duration formatlash
-        duration_str = ""
-        if duration:
-            hours, remainder = divmod(duration, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            if hours:
-                duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            else:
-                duration_str = f"{minutes:02d}:{seconds:02d}"
-
-        # View count formatlash
-        views_str = ""
-        if view_count:
-            if view_count >= 1_000_000:
-                views_str = f"{view_count / 1_000_000:.1f}M"
-            elif view_count >= 1_000:
-                views_str = f"{view_count / 1_000:.1f}K"
-            else:
-                views_str = f"{view_count:,}"
+        # Video ma'lumotlarini formatlash
+        size_mb = int(video_data.get('size', 0)) / (1024 * 1024) if video_data.get('size') else 0
+        logger.info(f"📦 Video size: {size_mb:.1f} MB")
 
         info_text = (
-            f"✅ <b>YouTube video topildi!</b>\n\n"
-            f"🎥 <b>{title[:100]}</b>\n"
-            f"👤 <b>Kanal:</b> {uploader}\n"
-            f"⏱ <b>Davomiyligi:</b> {duration_str}\n"
-            f"👀 <b>Ko'rishlar:</b> {views_str}\n\n"
-            f"📥 <b>Yuklab olish formatini tanlang:</b>"
+            f"✅ <b>YouTube видео найдено!</b>\n\n"
+            f"🆔 <b>ID видео:</b> {video_id}\n"
+            f"📋 <b>Качество:</b> {video_data.get('quality', 'Неизвестно')}\n"
+            f"📦 <b>Размер:</b> {size_mb:.1f} МБ\n"
+            f"🎞 <b>Формат:</b> {video_data.get('mime', 'Неизвестно')}\n"
+            f"⚡ <b>Битрейт:</b> {video_data.get('bitrate', 'Неизвестно')}\n\n"
+            f"📥 <b>Выберите формат:</b>"
         )
 
         keyboard = create_youtube_format_keyboard()
@@ -2624,76 +2609,23 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
         # State ga saqlash
         await state.update_data(
             youtube_url=url,
-            youtube_info=video_info
+            youtube_video_id=video_id,
+            youtube_api_type="fast_api"
         )
+        logger.info("💾 Data saved to state")
 
         await progress_msg.edit_text(
             info_text,
             reply_markup=keyboard.as_markup(),
             parse_mode="HTML"
         )
-
-        logger.info("YouTube handler completed successfully")
-
-    except Exception as e:
-        logger.error(f"YouTube handler error: {type(e).__name__}: {e}")
-        await message.answer("❌ YouTube videoni qayta ishlashda xatolik yuz berdi")
-
-
-async def get_youtube_info_with_yt_dlp(url):
-    """yt-dlp orqali YouTube video ma'lumotlarini olish"""
-    logger.info(f"🔍 Getting YouTube info with yt-dlp for URL: {url}")
-
-    try:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            'format': 'best',
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-
-            if info:
-                logger.info(f"✅ Successfully extracted video info: {info.get('title', 'Unknown')}")
-                return info
-            else:
-                logger.error("❌ No video info extracted")
-                return None
+        logger.info("✅ YouTube handler completed successfully")
 
     except Exception as e:
-        logger.error(f"❌ yt-dlp error: {type(e).__name__}: {e}")
-        return None
-
-
-@client_bot_router.callback_query(F.data.startswith("yt_"))
-async def process_youtube_download_callback(callback: CallbackQuery, state: FSMContext):
-    """YouTube download callback handler"""
-    try:
-        await callback.answer()
-
-        format_choice = callback.data.replace("yt_", "")
-
-        if format_choice == "cancel":
-            await callback.message.edit_text("❌ Yuklab olish bekor qilindi")
-            await state.clear()
-            return
-
-        # State dan ma'lumot olish
-        data = await state.get_data()
-        video_url = data.get('youtube_url')
-
-        if not video_url:
-            await callback.message.edit_text("❌ Video ma'lumotlari topilmadi")
-            return
-
-        # Yuklab olish va yuborish
-        await download_and_send_youtube(callback, video_url, format_choice)
-
-    except Exception as e:
-        logger.error(f"YouTube download callback error: {e}")
-        await callback.message.edit_text("❌ Yuklab olishda xatolik yuz berdi")
+        logger.error(f"❌ YouTube handler error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Traceback: {traceback.format_exc()}")
+        await message.answer("❌ Ошибка при обработке YouTube видео")
 
 
 @client_bot_router.callback_query(F.data.startswith("yt_fast_dl_"))
@@ -3007,10 +2939,444 @@ async def handle_too_large_callback(callback: CallbackQuery):
 from modul.loader import client_bot_router
 from aiogram import F
 import json
+RAPIDAPI_KEY = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
+RAPIDAPI_HOST = "youtube-info-download-api.p.rapidapi.com"
+
+
+def is_valid_youtube_url(url):
+    """YouTube URL to'g'riligini tekshirish"""
+    youtube_patterns = [
+        r'youtube\.com/watch\?v=',
+        r'youtu\.be/',
+        r'youtube\.com/embed/',
+        r'youtube\.com/v/',
+        r'youtube\.com/shorts/'
+    ]
+
+    return any(re.search(pattern, url) for pattern in youtube_patterns)
+
+
+async def get_youtube_download_info(url, format_quality="720"):
+    """YouTube download ma'lumotlarini olish - yangi API orqali"""
+    logger.info(f"🔍 Getting YouTube download info for URL: {url}")
+    logger.info(f"📋 Requested format: {format_quality}")
+
+    try:
+        # URL encoding
+        import urllib.parse
+        encoded_url = urllib.parse.quote(url, safe='')
+
+        # API endpoint
+        api_url = f"https://{RAPIDAPI_HOST}/ajax/download.php"
+        params = {
+            'format': format_quality,
+            'add_info': '0',
+            'url': url,
+            'audio_quality': '128',
+            'allow_extended_duration': 'false',
+            'no_merge': 'false',
+            'audio_language': 'en'
+        }
+
+        headers = {
+            'x-rapidapi-key': RAPIDAPI_KEY,
+            'x-rapidapi-host': RAPIDAPI_HOST
+        }
+
+        logger.info(f"📡 API request: {api_url}")
+        logger.info(f"📋 Params: {params}")
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, headers=headers, params=params, timeout=30) as response:
+                status = response.status
+                logger.info(f"📡 Response status: {status}")
+
+                if status == 200:
+                    try:
+                        data = await response.json()
+                        logger.info(f"✅ API Success! Response keys: {list(data.keys())}")
+
+                        if data.get('success'):
+                            return data
+                        else:
+                            logger.error(f"API returned success=false: {data}")
+                            return None
+
+                    except Exception as json_error:
+                        logger.error(f"❌ JSON parsing error: {json_error}")
+                        text_response = await response.text()
+                        logger.error(f"📄 Raw response: {text_response}")
+                        return None
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ API error {status}: {error_text}")
+                    return None
+
+    except Exception as e:
+        logger.error(f"❌ API request error: {type(e).__name__}: {e}")
+        return None
+
+
+async def check_download_progress(progress_url, max_wait_minutes=3):
+    """Download progress ni tekshirish"""
+    logger.info(f"⏳ Checking download progress: {progress_url}")
+
+    start_time = time.time()
+    max_wait_seconds = max_wait_minutes * 60
+    check_interval = 3  # 3 sekund interval
+
+    attempt = 1
+
+    while time.time() - start_time < max_wait_seconds:
+        try:
+            logger.info(f"🔄 Progress check attempt #{attempt}")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(progress_url, timeout=10) as response:
+                    if response.status == 200:
+                        try:
+                            progress_data = await response.json()
+                            logger.info(f"📊 Progress data: {progress_data}")
+
+                            # Agar download tayyor bo'lsa
+                            if progress_data.get('status') == 'completed' or progress_data.get('download_url'):
+                                logger.info("✅ Download completed!")
+                                return progress_data
+
+                            # Agar xatolik bo'lsa
+                            elif progress_data.get('status') == 'error':
+                                logger.error(f"❌ Download error: {progress_data}")
+                                return None
+
+                            # Agar hali jarayonda bo'lsa
+                            else:
+                                logger.info(f"⏳ Still processing... Status: {progress_data.get('status', 'unknown')}")
+
+                        except Exception as json_error:
+                            logger.error(f"Progress JSON error: {json_error}")
+
+                    else:
+                        logger.warning(f"Progress check failed with status: {response.status}")
+
+            # Keyingi tekshirish uchun kutish
+            if time.time() - start_time < max_wait_seconds:
+                await asyncio.sleep(check_interval)
+                attempt += 1
+
+        except Exception as e:
+            logger.error(f"Progress check error: {e}")
+            await asyncio.sleep(check_interval)
+            attempt += 1
+
+    logger.error(f"⏰ Progress check timeout ({max_wait_minutes} min)")
+    return None
+
+
+def create_youtube_format_keyboard():
+    """YouTube format tanlash klaviaturasi"""
+    keyboard = InlineKeyboardBuilder()
+
+    # Format tanlovlar
+    keyboard.row(InlineKeyboardButton(text="📹 1080p (Eng yaxshi)", callback_data="yt_api_1080"))
+    keyboard.row(InlineKeyboardButton(text="📹 720p (Yaxshi)", callback_data="yt_api_720"))
+    keyboard.row(InlineKeyboardButton(text="📹 480p (O'rtacha)", callback_data="yt_api_480"))
+    keyboard.row(InlineKeyboardButton(text="📹 360p (Past)", callback_data="yt_api_360"))
+    keyboard.row(InlineKeyboardButton(text="🎵 Faqat audio", callback_data="yt_api_audio"))
+    keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
+
+    return keyboard
+
+
+async def download_and_send_youtube_api(callback: CallbackQuery, video_url: str, format_choice: str):
+    """YouTube videoni API orqali yuklab olib yuborish"""
+    temp_dir = None
+    try:
+        # Format mapping
+        format_map = {
+            "1080": "1080",
+            "720": "720",
+            "480": "480",
+            "360": "360",
+            "audio": "audio"
+        }
+
+        api_format = format_map.get(format_choice, "720")
+
+        await callback.message.edit_text(
+            f"⏳ <b>Video ma'lumotlarini olyapman...</b>\n\n"
+            f"🎯 <b>Sifat:</b> {format_choice}\n"
+            f"🔄 <b>API so'rovi yuborilmoqda...</b>",
+            parse_mode="HTML"
+        )
+
+        # 1. Video ma'lumotlarini olish
+        download_info = await get_youtube_download_info(video_url, api_format)
+
+        if not download_info or not download_info.get('success'):
+            await callback.message.edit_text(
+                "❌ <b>Video ma'lumotlarini olib bo'lmadi</b>\n\n"
+                "💡 Video mavjudligini yoki URL to'g'riligini tekshiring",
+                parse_mode="HTML"
+            )
+            return
+
+        title = download_info.get('title', 'Video')
+        thumbnail_url = download_info.get('info', {}).get('image', '')
+        progress_url = download_info.get('progress_url')
+
+        if not progress_url:
+            await callback.message.edit_text(
+                "❌ <b>Progress URL olinmadi</b>\n\n"
+                "💡 API javobida kutilmagan format",
+                parse_mode="HTML"
+            )
+            return
+
+        await callback.message.edit_text(
+            f"⏳ <b>Video tayyorlanmoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>\n"
+            f"🎯 <b>Sifat:</b> {format_choice}\n"
+            f"⏱ <b>Maksimal kutish:</b> 3 daqiqa",
+            parse_mode="HTML"
+        )
+
+        # 2. Progress tekshirish va download URL ni olish
+        progress_data = await check_download_progress(progress_url, max_wait_minutes=3)
+
+        if not progress_data:
+            await callback.message.edit_text(
+                f"⏰ <b>Video 3 daqiqada tayyor bo'lmadi</b>\n\n"
+                f"💡 Video juda uzun yoki server band bo'lishi mumkin.\n"
+                f"Iltimos, keyinroq qayta urinib ko'ring.",
+                parse_mode="HTML"
+            )
+            return
+
+        download_url = progress_data.get('download_url')
+        if not download_url:
+            # Progress data strukturasini tekshirish
+            logger.info(f"Progress data structure: {progress_data}")
+            await callback.message.edit_text(
+                f"❌ <b>Download URL topilmadi</b>\n\n"
+                f"📋 Progress natijasi: {progress_data.get('status', 'unknown')}",
+                parse_mode="HTML"
+            )
+            return
+
+        # 3. Faylni yuklab olib yuborish
+        await callback.message.edit_text(
+            f"⏬ <b>Video yuklanmoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>",
+            parse_mode="HTML"
+        )
+
+        # Temp directory yaratish
+        temp_dir = tempfile.mkdtemp(prefix='yt_api_')
+        file_ext = "mp4" if format_choice != "audio" else "mp3"
+        filename = f"{title[:50]}.{file_ext}".replace('/', '_').replace('\\', '_')
+        filepath = os.path.join(temp_dir, filename)
+
+        # Faylni yuklab olish
+        async with aiohttp.ClientSession() as session:
+            async with session.get(download_url) as response:
+                if response.status == 200:
+                    total_size = int(response.headers.get('content-length', 0))
+                    total_size_mb = total_size / (1024 * 1024) if total_size else 0
+
+                    if total_size_mb > 50:
+                        await callback.message.edit_text(
+                            f"❌ <b>Fayl juda katta!</b>\n\n"
+                            f"📦 <b>Hajmi:</b> {total_size_mb:.1f} MB\n"
+                            f"📏 <b>Telegram limiti:</b> 50 MB\n\n"
+                            f"💡 Past sifatni tanlang",
+                            parse_mode="HTML"
+                        )
+                        return
+
+                    downloaded = 0
+                    with open(filepath, 'wb') as file:
+                        async for chunk in response.content.iter_chunked(8192):
+                            file.write(chunk)
+                            downloaded += len(chunk)
+
+                            # Progress yangilash (har 1MB da)
+                            if downloaded % (1024 * 1024) == 0:
+                                progress = (downloaded / total_size * 100) if total_size else 0
+                                await callback.message.edit_text(
+                                    f"⏬ <b>Yuklanmoqda: {progress:.0f}%</b>\n\n"
+                                    f"🎥 <b>{title[:50]}...</b>\n"
+                                    f"📦 <b>Yuklab olingan:</b> {downloaded / (1024 * 1024):.1f} MB",
+                                    parse_mode="HTML"
+                                )
+                else:
+                    raise Exception(f"Download failed: HTTP {response.status}")
+
+        # Fayl hajmini tekshirish
+        file_size = os.path.getsize(filepath)
+        file_size_mb = file_size / (1024 * 1024)
+
+        if file_size_mb > 50:
+            await callback.message.edit_text(
+                f"❌ <b>Fayl Telegram uchun juda katta</b>\n\n"
+                f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB",
+                parse_mode="HTML"
+            )
+            return
+
+        # Telegram ga yuborish
+        await callback.message.edit_text(
+            f"📤 <b>Telegram ga yubormoqda...</b>\n\n"
+            f"🎥 <b>{title[:50]}...</b>",
+            parse_mode="HTML"
+        )
+
+        caption = (
+            f"🎥 {title}\n"
+            f"📦 Hajmi: {file_size_mb:.1f} MB\n"
+            f"🎯 {format_choice} sifatida yuklab olindi\n"
+            f"🚀 YouTube API orqali"
+        )
+
+        try:
+            if format_choice == "audio":
+                await callback.bot.send_audio(
+                    chat_id=callback.message.chat.id,
+                    audio=FSInputFile(filepath),
+                    caption=caption,
+                    title=title
+                )
+            else:
+                await callback.bot.send_video(
+                    chat_id=callback.message.chat.id,
+                    video=FSInputFile(filepath),
+                    caption=caption,
+                    supports_streaming=True
+                )
+
+            await callback.message.delete()
+            logger.info("✅ YouTube video sent successfully via API!")
+
+        except Exception as send_error:
+            logger.error(f"Error sending file: {send_error}")
+            # Document sifatida yuborishga harakat
+            try:
+                await callback.bot.send_document(
+                    chat_id=callback.message.chat.id,
+                    document=FSInputFile(filepath),
+                    caption=caption
+                )
+                await callback.message.delete()
+                logger.info("✅ YouTube video sent as document!")
+            except Exception as doc_error:
+                logger.error(f"Error sending as document: {doc_error}")
+                await callback.message.edit_text(
+                    f"❌ <b>Faylni yuborishda xatolik</b>\n\n"
+                    f"📋 {str(send_error)[:100]}...",
+                    parse_mode="HTML"
+                )
+
+    except Exception as e:
+        logger.error(f"YouTube API download error: {e}")
+        await callback.message.edit_text(
+            f"❌ <b>Yuklab olishda xatolik</b>\n\n"
+            f"📋 <b>Xatolik:</b> {str(e)[:100]}...",
+            parse_mode="HTML"
+        )
+    finally:
+        # Temp fayllarni tozalash
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+
+
+async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext):
+    """YouTube handler - API orqali"""
+    logger.info(f"YouTube API handler started for URL: {url}")
+
+    try:
+        progress_msg = await message.answer("🔍 YouTube videoni tekshiryapman...")
+
+        # Video ID ni olish
+        video_id = extract_youtube_id(url)
+        if not video_id:
+            await progress_msg.edit_text(
+                "❌ <b>YouTube URL noto'g'ri</b>\n\n"
+                "💡 To'g'ri YouTube havolasini yuboring",
+                parse_mode="HTML"
+            )
+            return
+
+        # API orqali asosiy ma'lumotlarni olish (720p format bilan test)
+        video_info = await get_youtube_download_info(url, "720")
+
+        if not video_info or not video_info.get('success'):
+            await progress_msg.edit_text(
+                "❌ <b>Video ma'lumotlarini olib bo'lmadi</b>\n\n"
+                "💡 Video mavjud emas yoki cheklangan bo'lishi mumkin",
+                parse_mode="HTML"
+            )
+            return
+
+        title = video_info.get('title', 'Video')
+        thumbnail_url = video_info.get('info', {}).get('image', '')
+
+        info_text = (
+            f"✅ <b>YouTube video topildi!</b>\n\n"
+            f"🎥 <b>{title}</b>\n"
+            f"🆔 <b>Video ID:</b> {video_id}\n"
+            f"🖼 <b>Thumbnail:</b> {'Mavjud' if thumbnail_url else 'Yo\'q'}\n\n"
+            f"📥 <b>Yuklab olish formatini tanlang:</b>"
+        )
+
+        keyboard = create_youtube_format_keyboard()
+
+        # State ga saqlash
+        await state.update_data(
+            youtube_url=url,
+            youtube_video_id=video_id,
+            youtube_info=video_info
+        )
+
+        await progress_msg.edit_text(
+            info_text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode="HTML"
+        )
+
+        logger.info("YouTube API handler completed successfully")
+
+    except Exception as e:
+        logger.error(f"YouTube API handler error: {type(e).__name__}: {e}")
+        await message.answer("❌ YouTube videoni qayta ishlashda API xatolik yuz berdi")
+
+
+@client_bot_router.callback_query(F.data.startswith("yt_api_"))
+async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
+    """YouTube API download callback handler"""
+    try:
+        await callback.answer()
+
+        format_choice = callback.data.replace("yt_api_", "")
+
+        # State dan ma'lumot olish
+        data = await state.get_data()
+        video_url = data.get('youtube_url')
+
+        if not video_url:
+            await callback.message.edit_text("❌ Video ma'lumotlari topilmadi")
+            return
+
+        # Yuklab olish va yuborish
+        await download_and_send_youtube_api(callback, video_url, format_choice)
+
+    except Exception as e:
+        logger.error(f"YouTube API download callback error: {e}")
+        await callback.message.edit_text("❌ API orqali yuklab olishda xatolik yuz berdi")
 
 
 def extract_youtube_id(url):
-    """YouTube URL dan video ID ni olish"""
     logger.info(f"Extracting video ID from URL: {url}")
 
     patterns = [
@@ -3032,19 +3398,146 @@ def extract_youtube_id(url):
     logger.error(f"❌ Could not extract video ID from: {url}")
     return None
 
+def get_available_youtube_qualities():
+    """Mavjud YouTube sifatlari"""
+    return {
+        "18": {"quality": "360p", "type": "progressive", "format": "MP4", "desc": "360p MP4 (Video+Audio)"},
+        "22": {"quality": "720p", "type": "progressive", "format": "MP4", "desc": "720p MP4 (Video+Audio)"},
+        "247": {"quality": "720p", "type": "video", "format": "WebM", "desc": "720p WebM (Video only)"},
+        "248": {"quality": "1080p", "type": "video", "format": "WebM", "desc": "1080p WebM (Video only)"},
+        "360": {"quality": "360p", "type": "progressive", "format": "MP4", "desc": "360p (Video+Audio)"},
+        "720": {"quality": "720p", "type": "progressive", "format": "MP4", "desc": "720p (Video+Audio)"},
+        "1080": {"quality": "1080p", "type": "progressive", "format": "MP4", "desc": "1080p (Video+Audio)"}
+    }
+
+
+async def get_youtube_info_via_fast_api(video_id, quality="247"):
+    """Fast API orqali YouTube video ma'lumotlarini olish - DEBUGGING BILAN"""
+    logger.info(f"🔍 API request starting...")
+    logger.info(f"   Video ID: {video_id}")
+    logger.info(f"   Quality: {quality}")
+    logger.info(f"   API Host: {RAPIDAPI_HOST}")
+
+    try:
+        url = f"https://{RAPIDAPI_HOST}/download_short/{video_id}"
+        params = {"quality": quality}
+        headers = {
+            "x-rapidapi-key": RAPIDAPI_KEY,
+            "x-rapidapi-host": RAPIDAPI_HOST
+        }
+
+        logger.info(f"📡 Request URL: {url}")
+        logger.info(f"📋 Request params: {params}")
+        logger.info(f"🔑 Request headers: {headers}")
+
+        async with aiohttp.ClientSession() as session:
+            logger.info("🌐 Making HTTP request...")
+            async with session.get(url, headers=headers, params=params, timeout=30) as response:
+                status = response.status
+                logger.info(f"📡 Response status: {status}")
+
+                if status == 200:
+                    try:
+                        data = await response.json()
+                        logger.info(f"✅ API Success! Response keys: {list(data.keys())}")
+                        logger.info(f"📄 Full response: {json.dumps(data, indent=2)}")
+                        return data
+                    except Exception as json_error:
+                        logger.error(f"❌ JSON parsing error: {json_error}")
+                        text_response = await response.text()
+                        logger.error(f"📄 Raw response: {text_response}")
+                        return None
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ API error {status}: {error_text}")
+                    return None
+
+    except asyncio.TimeoutError:
+        logger.error("⏰ API request timeout (30s)")
+        return None
+    except Exception as e:
+        logger.error(f"❌ API request error: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"📍 Traceback: {traceback.format_exc()}")
+        return None
+
+
+async def wait_for_youtube_file_ready(file_url, max_wait_minutes=3):
+    """YouTube fayl tayyor bo'lishini kutish"""
+    logger.info(f"⏳ Waiting for file to be ready...")
+    logger.info(f"🔗 File URL: {file_url}")
+    logger.info(f"⏱ Max wait time: {max_wait_minutes} minutes")
+
+    start_time = time.time()
+    max_wait_seconds = max_wait_minutes * 60
+    check_interval = 10
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+        'Connection': 'keep-alive'
+    }
+
+    attempt = 1
+
+    while time.time() - start_time < max_wait_seconds:
+        try:
+            logger.info(f"🔄 Attempt #{attempt} - checking file status...")
+
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.head(file_url, timeout=10) as response:
+                    status = response.status
+                    logger.info(f"📡 HEAD response status: {status}")
+
+                    if status == 200:
+                        content_length = response.headers.get('content-length', 'Unknown')
+                        content_type = response.headers.get('content-type', 'Unknown')
+                        logger.info(f"✅ File ready! Size: {content_length}, Type: {content_type}")
+                        return True
+
+                    elif status == 404:
+                        elapsed = time.time() - start_time
+                        remaining = max_wait_seconds - elapsed
+                        logger.info(f"⏳ File not ready yet (404). Remaining: {remaining/60:.1f} min")
+
+                    else:
+                        logger.warning(f"⚠️ Unexpected status: {status}")
+
+            if time.time() - start_time < max_wait_seconds:
+                logger.info(f"💤 Sleeping {check_interval} seconds...")
+                await asyncio.sleep(check_interval)
+                attempt += 1
+
+        except Exception as e:
+            logger.error(f"❌ Check error: {type(e).__name__}: {e}")
+            await asyncio.sleep(check_interval)
+            attempt += 1
+
+    logger.error(f"⏰ Wait time expired ({max_wait_minutes} min)")
+    return False
+
 
 def create_youtube_format_keyboard():
-    """YouTube format tanlash klaviaturasi - yt-dlp uchun"""
     keyboard = InlineKeyboardBuilder()
+    qualities = get_available_youtube_qualities()
 
-    # Standard YouTube formatlar
-    keyboard.row(InlineKeyboardButton(text="📹 Eng yaxshi sifat", callback_data="yt_best"))
-    keyboard.row(InlineKeyboardButton(text="📹 O'rtacha sifat", callback_data="yt_medium"))
-    keyboard.row(InlineKeyboardButton(text="📹 Past sifat", callback_data="yt_low"))
-    keyboard.row(InlineKeyboardButton(text="🎵 Faqat audio", callback_data="yt_audio"))
-    keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
+    # Asosiy formatlar
+    popular_formats = ["22", "18", "720", "360"]
 
+    for quality_id in popular_formats:
+        if quality_id in qualities:
+            fmt = qualities[quality_id]
+            icon = "📹" if fmt["type"] == "progressive" else "🎬"
+            button_text = f"{icon} {fmt['desc']}"
+            keyboard.row(InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"yt_fast_dl_{quality_id}"
+            ))
+
+    keyboard.row(InlineKeyboardButton(text="🔧 Другие форматы", callback_data="yt_more_formats"))
+    keyboard.row(InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_download"))
     return keyboard
+
 
 def create_more_formats_keyboard():
     keyboard = InlineKeyboardBuilder()
