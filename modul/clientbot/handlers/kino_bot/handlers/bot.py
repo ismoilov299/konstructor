@@ -2362,6 +2362,19 @@ class DownloaderBotFilter(Filter):
 RAPIDAPI_KEY = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
 RAPIDAPI_HOST = "youtube-info-download-api.p.rapidapi.com"
 
+@client_bot_router.message(DownloaderBotFilter())
+@client_bot_router.message(Download.download)
+async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+    if not message.text:
+        await message.answer("❗ Отправьте ссылку на видео")
+        return
+
+    url = message.text.strip()
+    me = await bot.get_me()
+
+    if 'youtube.com' in url or 'youtu.be' in url:
+        await handle_youtube(message, url, me, bot, state)  # Bu chaqiruv bormi?
+
 
 def is_valid_youtube_url(url):
     """YouTube URL to'g'riligini tekshirish"""
