@@ -2672,19 +2672,23 @@ async def download_and_send_youtube_api(callback: CallbackQuery, video_url: str,
         )
 
         try:
+            request_timeout = aiohttp.ClientTimeout(total=300)  # 5 daqiqa
+
             if format_choice == "audio":
                 await callback.bot.send_audio(
                     chat_id=callback.message.chat.id,
                     audio=FSInputFile(filepath),
                     caption=caption,
-                    title=title
+                    title=title,
+                    request_timeout=300  # 5 daqiqa timeout
                 )
             else:
                 await callback.bot.send_video(
                     chat_id=callback.message.chat.id,
                     video=FSInputFile(filepath),
                     caption=caption,
-                    supports_streaming=True
+                    supports_streaming=True,
+                    request_timeout=300  # 5 daqiqa timeout
                 )
 
             await callback.message.delete()
