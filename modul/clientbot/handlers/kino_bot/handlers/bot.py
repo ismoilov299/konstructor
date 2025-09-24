@@ -2768,11 +2768,9 @@ async def background_youtube_download(task_id, callback, video_id, quality_id, s
             await update_progress("Файл не готов", 0)
             return
 
-        # 5. Faylni yuklab olish va yuborish
         await update_progress("Загрузка и отправка файла", 90)
 
         try:
-            # Faylni yuklab olib yuborish
             await download_and_send_youtube_fast(
                 callback, download_url, selected_format, video_id, size_mb
             )
@@ -2871,173 +2869,241 @@ async def show_main_formats(callback: CallbackQuery):
     )
 
 
-async def download_and_send_youtube_fast(callback, download_url, format_data, video_id, size_mb):
-    logger.info(f"📥 Starting download and send process")
-    logger.info(f"🔗 Download URL: {download_url[:50]}...")
-    logger.info(f"📋 Format: {format_data}")
-
-    temp_dir = None
+async def download_and_send_youtube_fast(callback, download_url, selected_format, video_id, size_mb):
+    """
+    YouTube fayl yuklash va yuborish - optimallashtirilgan
+    """
+    temp_file = None
     try:
-        # Temp directory yaratish
-        temp_dir = tempfile.mkdtemp(prefix='yt_fast_')
-        filename = f"youtube_{video_id}_{format_data['quality']}.mp4"
-        filepath = os.path.join(temp_dir, filename)
-        logger.info(f"📁 Temp file path: {filepath}")
+        # 1. Temp file yaratish
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tf:
+            temp_file = tf.name
 
+        logger.info(f"📥 Downloading to: {temp_file}")
+
+        # 2. Progress bilan yuklab olish
         await callback.message.edit_text(
-            f"⏬ <b>Загружаю...</b>\n\n"
-            f"🆔 <b>ID видео:</b> {video_id}\n"
-            f"📋 <b>Формат:</b> {format_data['desc']}\n"
-            f"📦 <b>Размер:</b> {size_mb:.1f} МБ",
+            f"📥 <b>Загрузка файла...</b>\n\n"
+            f"📦 <b>Размер:</b> {size_mb:.1f} МБ\n"
+            f"📊 <b>Прогресс:</b> 0%",
             parse_mode="HTML"
         )
 
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Connection': 'keep-alive',
-            'Accept-Encoding': 'identity'
-        }
+        # 3. Faylni yuklab olish
+        success = await download_file_with_progress(download_url, temp_file, callback.message)
 
-        downloaded = 0
-        start_time = time.time()
-
-        logger.info("🌐 Starting file download...")
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(download_url, timeout=300) as response:
-                status = response.status
-                logger.info(f"📡 Download response status: {status}")
-
-                if status == 200:
-                    total_size = int(response.headers.get('content-length', 0))
-                    logger.info(f"📦 Total download size: {total_size} bytes")
-
-                    with open(filepath, 'wb') as file:
-                        last_update = time.time()
-
-                        async for chunk in response.content.iter_chunked(8192):
-                            file.write(chunk)
-                            downloaded += len(chunk)
-
-                            current_time = time.time()
-                            if current_time - last_update >= 3:
-                                if total_size > 0:
-                                    progress = (downloaded / total_size) * 100
-                                    speed = downloaded / (current_time - start_time) / (1024 * 1024)
-                                    logger.info(f"📊 Progress: {progress:.0f}%, Speed: {speed:.1f} MB/s")
-
-                                    await callback.message.edit_text(
-                                        f"⏬ <b>Загружаю: {progress:.0f}%</b>\n\n"
-                                        f"🆔 <b>ID видео:</b> {video_id}\n"
-                                        f"📋 <b>Формат:</b> {format_data['desc']}\n"
-                                        f"📊 <b>Скорость:</b> {speed:.1f} МБ/с\n"
-                                        f"📦 <b>Загружено:</b> {downloaded / (1024 * 1024):.1f} МБ",
-                                        parse_mode="HTML"
-                                    )
-
-                                last_update = current_time
-                else:
-                    raise Exception(f"Download failed: HTTP {status}")
-
-        # Fayl hajmini tekshirish
-        file_size = os.path.getsize(filepath)
-        file_size_mb = file_size / (1024 * 1024)
-        logger.info(f"✅ File downloaded: {file_size_mb:.1f} MB")
-
-        if file_size_mb > 50:
-            logger.error(f"❌ File too large for Telegram: {file_size_mb:.1f} MB")
-            await callback.message.edit_text(
-                f"❌ <b>Файл слишком большой для Telegram</b>\n\n"
-                f"📦 <b>Размер:</b> {file_size_mb:.1f} МБ\n"
-                f"📏 <b>Лимит:</b> 50 МБ",
-                parse_mode="HTML"
-            )
+        if not success:
+            await callback.message.edit_text("❌ Ошибка при загрузке файла")
             return
 
-        # Telegram ga yuborish
-        await callback.message.edit_text(
-            f"📤 <b>Отправляю в Telegram...</b>\n\n"
-            f"🆔 <b>ID видео:</b> {video_id}",
-            parse_mode="HTML"
-        )
+        # 4. Telegram'ga yuborish - optimallashtirilgan
+        logger.info("📤 Starting optimized Telegram upload...")
 
-        caption = (
-            f"🎥 YouTube Видео\n"
-            f"🆔 {video_id}\n"
-            f"📋 {format_data['desc']}\n"
-            f"📦 {file_size_mb:.1f} МБ\n"
-            f"🚀 Загружено через Fast API"
-        )
-
-        logger.info("📤 Sending to Telegram...")
-        try:
-            if format_data['type'] == 'progressive':
-                await callback.bot.send_video(
-                    chat_id=callback.message.chat.id,
-                    video=FSInputFile(filepath),
-                    caption=caption,
-                    supports_streaming=True
-                )
-            else:
-                await callback.bot.send_document(
-                    chat_id=callback.message.chat.id,
-                    document=FSInputFile(filepath),
-                    caption=caption
-                )
-
-            await callback.message.delete()
-            logger.info("✅ File sent successfully!")
-
-            # Analytics
-            try:
-                await shortcuts.add_to_analitic_data(
-                    (await callback.bot.get_me()).username,
-                    callback.message.chat.id
-                )
-            except Exception as analytics_error:
-                logger.warning(f"⚠️ Analytics error: {analytics_error}")
-
-        except Exception as send_error:
-            logger.error(f"❌ Error sending file: {send_error}")
-            await callback.message.edit_text(
-                f"❌ <b>Ошибка отправки файла</b>\n\n"
-                f"📋 <b>Ошибка:</b> {str(send_error)[:100]}...",
-                parse_mode="HTML"
+        # Fayl o'lchamiga qarab strategiya tanlash
+        if size_mb < 10:
+            # Kichik fayllar uchun oddiy yuborish
+            success = await send_file_to_telegram_simple(
+                callback.bot, callback.message.chat.id, temp_file,
+                caption=f"🎬 {selected_format['desc']}\n📦 {size_mb:.1f} МБ"
+            )
+        else:
+            success = await send_file_to_telegram_optimized(
+                callback.bot, callback.message.chat.id, temp_file,
+                callback.message, f"🎬 {selected_format['desc']}\n📦 {size_mb:.1f} МБ"
             )
 
+        if success:
+            logger.info("✅ File sent successfully")
+        else:
+            await callback.message.edit_text("❌ Ошибка при отправке файла")
+
     except Exception as e:
-        logger.error(f"❌ Download and send error: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"📍 Traceback: {traceback.format_exc()}")
-        await callback.message.edit_text(
-            f"❌ <b>Ошибка при загрузке</b>\n\n"
-            f"📋 <b>Ошибка:</b> {str(e)[:100]}...",
-            parse_mode="HTML"
-        )
+        logger.error(f"❌ Download and send error: {e}")
+        await callback.message.edit_text("❌ Ошибка при загрузке")
+
     finally:
-        # Cleanup
-        if temp_dir and os.path.exists(temp_dir):
+        # 5. Temp file'ni o'chirish
+        if temp_file and os.path.exists(temp_file):
             try:
-                shutil.rmtree(temp_dir)
-                logger.info("🗑️ Temp files cleaned up")
-            except Exception as cleanup_error:
-                logger.warning(f"⚠️ Cleanup error: {cleanup_error}")
+                os.unlink(temp_file)
+                logger.info("🗑️ Temp file cleaned up")
+            except:
+                pass
 
 
-@client_bot_router.callback_query(F.data == "too_large")
-async def handle_too_large_callback(callback: CallbackQuery):
-    """Handle too large file selection"""
-    await callback.answer(
-        "Этот файл слишком большой для Telegram (более 50 MB). "
-        "Выберите формат с меньшим качеством.",
-        show_alert=True
-    )
+async def send_file_to_telegram_simple(bot, chat_id, file_path, caption=""):
+    try:
+        logger.info("📤 Using simple upload for small file")
+        with open(file_path, 'rb') as f:
+            document = BufferedInputFile(f.read(), filename=os.path.basename(file_path))
+            await bot.send_document(
+                chat_id=chat_id,
+                document=document,
+                caption=caption,
+                request_timeout=120
+            )
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Simple upload error: {e}")
+        return False
 
 
+async def send_file_to_telegram_optimized(bot, chat_id, file_path, message_to_edit, caption=""):
+    """
+    Katta fayllar uchun optimallashtirilgan yuborish
+    """
+    try:
+        file_size = os.path.getsize(file_path)
+        filename = os.path.basename(file_path)
+
+        logger.info("📤 Using optimized upload for large file")
+
+        # Connection optimization
+        connector = aiohttp.TCPConnector(
+            limit=1,  # Bitta connection
+            limit_per_host=1,  # Host uchun 1ta
+            keepalive_timeout=300,  # 5 minut keepalive
+            enable_cleanup_closed=True,
+            force_close=False,  # Connection'ni berkitmaslik
+            ssl=False  # SSL muammosini hal qilish
+        )
+
+        # Timeout optimization
+        timeout = aiohttp.ClientTimeout(
+            total=None,  # Jami timeout yo'q
+            connect=30,  # Connect 30s
+            sock_read=300,  # Read 5 minut
+            sock_connect=30  # Socket connect 30s
+        )
+
+        # Custom session yaratish
+        session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout
+        )
+
+        # Bot object'ini yangi session bilan yangilash
+        old_session = bot.session
+        bot.session = session
+
+        try:
+            # Progress callback
+            uploaded_size = 0
+            last_progress = 0
+
+            async def update_progress(chunk_size):
+                nonlocal uploaded_size, last_progress
+                uploaded_size += chunk_size
+                progress = (uploaded_size / file_size) * 100
+
+                # Har 15% da update
+                if progress - last_progress >= 15:
+                    try:
+                        await message_to_edit.edit_text(
+                            f"📤 <b>Отправка файла...</b>\n\n"
+                            f"📁 <b>Файл:</b> {filename}\n"
+                            f"📦 <b>Размер:</b> {file_size / 1024 / 1024:.1f} МБ\n"
+                            f"📊 <b>Прогресс:</b> {progress:.1f}%\n"
+                            f"⚡ <b>Загружено:</b> {uploaded_size / 1024 / 1024:.1f} МБ",
+                            parse_mode="HTML"
+                        )
+                        last_progress = progress
+                    except:
+                        pass
+
+            # Upload progress boshida
+            await update_progress(0)
+
+            # Faylni o'qish va yuborish
+            with open(file_path, 'rb') as f:
+                document = BufferedInputFile(f.read(), filename=filename)
+
+                # Yuborish
+                await bot.send_document(
+                    chat_id=chat_id,
+                    document=document,
+                    caption=caption,
+                    request_timeout=300  # 5 minut timeout
+                )
+
+                # 100% progress
+                await update_progress(file_size - uploaded_size)
+
+            logger.info("✅ File sent successfully with optimized upload")
+            return True
+
+        finally:
+            # Session'ni qaytarish
+            await session.close()
+            bot.session = old_session
+
+    except Exception as e:
+        logger.error(f"❌ Optimized upload error: {e}")
+        return False
 
 
+async def download_file_with_progress(url, file_path, message):
+    """
+    Progress bilan fayl yuklab olish - eski nom
+    """
+    try:
+        # Connection settings
+        connector = aiohttp.TCPConnector(
+            keepalive_timeout=300,
+            enable_cleanup_closed=True,
+            ssl=False  # SSL muammolarini hal qilish
+        )
 
+        timeout = aiohttp.ClientTimeout(
+            total=300,  # 5 minut total
+            connect=30,  # Connect 30s
+            sock_read=60  # Read 1 minut
+        )
+
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    logger.error(f"❌ HTTP {response.status} error")
+                    return False
+
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
+                last_progress = 0
+
+                logger.info(f"📥 Starting download: {total_size / 1024 / 1024:.1f} MB")
+
+                with open(file_path, 'wb') as f:
+                    async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        if total_size > 0:
+                            progress = (downloaded / total_size) * 100
+
+                            # Har 20% da update
+                            if progress - last_progress >= 20:
+                                try:
+                                    await message.edit_text(
+                                        f"📥 <b>Загрузка файла...</b>\n\n"
+                                        f"📦 <b>Размер:</b> {total_size / 1024 / 1024:.1f} МБ\n"
+                                        f"📊 <b>Прогресс:</b> {progress:.1f}%\n"
+                                        f"⚡ <b>Скорость:</b> Загружается...",
+                                        parse_mode="HTML"
+                                    )
+                                    last_progress = progress
+                                except:
+                                    pass
+
+                logger.info(f"✅ Download completed: {downloaded / 1024 / 1024:.1f} MB")
+                return True
+
+    except asyncio.TimeoutError:
+        logger.error("❌ Download timeout")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Download error: {e}")
+        return False
 
 
 from modul.loader import client_bot_router
@@ -3134,59 +3200,42 @@ async def get_youtube_info_via_fast_api(video_id, quality="247"):
         return None
 
 
-async def wait_for_youtube_file_ready(file_url, max_wait_minutes=3):
-    """YouTube fayl tayyor bo'lishini kutish"""
-    logger.info(f"⏳ Waiting for file to be ready...")
-    logger.info(f"🔗 File URL: {file_url}")
-    logger.info(f"⏱ Max wait time: {max_wait_minutes} minutes")
+async def wait_for_youtube_file_ready(download_url, max_wait_minutes=2):
+    """
+    YouTube fayl tayyor bo'lishini kutish - optimallashtirilgan
+    """
+    try:
+        max_attempts = max_wait_minutes * 12  # Har 5 sekundda tekshirish
 
-    start_time = time.time()
-    max_wait_seconds = max_wait_minutes * 60
-    check_interval = 10
+        connector = aiohttp.TCPConnector(
+            keepalive_timeout=60,
+            ssl=False
+        )
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*',
-        'Connection': 'keep-alive'
-    }
+        timeout = aiohttp.ClientTimeout(total=10, connect=5)
 
-    attempt = 1
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            for attempt in range(max_attempts):
+                try:
+                    async with session.head(download_url) as response:
+                        if response.status == 200:
+                            content_length = response.headers.get('content-length')
+                            if content_length and int(content_length) > 1000:  # 1KB dan katta
+                                logger.info(f"✅ File ready after {attempt * 5}s")
+                                return True
 
-    while time.time() - start_time < max_wait_seconds:
-        try:
-            logger.info(f"🔄 Attempt #{attempt} - checking file status...")
+                except Exception as check_error:
+                    logger.debug(f"🔍 Check attempt {attempt + 1} failed: {check_error}")
 
-            async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.head(file_url, timeout=10) as response:
-                    status = response.status
-                    logger.info(f"📡 HEAD response status: {status}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(5)
 
-                    if status == 200:
-                        content_length = response.headers.get('content-length', 'Unknown')
-                        content_type = response.headers.get('content-type', 'Unknown')
-                        logger.info(f"✅ File ready! Size: {content_length}, Type: {content_type}")
-                        return True
+        logger.warning(f"⏰ File not ready after {max_wait_minutes} minutes")
+        return False
 
-                    elif status == 404:
-                        elapsed = time.time() - start_time
-                        remaining = max_wait_seconds - elapsed
-                        logger.info(f"⏳ File not ready yet (404). Remaining: {remaining/60:.1f} min")
-
-                    else:
-                        logger.warning(f"⚠️ Unexpected status: {status}")
-
-            if time.time() - start_time < max_wait_seconds:
-                logger.info(f"💤 Sleeping {check_interval} seconds...")
-                await asyncio.sleep(check_interval)
-                attempt += 1
-
-        except Exception as e:
-            logger.error(f"❌ Check error: {type(e).__name__}: {e}")
-            await asyncio.sleep(check_interval)
-            attempt += 1
-
-    logger.error(f"⏰ Wait time expired ({max_wait_minutes} min)")
-    return False
+    except Exception as e:
+        logger.error(f"❌ File ready check error: {e}")
+        return False
 
 
 def create_youtube_format_keyboard():
