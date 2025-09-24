@@ -3326,7 +3326,7 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
             f"✅ <b>YouTube video topildi!</b>\n\n"
             f"🎥 <b>{title}</b>\n"
             f"🆔 <b>Video ID:</b> {video_id}\n"
-            f"🖼 <b>Thumbnail:</b> {'Mavjud' if thumbnail_url else 'Yo\'q'}\n\n"
+            f"🖼 <b>Thumbnail:</b> {'Mavjud' if thumbnail_url else 'Yoq'}\n\n"
             f"📥 <b>Yuklab olish formatini tanlang:</b>"
         )
 
