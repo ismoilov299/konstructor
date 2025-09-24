@@ -2789,7 +2789,12 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
     """YouTube API download callback handler"""
     try:
-        await callback.answer()
+        try:
+            await callback.answer("Yuklab olish boshlandi...")
+        except Exception as callback_error:
+            logger.warning(f"Callback timeout (ignoring): {callback_error}")
+            # Agar callback timeout bo'lsa, yangi xabar yuborish
+            await callback.message.answer("⏳ Yuklab olish boshlandi...")
 
         format_choice = callback.data.replace("yt_api_", "")
 
