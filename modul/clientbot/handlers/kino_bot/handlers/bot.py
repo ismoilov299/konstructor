@@ -7,6 +7,7 @@ import time
 import traceback
 from contextlib import suppress
 import shutil
+from datetime import timedelta, datetime
 
 import requests
 from aiogram import Bot, F, html
@@ -2626,117 +2627,221 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
         logger.error(f"📍 Traceback: {traceback.format_exc()}")
         await message.answer("❌ Ошибка при обработке YouTube видео")
 
+download_tasks = {}
+
 
 @client_bot_router.callback_query(F.data.startswith("yt_fast_dl_"))
 async def process_youtube_fast_download(callback: CallbackQuery, state: FSMContext):
     logger.info(f"📱 Fast download callback triggered")
-    logger.info(f"📋 Callback data: {callback.data}")
 
     try:
-        await callback.answer()
+        # 1️⃣ DARHOL javob berish - timeout xatosini oldini oladi
+        try:
+            await callback.answer("⏳ Загрузка начата...")
+        except:
+            pass  # Callback javob bermasa ham davom etamiz
 
-        # Quality ID ni olish
+        # 2️⃣ Ma'lumotlarni olish
         parts = callback.data.split('_')
-        logger.info(f"📋 Callback parts: {parts}")
-
         if len(parts) < 4:
-            logger.error(f"❌ Invalid callback data format: {callback.data}")
             await callback.message.edit_text("❌ Неверный формат данных")
             return
 
-        quality_id = parts[3]  # yt_fast_dl_360 -> 360
-        logger.info(f"🎯 Selected quality ID: {quality_id}")
-
-        # State dan ma'lumot olish
+        quality_id = parts[3]
         data = await state.get_data()
         video_id = data.get('youtube_video_id')
-        logger.info(f"💾 Video ID from state: {video_id}")
 
         if not video_id:
-            logger.error("❌ No video ID in state")
             await callback.message.edit_text("❌ Данные видео не найдены")
             return
 
-        # Quality tekshirish
-        qualities = get_available_youtube_qualities()
-        if quality_id not in qualities:
-            logger.error(f"❌ Invalid quality ID: {quality_id}")
-            await callback.message.edit_text("❌ Неверный формат выбран")
-            return
+        # 3️⃣ Unique task ID yaratish
+        task_id = f"{callback.from_user.id}_{video_id}_{quality_id}_{int(datetime.now().timestamp())}"
 
-        selected_format = qualities[quality_id]
-        logger.info(f"✅ Selected format: {selected_format}")
-
+        # 4️⃣ Darhol progress message yuborish
         await callback.message.edit_text(
-            f"⏳ <b>Отправляю запрос на загрузку...</b>\n\n"
-            f"🆔 <b>ID видео:</b> {video_id}\n"
-            f"📋 <b>Формат:</b> {selected_format['desc']}\n"
-            f"⚙️ <b>ID качества:</b> {quality_id}",
+            f"⏳ <b>Загрузка начата</b>\n\n"
+            f"🎬 <b>Видео ID:</b> {video_id}\n"
+            f"📋 <b>Качество:</b> {quality_id}\n"
+            f"⏱ <b>Статус:</b> Подготовка...\n\n"
+            f"💡 <i>Процесс может занять до 3 минут</i>",
             parse_mode="HTML"
         )
 
-        # API dan download URL olish
-        logger.info(f"🔍 Getting download URL for quality: {quality_id}")
-        download_data = await get_youtube_info_via_fast_api(video_id, quality_id)
+        # 5️⃣ Background task yaratish
+        task = asyncio.create_task(
+            background_youtube_download(
+                task_id, callback, video_id, quality_id, state
+            )
+        )
+        download_tasks[task_id] = {
+            'task': task,
+            'status': 'starting',
+            'progress': 0,
+            'message': callback.message,
+            'start_time': datetime.now()
+        }
 
-        if not download_data:
-            logger.error("❌ No download data received")
-            await callback.message.edit_text("❌ Данные для загрузки не получены")
+        logger.info(f"✅ Background task created: {task_id}")
+
+    except Exception as e:
+        logger.error(f"❌ Callback error: {e}")
+        try:
+            await callback.message.edit_text("❌ Ошибка при запуске загрузки")
+        except:
+            pass
+
+
+async def background_youtube_download(task_id, callback, video_id, quality_id, state):
+    """Background'da YouTube yuklab olish"""
+    try:
+        # Progress update qilish uchun
+        async def update_progress(status, progress=0, extra_info=""):
+            if task_id in download_tasks:
+                download_tasks[task_id]['status'] = status
+                download_tasks[task_id]['progress'] = progress
+
+                try:
+                    await download_tasks[task_id]['message'].edit_text(
+                        f"⏳ <b>Загрузка в процессе</b>\n\n"
+                        f"🎬 <b>Видео ID:</b> {video_id}\n"
+                        f"📋 <b>Качество:</b> {quality_id}\n"
+                        f"⏱ <b>Статус:</b> {status}\n"
+                        f"📊 <b>Прогресс:</b> {progress}%\n"
+                        f"{extra_info}",
+                        parse_mode="HTML"
+                    )
+                except:
+                    pass
+
+        # 1. Quality ma'lumotini olish
+        await update_progress("Получение информации о видео", 10)
+        qualities = get_available_youtube_qualities()
+
+        if quality_id not in qualities:
+            await update_progress("Ошибка: неверное качество", 0)
             return
 
-        if 'file' not in download_data:
-            logger.error(f"❌ No 'file' key in download data: {list(download_data.keys())}")
-            await callback.message.edit_text("❌ URL для загрузки не найден")
+        selected_format = qualities[quality_id]
+
+        # 2. API dan ma'lumot olish
+        await update_progress("Запрос к API", 20)
+        download_data = await get_youtube_info_via_fast_api(video_id, quality_id)
+
+        if not download_data or 'file' not in download_data:
+            await update_progress("Ошибка: данные не получены", 0)
             return
 
         download_url = download_data['file']
         size_mb = int(download_data.get('size', 0)) / (1024 * 1024)
-        logger.info(f"✅ Download URL obtained: {download_url[:50]}...")
-        logger.info(f"📦 File size: {size_mb:.1f} MB")
 
-        # Telegram limit tekshirish
+        # 3. Size check
         if size_mb > 50:
-            logger.warning(f"⚠️ File too large: {size_mb:.1f} MB")
             await callback.message.edit_text(
                 f"❌ <b>Файл слишком большой!</b>\n\n"
                 f"📦 <b>Размер:</b> {size_mb:.1f} МБ\n"
-                f"📏 <b>Лимит Telegram:</b> 50 МБ\n\n"
-                f"💡 Выберите формат меньшего размера",
+                f"📏 <b>Лимит:</b> 50 МБ",
                 parse_mode="HTML"
             )
             return
 
-        await callback.message.edit_text(
-            f"⏳ <b>Жду готовности файла...</b>\n\n"
-            f"🆔 <b>ID видео:</b> {video_id}\n"
-            f"📋 <b>Формат:</b> {selected_format['desc']}\n"
-            f"📦 <b>Размер:</b> {size_mb:.1f} МБ\n\n"
-            f"⏱ <b>Максимальное ожидание:</b> 3 минуты",
-            parse_mode="HTML"
-        )
+        # 4. Fayl tayyor bo'lishini kutish
+        await update_progress("Ожидание готовности файла", 40,
+                              f"\n📦 <b>Размер:</b> {size_mb:.1f} МБ")
 
-        # Fayl tayyor bo'lishini kutish
-        logger.info("⏳ Starting file ready check...")
-        is_ready = await wait_for_youtube_file_ready(download_url, max_wait_minutes=3)
+        # 2 minut kutish
+        for i in range(24):  # 24 * 5 = 120 sekund
+            try:
+                # Faylni tekshirish
+                async with aiohttp.ClientSession() as session:
+                    async with session.head(download_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        if resp.status == 200:
+                            break
+            except:
+                pass
 
-        if not is_ready:
-            logger.error("⏰ File not ready after waiting")
+            progress = 40 + (i * 2)  # 40% dan 88% gacha
+            await update_progress(f"Ожидание готовности файла ({i * 5}s)", progress,
+                                  f"\n📦 <b>Размер:</b> {size_mb:.1f} МБ")
+            await asyncio.sleep(5)
+        else:
+            await update_progress("Файл не готов", 0)
+            return
+
+        # 5. Faylni yuklab olish va yuborish
+        await update_progress("Загрузка и отправка файла", 90)
+
+        try:
+            # Faylni yuklab olib yuborish
+            await download_and_send_youtube_fast(
+                callback, download_url, selected_format, video_id, size_mb
+            )
+
+            # Muvaffaqiyat xabari
+            elapsed = datetime.now() - download_tasks[task_id]['start_time']
             await callback.message.edit_text(
-                f"⏰ <b>Файл не готов через 3 минуты</b>\n\n"
-                f"💡 Попробуйте позже или выберите другой формат",
+                f"✅ <b>Файл успешно отправлен!</b>\n\n"
+                f"📦 <b>Размер:</b> {size_mb:.1f} МБ\n"
+                f"⏱ <b>Время:</b> {elapsed.total_seconds():.1f}s\n"
+                f"📋 <b>Качество:</b> {selected_format['desc']}",
                 parse_mode="HTML"
             )
-            return
 
-        # Faylni yuklab olib yuborish
-        logger.info("📥 Starting file download and send...")
-        await download_and_send_youtube_fast(callback, download_url, selected_format, video_id, size_mb)
+        except Exception as send_error:
+            logger.error(f"❌ Send error: {send_error}")
+            await callback.message.edit_text(
+                f"❌ <b>Ошибка при отправке</b>\n\n"
+                f"💡 Попробуйте выбрать другое качество",
+                parse_mode="HTML"
+            )
 
     except Exception as e:
-        logger.error(f"❌ Fast download callback error: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"📍 Traceback: {traceback.format_exc()}")
-        await callback.message.edit_text("❌ Ошибка при загрузке")
+        logger.error(f"❌ Background task error: {e}")
+        try:
+            await callback.message.edit_text("❌ Ошибка при загрузке")
+        except:
+            pass
+
+    finally:
+        # Task'ni tozalash
+        if task_id in download_tasks:
+            del download_tasks[task_id]
+        logger.info(f"🗑️ Task cleaned up: {task_id}")
+
+
+# Task'larni tozalash uchun background service
+async def cleanup_old_tasks():
+    """Eski task'larni tozalash"""
+    while True:
+        try:
+            current_time = datetime.now()
+            tasks_to_remove = []
+
+            for task_id, task_info in download_tasks.items():
+                # 10 daqiqadan eski task'larni o'chirish
+                if current_time - task_info['start_time'] > timedelta(minutes=10):
+                    tasks_to_remove.append(task_id)
+                    try:
+                        task_info['task'].cancel()
+                    except:
+                        pass
+
+            for task_id in tasks_to_remove:
+                del download_tasks[task_id]
+                logger.info(f"🗑️ Cleaned up old task: {task_id}")
+
+            await asyncio.sleep(300)  # Har 5 daqiqada tekshirish
+
+        except Exception as e:
+            logger.error(f"❌ Cleanup error: {e}")
+            await asyncio.sleep(60)
+
+
+# Bot ishga tushganda cleanup service ni boshlash
+async def start_cleanup_service():
+    """Cleanup service ni boshlash"""
+    asyncio.create_task(cleanup_old_tasks())
+    logger.info("🧹 Cleanup service started")
 
 
 @client_bot_router.callback_query(F.data == "yt_more_formats")
