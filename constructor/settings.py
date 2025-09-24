@@ -89,15 +89,16 @@ CSRF_TRUSTED_ORIGINS = ['https://ismoilov299.uz']
 # }
 
 DATABASES = {
-      'default': {
-          'ENGINE': 'django.db.backends.postgresql_psycopg2',
-          'NAME': 'giper_db1',
-          'USER': 'giper_us1',
-          'PASSWORD': 'giper_pass1',
-          'HOST': 'localhost',
-          'PORT': 5433,
-      }
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',  # yangiroq varianti
+        'NAME': 'konstruktor_db1',
+        'USER': 'konstruktor_us1',
+        'PASSWORD': 'konstruktor_pass1',
+        'HOST': 'localhost',
+        'PORT': 5432,
+    }
 }
+
 
 
 AUTH_PASSWORD_VALIDATORS = [
