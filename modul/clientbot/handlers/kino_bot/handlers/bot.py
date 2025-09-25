@@ -1,32 +1,13 @@
 import glob
 import asyncio
 import json
+import subprocess
 import tempfile
 import time
 import traceback
-from contextlib import suppress, asynccontextmanager
+from contextlib import suppress
 import shutil
-from dataclasses import dataclass
-
-import os
-import re
-import time
-import asyncio
-import aiohttp
-import tempfile
-import shutil
-from typing import Optional, Dict, Any, Tuple
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from enum import Enum
-
-from aiogram import Bot, F
-from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.fsm.context import FSMContext
-import logging
-
-
+from datetime import timedelta, datetime
 
 import requests
 from aiogram import Bot, F, html
@@ -44,6 +25,7 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 import re
+# from modul.clientbot.handlers.davinci_bot import *
 from yt_dlp import YoutubeDL
 
 from modul import models
@@ -80,7 +62,7 @@ from modul.clientbot.shortcuts import get_all_users, get_bot_by_username, get_bo
     executor
 from modul.loader import client_bot_router, main_bot
 from modul.models import UserTG, AdminInfo, User, ClientBotUser
-from typing import Union, List, Dict, Any
+from typing import Union, List, Dict
 import yt_dlp
 import logging
 from aiogram.types import Message, FSInputFile
@@ -2382,10 +2364,12 @@ class Config:
     RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd")
     RAPIDAPI_HOST: str = "youtube-info-download-api.p.rapidapi.com"
     MAX_FILE_SIZE_MB: float = 50.0
-    MAX_WAIT_MINUTES: int = 3
-    PROGRESS_CHECK_INTERVAL: int = 3
-    CHUNK_SIZE: int = 8192
-    PROGRESS_UPDATE_THRESHOLD: int = 1024 * 1024  # 1MB
+    MAX_WAIT_MINUTES: int = 1  # Qisqartirildi
+    PROGRESS_CHECK_INTERVAL: int = 2  # Tezroq
+    CHUNK_SIZE: int = 16384  # Kattaroq chunk
+    PROGRESS_UPDATE_THRESHOLD: int = 2 * 1024 * 1024  # 2MB da progress yangilash
+    CONNECTION_TIMEOUT: int = 15  # Qisqa timeout
+
 
 class VideoFormat(Enum):
     P1080 = ("1080", "📹 1080p (Eng yaxshi)", "1080")
@@ -2393,6 +2377,7 @@ class VideoFormat(Enum):
     P480 = ("480", "📹 480p (O'rtacha)", "480")
     P360 = ("360", "📹 360p (Past)", "360")
     AUDIO = ("audio", "🎵 Faqat audio", "mp3")
+
 
 @dataclass
 class DownloadInfo:
@@ -2496,36 +2481,66 @@ class YouTubeDownloader:
             self.logger.error(f"API request error: {e}")
             return DownloadInfo(False, error_message="API so'rov xatoligi")
 
+    async def get_direct_download_url(self, url: str, format_quality: str = "720") -> Optional[str]:
+        """To'g'ridan-to'g'ri download URL ni olish"""
+        try:
+            # Alternative API endpoint - instant download URL
+            api_url = f"https://{self.config.RAPIDAPI_HOST}/ajax/get_download.php"
+
+            params = {
+                "format": format_quality,
+                "url": url,
+                "audio_quality": "128" if format_quality == "mp3" else "192",
+                "no_merge": "false"
+            }
+
+            async with self._session_context() as session:
+                async with session.get(
+                        api_url,
+                        headers=self._get_headers(),
+                        params=params,
+                        timeout=15  # Qisqa timeout
+                ) as response:
+
+                    if response.status != 200:
+                        return None
+
+                    data = await response.json()
+
+                    # To'g'ridan-to'g'ri download URL qaytarish
+                    if data.get('success') and data.get('download_url'):
+                        return data['download_url']
+
+                    # Agar download_url yo'q bo'lsa, boshqa variantlarni tekshirish
+                    for key in ['url', 'link', 'file_url', 'media_url']:
+                        if data.get(key):
+                            return data[key]
+
+                    return None
+
+        except Exception as e:
+            self.logger.error(f"Direct download URL error: {e}")
+            return None
+
     async def check_download_progress(self, progress_url: str) -> Optional[Dict[str, Any]]:
-        """Download progressini kuzatish"""
-        start_time = time.time()
-        max_wait_seconds = self.config.MAX_WAIT_MINUTES * 60
+        """Download progressini tez tekshirish"""
+        try:
+            async with self._session_context() as session:
+                # Faqat 1 marta tekshirish, 10 sekund timeout
+                async with session.get(progress_url, timeout=10) as response:
+                    if response.status == 200:
+                        progress_data = await response.json()
 
-        attempt = 1
-        while time.time() - start_time < max_wait_seconds:
-            try:
-                async with self._session_context() as session:
-                    async with session.get(progress_url, timeout=10) as response:
-                        if response.status == 200:
-                            progress_data = await response.json()
+                        # Agar tayyor bo'lsa yoki URL mavjud bo'lsa
+                        if (progress_data.get('status') == 'completed' or
+                                progress_data.get('download_url')):
+                            return progress_data
 
-                            status = progress_data.get('status')
-                            if status == 'completed' or progress_data.get('download_url'):
-                                return progress_data
-                            elif status == 'error':
-                                self.logger.error(f"Download error: {progress_data}")
-                                return None
+                    return None
 
-                            self.logger.info(f"Progress attempt {attempt}: {status}")
-
-                await asyncio.sleep(self.config.PROGRESS_CHECK_INTERVAL)
-                attempt += 1
-
-            except Exception as e:
-                self.logger.error(f"Progress check error: {e}")
-                await asyncio.sleep(self.config.PROGRESS_CHECK_INTERVAL)
-
-        return None
+        except Exception as e:
+            self.logger.error(f"Progress check error: {e}")
+            return None
 
     async def download_file(self, download_url: str, filepath: str,
                             progress_callback=None) -> Tuple[bool, str]:
@@ -2761,23 +2776,10 @@ class YouTubeBotHandler:
                 await callback.message.edit_text("❌ Faylni yuborishda xatolik")
 
 
+# Main handlers - TEZKOR VERSIYA
 config = Config()
 downloader = YouTubeDownloader(config)
 bot_handler = YouTubeBotHandler(downloader)
-
-
-@client_bot_router.message(DownloaderBotFilter())
-@client_bot_router.message(Download.download)
-async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
-    """Asosiy YouTube download handler"""
-    if not message.text:
-        await message.answer("❗ Отправьте ссылку на видео")
-        return
-
-    url = message.text.strip()
-
-    if 'youtube.com' in url or 'youtu.be' in url:
-        await bot_handler.handle_youtube_url(message, url, state)
 
 
 def is_valid_youtube_url(url):
@@ -3194,11 +3196,16 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
 @client_bot_router.callback_query(F.data.startswith("yt_api_"))
 async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
+    """YouTube download callback handler - TEZKOR"""
     await bot_handler.process_download_callback(callback, state)
 
 
 @client_bot_router.callback_query(F.data == "cancel_download")
 async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("❌ Yuklab olish bekor qilindi")
-    await callback.answer("Bekor qilindi")
-    await state.clear()
+    """Yuklab olishni bekor qilish"""
+    try:
+        await callback.answer("Bekor qilindi")
+        await callback.message.edit_text("❌ <b>Yuklab olish bekor qilindi</b>", parse_mode="HTML")
+        await state.clear()
+    except Exception:
+        await callback.message.answer("❌ Bekor qilindi")
