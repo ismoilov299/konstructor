@@ -3214,6 +3214,12 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
 @client_bot_router.callback_query(F.data.startswith("yt_api_"))
 async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "⚡ Yuklab olish boshlandi...\n\n⏳ Iltimos, biroz kuting...",
+        parse_mode="HTML"
+    )
+
+
     await bot_handler.process_download_callback(callback, state)
 
 
@@ -3253,3 +3259,5 @@ async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
         await state.clear()
     except Exception:
         await callback.message.answer("❌ Bekor qilindi")
+
+
