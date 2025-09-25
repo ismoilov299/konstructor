@@ -2394,11 +2394,46 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+import asyncio
+import tempfile
+import shutil
+import os
+import re
+import time
+import logging
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, Optional, Any, Tuple, List
+from contextlib import asynccontextmanager
+
+import aiohttp
+from aiogram import Bot, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, FSInputFile
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.fsm.context import FSMContext
+
+# Детальное логирование
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('youtube_ultra_fast.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class Config:
-    RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd")
+    # Множественные API ключи для failover
+    RAPIDAPI_KEYS: List[str] = None
     RAPIDAPI_HOST: str = "youtube-info-download-api.p.rapidapi.com"
+
+    # Альтернативные API hosts
+    ALTERNATIVE_HOSTS: List[str] = None
+
     MAX_FILE_SIZE_MB: float = 50.0
     MAX_WAIT_SECONDS: int = 45  # Сократил до 45 секунд максимум
     PROGRESS_CHECK_INTERVAL: int = 2  # Проверяем каждые 2 секунды
@@ -2539,7 +2574,7 @@ class UltraFastYouTubeDownloader:
                 "quality": format_quality
             }),
 
-            # Быстрый endpoint 2  
+            # Быстрый endpoint 2
             ("/download", {
                 "format": format_quality,
                 "url": url,
@@ -2631,6 +2666,9 @@ class UltraFastYouTubeDownloader:
                         if response.status == 200:
                             data = await response.json()
 
+                            # Сохраняем последние данные прогресса для доступа к альтернативным URL
+                            self._last_progress_data = data
+
                             # Проверяем готовность
                             download_url = data.get('download_url')
                             status = data.get('status', '')
@@ -2641,6 +2679,12 @@ class UltraFastYouTubeDownloader:
 
                             if download_url and download_url != "None" and download_url.startswith('http'):
                                 await progress_tracker.update_stage("Готово к загрузке!", 100)
+
+                                # Логируем альтернативные URL если есть
+                                alt_urls = data.get('alternative_download_urls', [])
+                                if alt_urls:
+                                    self.logger.info(f"Found {len(alt_urls)} alternative download URLs")
+
                                 return download_url
 
                             if status == 'error':
@@ -2649,8 +2693,10 @@ class UltraFastYouTubeDownloader:
 
                             # Показываем прогресс если есть
                             if progress_percent > 0:
-                                await progress_tracker.update_stage(f"Сервер обрабатывает: {progress_percent}%",
-                                                                    progress_percent)
+                                # Конвертируем progress в проценты (API может возвращать 1000 вместо 100)
+                                display_progress = progress_percent if progress_percent <= 100 else progress_percent / 10
+                                await progress_tracker.update_stage(f"Сервер обрабатывает: {display_progress:.0f}%",
+                                                                    int(display_progress))
 
             except Exception as e:
                 self.logger.warning(f"Progress check error: {e}")
@@ -2662,22 +2708,70 @@ class UltraFastYouTubeDownloader:
         self.logger.warning(f"Progress timeout after {self.config.MAX_WAIT_SECONDS}s")
         return None
 
-    async def ultra_fast_download(self, download_url: str, filepath: str,
-                                  progress_tracker: ProgressTracker) -> Tuple[bool, str]:
-        """Ультрабыстрая загрузка с прогрессом каждые 5 секунд"""
-        self.logger.info(f"Starting ultra fast download: {download_url[:50]}...")
+    async def ultra_fast_download_with_fallback(self, download_urls: List[str], filepath: str,
+                                                progress_tracker: ProgressTracker) -> Tuple[bool, str]:
+        """Ультрабыстрая загрузка с fallback на альтернативные URL"""
+        self.logger.info(f"Trying {len(download_urls)} download URLs")
+
+        for i, download_url in enumerate(download_urls):
+            self.logger.info(f"Attempt {i + 1}/{len(download_urls)}: {download_url[:50]}...")
+
+            try:
+                result = await self._single_download_attempt(download_url, filepath, progress_tracker, i + 1)
+                if result[0]:  # Успешно
+                    return result
+                else:
+                    self.logger.warning(f"Attempt {i + 1} failed: {result[1]}")
+
+            except Exception as e:
+                self.logger.error(f"Download attempt {i + 1} error: {e}")
+                continue
+
+        return False, "Все попытки загрузки неудачны"
+
+    async def _single_download_attempt(self, download_url: str, filepath: str,
+                                       progress_tracker: ProgressTracker, attempt_num: int) -> Tuple[bool, str]:
+        """Одна попытка загрузки"""
         start_time = time.time()
 
         try:
-            # Используем простую сессию без дополнительных заголовков для загрузки
-            connector = aiohttp.TCPConnector(limit=10)
-            timeout = aiohttp.ClientTimeout(total=300)  # 5 минут на загрузку
+            # Более надежная конфигурация сессии
+            connector = aiohttp.TCPConnector(
+                limit=10,
+                keepalive_timeout=30,
+                enable_cleanup_closed=True,
+                force_close=False,
+                ssl=False  # Отключаем SSL для скорости
+            )
 
-            async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-                async with session.get(download_url) as response:
+            timeout = aiohttp.ClientTimeout(
+                total=300,  # 5 минут общий таймаут
+                connect=15,  # 15 сек на подключение
+                sock_read=30  # 30 сек на чтение
+            )
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': '*/*',
+                'Accept-Encoding': 'identity',  # Без сжатия для скорости
+                'Connection': 'keep-alive'
+            }
+
+            async with aiohttp.ClientSession(
+                    timeout=timeout,
+                    connector=connector,
+                    headers=headers
+            ) as session:
+
+                self.logger.info(f"Starting download attempt {attempt_num}")
+
+                async with session.get(download_url, allow_redirects=True) as response:
+                    self.logger.info(f"Response status: {response.status}, headers: {dict(response.headers)}")
+
                     if response.status != 200:
-                        return False, f"Ошибка загрузки: HTTP {response.status}"
+                        return False, f"HTTP {response.status}: {response.reason}"
 
+                    # Получаем размер файла
                     total_size = int(response.headers.get('content-length', 0))
                     total_size_mb = total_size / (1024 * 1024) if total_size else 0
 
@@ -2686,38 +2780,70 @@ class UltraFastYouTubeDownloader:
                     if total_size_mb > self.config.MAX_FILE_SIZE_MB:
                         return False, f"Файл слишком большой: {total_size_mb:.1f} MB"
 
+                    # Загружаем файл
                     downloaded = 0
                     last_progress_time = time.time()
+                    last_log_time = time.time()
 
                     with open(filepath, 'wb') as file:
-                        async for chunk in response.content.iter_chunked(self.config.CHUNK_SIZE):
-                            file.write(chunk)
-                            downloaded += len(chunk)
+                        try:
+                            async for chunk in response.content.iter_chunked(self.config.CHUNK_SIZE):
+                                if not chunk:
+                                    break
 
-                            # Обновляем прогресс каждые 5 секунд
-                            current_time = time.time()
-                            if current_time - last_progress_time >= self.config.PROGRESS_UPDATE_INTERVAL:
-                                if total_size > 0:
-                                    progress_percent = int((downloaded / total_size) * 100)
+                                file.write(chunk)
+                                downloaded += len(chunk)
+
+                                current_time = time.time()
+
+                                # Логируем каждые 10 секунд для отладки
+                                if current_time - last_log_time >= 10:
                                     downloaded_mb = downloaded / (1024 * 1024)
-                                    speed_mbps = downloaded_mb / (current_time - start_time)
+                                    elapsed = current_time - start_time
+                                    speed_mbps = downloaded_mb / elapsed if elapsed > 0 else 0
+                                    self.logger.info(f"Downloaded {downloaded_mb:.1f}MB at {speed_mbps:.1f}MB/s")
+                                    last_log_time = current_time
 
-                                    await progress_tracker.update_stage(
-                                        f"Загрузка: {progress_percent}% ({downloaded_mb:.1f}MB) - {speed_mbps:.1f}MB/s",
-                                        progress_percent
-                                    )
+                                # Обновляем UI каждые 5 секунд
+                                if current_time - last_progress_time >= self.config.PROGRESS_UPDATE_INTERVAL:
+                                    if total_size > 0:
+                                        progress_percent = int((downloaded / total_size) * 100)
+                                        downloaded_mb = downloaded / (1024 * 1024)
+                                        elapsed = current_time - start_time
+                                        speed_mbps = downloaded_mb / elapsed if elapsed > 0 else 0
 
-                                last_progress_time = current_time
+                                        await progress_tracker.update_stage(
+                                            f"Загрузка: {progress_percent}% ({downloaded_mb:.1f}MB) - {speed_mbps:.1f}MB/s",
+                                            progress_percent
+                                        )
+
+                                    last_progress_time = current_time
+
+                        except asyncio.TimeoutError:
+                            return False, "Timeout при чтении данных"
+                        except aiohttp.ClientError as e:
+                            return False, f"Сетевая ошибка: {str(e)}"
+
+                    # Проверяем что файл загрузился полностью
+                    final_size = os.path.getsize(filepath)
+                    if total_size > 0 and final_size != total_size:
+                        return False, f"Неполная загрузка: {final_size}/{total_size} байт"
 
                     elapsed = time.time() - start_time
-                    speed_mbps = (downloaded / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+                    speed_mbps = (final_size / (1024 * 1024)) / elapsed if elapsed > 0 else 0
                     self.logger.info(f"Download completed in {elapsed:.2f}s at {speed_mbps:.1f} MB/s")
 
-                    return True, "Загрузка завершена успешно"
+                    return True, "Загрузка успешно завершена"
 
+        except asyncio.TimeoutError:
+            return False, "Общий timeout загрузки"
+        except aiohttp.ClientError as e:
+            return False, f"Ошибка клиента: {str(e)}"
+        except OSError as e:
+            return False, f"Ошибка файловой системы: {str(e)}"
         except Exception as e:
-            self.logger.error(f"Ultra fast download error: {e}")
-            return False, f"Ошибка загрузки: {str(e)}"
+            self.logger.error(f"Неожиданная ошибка загрузки: {e}")
+            return False, f"Неожиданная ошибка: {str(e)}"
 
 
 class UltraFastBotHandler:
@@ -2860,11 +2986,23 @@ class UltraFastBotHandler:
                 await progress_tracker.update_stage("❌ Не удалось получить ссылку для загрузки", 0)
                 return
 
-            # Загружаем файл с прогрессом
+            # Загружаем файл с прогрессом и fallback
             await progress_tracker.update_stage("Начинаю загрузку файла...", 0)
 
-            success, message = await self.downloader.ultra_fast_download(
-                download_url, filepath, progress_tracker)
+            # Подготавливаем список URL для попыток
+            download_urls = [download_url]
+
+            # Если есть альтернативные URL из последнего API ответа, добавляем их
+            if hasattr(self, '_last_progress_data') and self._last_progress_data:
+                alt_urls = self._last_progress_data.get('alternative_download_urls', [])
+                for alt_url_info in alt_urls:
+                    if isinstance(alt_url_info, dict) and alt_url_info.get('url'):
+                        download_urls.append(alt_url_info['url'])
+
+            self.logger.info(f"Prepared {len(download_urls)} download URLs for attempts")
+
+            success, message = await self.downloader.ultra_fast_download_with_fallback(
+                download_urls, filepath, progress_tracker)
 
             if not success:
                 await progress_tracker.update_stage(f"❌ {message}", 0)
@@ -2966,3 +3104,4 @@ async def cancel_ultra_fast_download(callback: CallbackQuery, state: FSMContext)
         await state.clear()
     except:
         pass
+
