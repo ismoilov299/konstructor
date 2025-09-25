@@ -2772,7 +2772,11 @@ class YouTubeBotHandler:
                     chat_id=callback.message.chat.id,
                     video=file_input,
                     caption=caption,
-                    supports_streaming=True,
+                    parse_mode="HTML",
+                    supports_streaming=True,  # iPhone uchun streaming
+                    width=None,  # Auto detect
+                    height=None,  # Auto detect
+                    duration=None,  # Auto detect
                     request_timeout=300
                 )
 
@@ -3218,8 +3222,6 @@ async def process_youtube_api_download(callback: CallbackQuery, state: FSMContex
         "⚡ Yuklab olish boshlandi...\n\n⏳ Iltimos, biroz kuting...",
         parse_mode="HTML"
     )
-
-
     await bot_handler.process_download_callback(callback, state)
 
 
