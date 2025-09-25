@@ -2531,7 +2531,7 @@ async def download_and_send_youtube_api(callback: CallbackQuery, video_url: str,
             "720": "720",
             "480": "480",
             "360": "360",
-            "audio": "audio"
+            "audio": "mp3"
         }
 
         api_format = format_map.get(format_choice, "720")
