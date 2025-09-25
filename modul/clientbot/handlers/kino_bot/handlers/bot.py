@@ -7,6 +7,7 @@ import time
 import traceback
 from contextlib import suppress
 import shutil
+from dataclasses import dataclass
 from datetime import timedelta, datetime
 
 import requests
@@ -2359,21 +2360,407 @@ class DownloaderBotFilter(Filter):
         return shortcuts.have_one_module(bot_db, "download")
 
 
-RAPIDAPI_KEY = "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd"
-RAPIDAPI_HOST = "youtube-info-download-api.p.rapidapi.com"
+@dataclass
+class Config:
+    RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd")
+    RAPIDAPI_HOST: str = "youtube-info-download-api.p.rapidapi.com"
+    MAX_FILE_SIZE_MB: float = 50.0
+    MAX_WAIT_MINUTES: int = 3
+    PROGRESS_CHECK_INTERVAL: int = 3
+    CHUNK_SIZE: int = 8192
+    PROGRESS_UPDATE_THRESHOLD: int = 1024 * 1024  # 1MB
+
+class VideoFormat(Enum):
+    P1080 = ("1080", "📹 1080p (Eng yaxshi)", "1080")
+    P720 = ("720", "📹 720p (Yaxshi)", "720")
+    P480 = ("480", "📹 480p (O'rtacha)", "480")
+    P360 = ("360", "📹 360p (Past)", "360")
+    AUDIO = ("audio", "🎵 Faqat audio", "mp3")
+
+@dataclass
+class DownloadInfo:
+    success: bool
+    title: str = ""
+    thumbnail_url: str = ""
+    progress_url: str = ""
+    error_message: str = ""
+
+
+class YouTubeDownloader:
+    def __init__(self, config: Config):
+        self.config = config
+        self.logger = logging.getLogger(__name__)
+
+    def _get_headers(self) -> Dict[str, str]:
+        """API headers yaratish"""
+        return {
+            "x-rapidapi-key": self.config.RAPIDAPI_KEY,
+            "x-rapidapi-host": self.config.RAPIDAPI_HOST
+        }
+
+    def _validate_youtube_url(self, url: str) -> bool:
+        """YouTube URL validation"""
+        patterns = [
+            r'youtube\.com/watch\?v=',
+            r'youtu\.be/',
+            r'youtube\.com/embed/',
+            r'youtube\.com/v/',
+            r'youtube\.com/shorts/'
+        ]
+        return any(re.search(pattern, url) for pattern in patterns)
+
+    def _get_file_extension(self, format_choice: str) -> str:
+        """Format bo'yicha fayl kengaytmasini aniqlash"""
+        return "mp3" if format_choice == "audio" else "mp4"
+
+    def _sanitize_filename(self, filename: str, max_length: int = 50) -> str:
+        """Fayl nomini tozalash"""
+        # Xavfsiz belgilarni qoldirish
+        safe_chars = re.sub(r'[^\w\s\-_.]', '', filename)
+        return safe_chars[:max_length].strip()
+
+    @asynccontextmanager
+    async def _session_context(self):
+        """Async session context manager"""
+        async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30)
+        ) as session:
+            yield session
+
+    async def get_video_info(self, url: str, format_quality: str = "720") -> DownloadInfo:
+        """Video ma'lumotlarini olish"""
+        if not self._validate_youtube_url(url):
+            return DownloadInfo(False, error_message="Noto'g'ri YouTube URL")
+
+        try:
+            api_url = f"https://{self.config.RAPIDAPI_HOST}/ajax/download.php"
+
+            params = {
+                "format": format_quality,
+                "add_info": "0",
+                "url": url,
+                "audio_quality": "128",
+                "allow_extended_duration": "false",
+                "no_merge": "false",
+                "audio_language": "en"
+            }
+
+            async with self._session_context() as session:
+                async with session.get(
+                        api_url,
+                        headers=self._get_headers(),
+                        params=params
+                ) as response:
+
+                    if response.status != 200:
+                        error_text = await response.text()
+                        self.logger.error(f"API error {response.status}: {error_text}")
+                        return DownloadInfo(False, error_message=f"API xatolik: {response.status}")
+
+                    try:
+                        data = await response.json()
+                    except Exception as e:
+                        self.logger.error(f"JSON parse error: {e}")
+                        return DownloadInfo(False, error_message="API javob formatida xatolik")
+
+                    if not data.get('success'):
+                        return DownloadInfo(False, error_message="Video topilmadi yoki mavjud emas")
+
+                    return DownloadInfo(
+                        success=True,
+                        title=data.get('title', 'Video'),
+                        thumbnail_url=data.get('info', {}).get('image', ''),
+                        progress_url=data.get('progress_url', '')
+                    )
+
+        except asyncio.TimeoutError:
+            return DownloadInfo(False, error_message="API so'rov vaqti tugadi")
+        except Exception as e:
+            self.logger.error(f"API request error: {e}")
+            return DownloadInfo(False, error_message="API so'rov xatoligi")
+
+    async def check_download_progress(self, progress_url: str) -> Optional[Dict[str, Any]]:
+        """Download progressini kuzatish"""
+        start_time = time.time()
+        max_wait_seconds = self.config.MAX_WAIT_MINUTES * 60
+
+        attempt = 1
+        while time.time() - start_time < max_wait_seconds:
+            try:
+                async with self._session_context() as session:
+                    async with session.get(progress_url, timeout=10) as response:
+                        if response.status == 200:
+                            progress_data = await response.json()
+
+                            status = progress_data.get('status')
+                            if status == 'completed' or progress_data.get('download_url'):
+                                return progress_data
+                            elif status == 'error':
+                                self.logger.error(f"Download error: {progress_data}")
+                                return None
+
+                            self.logger.info(f"Progress attempt {attempt}: {status}")
+
+                await asyncio.sleep(self.config.PROGRESS_CHECK_INTERVAL)
+                attempt += 1
+
+            except Exception as e:
+                self.logger.error(f"Progress check error: {e}")
+                await asyncio.sleep(self.config.PROGRESS_CHECK_INTERVAL)
+
+        return None
+
+    async def download_file(self, download_url: str, filepath: str,
+                            progress_callback=None) -> Tuple[bool, str]:
+        """Faylni yuklab olish"""
+        try:
+            async with self._session_context() as session:
+                async with session.get(download_url) as response:
+                    if response.status != 200:
+                        return False, f"Download failed: HTTP {response.status}"
+
+                    total_size = int(response.headers.get('content-length', 0))
+                    total_size_mb = total_size / (1024 * 1024) if total_size else 0
+
+                    if total_size_mb > self.config.MAX_FILE_SIZE_MB:
+                        return False, f"Fayl juda katta: {total_size_mb:.1f} MB"
+
+                    downloaded = 0
+                    with open(filepath, 'wb') as file:
+                        async for chunk in response.content.iter_chunked(self.config.CHUNK_SIZE):
+                            file.write(chunk)
+                            downloaded += len(chunk)
+
+                            # Progress callback
+                            if (progress_callback and total_size > 0 and
+                                    downloaded % self.config.PROGRESS_UPDATE_THRESHOLD == 0):
+                                progress_percent = (downloaded / total_size) * 100
+                                await progress_callback(progress_percent, downloaded, total_size)
+
+                    return True, "Muvaffaqiyatli yuklab olindi"
+
+        except Exception as e:
+            return False, f"Yuklab olish xatoligi: {str(e)}"
+
+
+class YouTubeBotHandler:
+    def __init__(self, downloader: YouTubeDownloader):
+        self.downloader = downloader
+        self.logger = logging.getLogger(__name__)
+
+    def create_format_keyboard(self) -> InlineKeyboardBuilder:
+        """Format tanlash klaviaturasi"""
+        keyboard = InlineKeyboardBuilder()
+
+        for format_enum in VideoFormat:
+            keyboard.row(InlineKeyboardButton(
+                text=format_enum.value[1],
+                callback_data=f"yt_api_{format_enum.value[0]}"
+            ))
+
+        keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
+        return keyboard
+
+    async def handle_youtube_url(self, message: Message, url: str, state: FSMContext):
+        """YouTube URL ni qayta ishlash"""
+        progress_msg = await message.answer("🔍 YouTube videoni tekshiryapman...")
+
+        try:
+            # Video ma'lumotlarini olish
+            video_info = await self.downloader.get_video_info(url)
+
+            if not video_info.success:
+                await progress_msg.edit_text(
+                    f"❌ <b>Xatolik:</b> {video_info.error_message}",
+                    parse_mode="HTML"
+                )
+                return
+
+            # Ma'lumotlarni state ga saqlash
+            await state.update_data(
+                youtube_url=url,
+                video_title=video_info.title,
+                progress_url=video_info.progress_url
+            )
+
+            info_text = (
+                f"✅ <b>YouTube video topildi!</b>\n\n"
+                f"🎥 <b>{video_info.title[:100]}...</b>\n"
+                f"🔗 <b>URL:</b> {url[:50]}...\n\n"
+                f"📥 <b>Formatni tanlang:</b>"
+            )
+
+            keyboard = self.create_format_keyboard()
+            await progress_msg.edit_text(
+                info_text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode="HTML"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Handle YouTube URL error: {e}")
+            await progress_msg.edit_text("❌ Video ma'lumotlarini olishda xatolik")
+
+    async def process_download_callback(self, callback: CallbackQuery, state: FSMContext):
+        """Download callback ni qayta ishlash"""
+        try:
+            await callback.answer("Yuklab olish boshlandi...")
+
+            format_choice = callback.data.replace("yt_api_", "")
+            data = await state.get_data()
+
+            video_url = data.get('youtube_url')
+            video_title = data.get('video_title', 'Video')
+
+            if not video_url:
+                await callback.message.edit_text("❌ Video ma'lumotlari topilmadi")
+                return
+
+            await self._download_and_send(callback, video_url, video_title, format_choice)
+
+        except Exception as e:
+            self.logger.error(f"Download callback error: {e}")
+            await callback.message.edit_text("❌ Yuklab olishda xatolik yuz berdi")
+
+    async def _download_and_send(self, callback: CallbackQuery, video_url: str,
+                                 video_title: str, format_choice: str):
+        """Video yuklab olib yuborish"""
+        temp_dir = None
+        try:
+            # Format ma'lumotlarini olish
+            format_info = next((f for f in VideoFormat if f.value[0] == format_choice), VideoFormat.P720)
+            api_format = format_info.value[2]
+
+            await callback.message.edit_text(
+                f"⏳ <b>Video tayyorlanmoqda...</b>\n\n"
+                f"🎥 <b>{video_title[:50]}...</b>\n"
+                f"🎯 <b>Sifat:</b> {format_choice}",
+                parse_mode="HTML"
+            )
+
+            # Video ma'lumotlarini olish
+            video_info = await self.downloader.get_video_info(video_url, api_format)
+            if not video_info.success:
+                await callback.message.edit_text(f"❌ {video_info.error_message}")
+                return
+
+            # Progress tekshirish
+            progress_data = await self.downloader.check_download_progress(video_info.progress_url)
+            if not progress_data or not progress_data.get('download_url'):
+                await callback.message.edit_text("⏰ Video 3 daqiqada tayyor bo'lmadi")
+                return
+
+            # Temp directory yaratish
+            temp_dir = tempfile.mkdtemp(prefix='yt_api_')
+            file_ext = self.downloader._get_file_extension(format_choice)
+            filename = f"{self.downloader._sanitize_filename(video_title)}.{file_ext}"
+            filepath = os.path.join(temp_dir, filename)
+
+            # Progress callback funksiyasi
+            async def progress_callback(percent, downloaded_bytes, total_bytes):
+                downloaded_mb = downloaded_bytes / (1024 * 1024)
+                await callback.message.edit_text(
+                    f"⏬ <b>Yuklanmoqda: {percent:.0f}%</b>\n\n"
+                    f"🎥 <b>{video_title[:50]}...</b>\n"
+                    f"📦 <b>Yuklab olingan:</b> {downloaded_mb:.1f} MB",
+                    parse_mode="HTML"
+                )
+
+            # Faylni yuklab olish
+            success, message = await self.downloader.download_file(
+                progress_data['download_url'],
+                filepath,
+                progress_callback
+            )
+
+            if not success:
+                await callback.message.edit_text(f"❌ {message}")
+                return
+
+            # Telegram ga yuborish
+            await self._send_to_telegram(callback, filepath, video_title, format_choice, file_ext)
+
+        finally:
+            # Temp fayllarni tozalash
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    self.logger.warning(f"Temp cleanup error: {e}")
+
+    async def _send_to_telegram(self, callback: CallbackQuery, filepath: str,
+                                video_title: str, format_choice: str, file_ext: str):
+        """Faylni Telegram ga yuborish"""
+        try:
+            file_size = os.path.getsize(filepath)
+            file_size_mb = file_size / (1024 * 1024)
+
+            caption = (
+                f"🎥 {video_title}\n"
+                f"📦 Hajmi: {file_size_mb:.1f} MB\n"
+                f"🎯 {format_choice} sifatida yuklab olindi"
+            )
+
+            await callback.message.edit_text(
+                f"📤 <b>Telegram ga yubormoqda...</b>\n\n🎥 <b>{video_title[:50]}...</b>",
+                parse_mode="HTML"
+            )
+
+            file_input = FSInputFile(filepath)
+
+            # Fayl turini aniqlash va yuborish
+            if file_ext == "mp3":
+                await callback.bot.send_audio(
+                    chat_id=callback.message.chat.id,
+                    audio=file_input,
+                    caption=caption,
+                    title=video_title,
+                    request_timeout=300
+                )
+            else:
+                await callback.bot.send_video(
+                    chat_id=callback.message.chat.id,
+                    video=file_input,
+                    caption=caption,
+                    supports_streaming=True,
+                    request_timeout=300
+                )
+
+            await callback.message.delete()
+            self.logger.info("✅ File sent successfully!")
+
+        except Exception as e:
+            self.logger.error(f"Send error: {e}")
+            # Document sifatida yuborishga harakat
+            try:
+                await callback.bot.send_document(
+                    chat_id=callback.message.chat.id,
+                    document=FSInputFile(filepath),
+                    caption=caption
+                )
+                await callback.message.delete()
+            except Exception as doc_error:
+                self.logger.error(f"Document send error: {doc_error}")
+                await callback.message.edit_text("❌ Faylni yuborishda xatolik")
+
+
+config = Config()
+downloader = YouTubeDownloader(config)
+bot_handler = YouTubeBotHandler(downloader)
+
 
 @client_bot_router.message(DownloaderBotFilter())
 @client_bot_router.message(Download.download)
 async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+    """Asosiy YouTube download handler"""
     if not message.text:
         await message.answer("❗ Отправьте ссылку на видео")
         return
 
     url = message.text.strip()
-    me = await bot.get_me()
 
     if 'youtube.com' in url or 'youtu.be' in url:
-        await handle_youtube(message, url, me, bot, state)  # Bu chaqiruv bormi?
+        await bot_handler.handle_youtube_url(message, url, state)
 
 
 def is_valid_youtube_url(url):
@@ -2788,39 +3175,13 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
         await message.answer("❌ YouTube videoni qayta ishlashda API xatolik yuz berdi")
 
 
-# Callback handler'lar
 @client_bot_router.callback_query(F.data.startswith("yt_api_"))
 async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
-    """YouTube API download callback handler"""
-    try:
-        try:
-            await callback.answer("Yuklab olish boshlandi...")
-        except Exception as callback_error:
-            logger.warning(f"Callback timeout (ignoring): {callback_error}")
-            # Agar callback timeout bo'lsa, yangi xabar yuborish
-            await callback.message.answer("⏳ Yuklab olish boshlandi...")
-
-        format_choice = callback.data.replace("yt_api_", "")
-
-        # State dan ma'lumot olish
-        data = await state.get_data()
-        video_url = data.get('youtube_url')
-
-        if not video_url:
-            await callback.message.edit_text("❌ Video ma'lumotlari topilmadi")
-            return
-
-        # Yuklab olish va yuborish
-        await download_and_send_youtube_api(callback, video_url, format_choice)
-
-    except Exception as e:
-        logger.error(f"YouTube API download callback error: {e}")
-        await callback.message.edit_text("❌ API orqali yuklab olishda xatolik yuz berdi")
+    await bot_handler.process_download_callback(callback, state)
 
 
 @client_bot_router.callback_query(F.data == "cancel_download")
 async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
-    """Download bekor qilish"""
     await callback.message.edit_text("❌ Yuklab olish bekor qilindi")
     await callback.answer("Bekor qilindi")
     await state.clear()
