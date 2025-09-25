@@ -2599,203 +2599,314 @@ class YouTubeBotHandler:
         self.logger = logging.getLogger(__name__)
 
     def create_format_keyboard(self) -> InlineKeyboardBuilder:
-        """Format tanlash klaviaturasi"""
+        """Format tanlash klaviaturasi - iPhone optimize qilindi"""
         keyboard = InlineKeyboardBuilder()
-
-        for format_enum in VideoFormat:
-            keyboard.row(InlineKeyboardButton(
-                text=format_enum.value[1],
-                callback_data=f"yt_api_{format_enum.value[0]}"
-            ))
-
-        keyboard.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_download"))
+        
+        # iPhone uchun optimallashtirilgan tanlovlar
+        keyboard.row(InlineKeyboardButton(
+            text="📹 1080p (Eng yaxshi)", 
+            callback_data="yt_api_1080"
+        ))
+        keyboard.row(InlineKeyboardButton(
+            text="📹 720p (iPhone uchun ideal)", 
+            callback_data="yt_api_720"
+        ))
+        keyboard.row(InlineKeyboardButton(
+            text="📹 480p (iPhone tez yuklab olish)", 
+            callback_data="yt_api_480"
+        ))
+        keyboard.row(InlineKeyboardButton(
+            text="📹 360p (iPhone kichik hajm)", 
+            callback_data="yt_api_360"
+        ))
+        keyboard.row(InlineKeyboardButton(
+            text="🎵 Faqat audio", 
+            callback_data="yt_api_audio"
+        ))
+        keyboard.row(InlineKeyboardButton(
+            text="📄 Document (iPhone uchun siqilmasdan)", 
+            callback_data="yt_api_document"
+        ))
+        keyboard.row(InlineKeyboardButton(
+            text="❌ Bekor qilish", 
+            callback_data="cancel_download"
+        ))
+        
         return keyboard
 
     async def handle_youtube_url(self, message: Message, url: str, state: FSMContext):
-        """YouTube URL ni qayta ishlash"""
+        """YouTube URL ni qayta ishlash - iPhone optimize qilindi"""
         progress_msg = await message.answer("🔍 YouTube videoni tekshiryapman...")
-
+        
         try:
             # Video ma'lumotlarini olish
             video_info = await self.downloader.get_video_info(url)
-
+            
             if not video_info.success:
                 await progress_msg.edit_text(
                     f"❌ <b>Xatolik:</b> {video_info.error_message}",
                     parse_mode="HTML"
                 )
                 return
-
+            
             # Ma'lumotlarni state ga saqlash
             await state.update_data(
                 youtube_url=url,
                 video_title=video_info.title,
                 progress_url=video_info.progress_url
             )
-
+            
             info_text = (
                 f"✅ <b>YouTube video topildi!</b>\n\n"
                 f"🎥 <b>{video_info.title[:100]}...</b>\n"
                 f"🔗 <b>URL:</b> {url[:50]}...\n\n"
-                f"📥 <b>Formatni tanlang:</b>"
+                f"📥 <b>Format tanlang:</b>\n"
+                f"📱 <b>iPhone uchun optimallashtirilgan</b>\n"
+                f"💡 <b>Document format = siqilmasdan!</b>"
             )
-
+            
             keyboard = self.create_format_keyboard()
             await progress_msg.edit_text(
                 info_text,
                 reply_markup=keyboard.as_markup(),
                 parse_mode="HTML"
             )
-
+            
         except Exception as e:
             self.logger.error(f"Handle YouTube URL error: {e}")
-            await progress_msg.edit_text("❌ Video ma'lumotlarini olishda xatolik")
-
-    async def process_download_callback(self, callback: CallbackQuery, state: FSMContext):
-        """Download callback ni qayta ishlash"""
-        try:
-            await callback.answer("Yuklab olish boshlandi...")
-
-            format_choice = callback.data.replace("yt_api_", "")
-            data = await state.get_data()
-
-            video_url = data.get('youtube_url')
-            video_title = data.get('video_title', 'Video')
-
-            if not video_url:
-                await callback.message.edit_text("❌ Video ma'lumotlari topilmadi")
-                return
-
-            await self._download_and_send(callback, video_url, video_title, format_choice)
-
-        except Exception as e:
-            self.logger.error(f"Download callback error: {e}")
-            await callback.message.edit_text("❌ Yuklab olishda xatolik yuz berdi")
-
-    async def _download_and_send(self, callback: CallbackQuery, video_url: str,
-                                 video_title: str, format_choice: str):
-        """Video yuklab olib yuborish"""
-        temp_dir = None
-        try:
-            # Format ma'lumotlarini olish
-            format_info = next((f for f in VideoFormat if f.value[0] == format_choice), VideoFormat.P720)
-            api_format = format_info.value[2]
-
-            await callback.message.edit_text(
-                f"⏳ <b>Video tayyorlanmoqda...</b>\n\n"
-                f"🎥 <b>{video_title[:50]}...</b>\n"
-                f"🎯 <b>Sifat:</b> {format_choice}",
+            await progress_msg.edit_text(
+                "❌ <b>Video ma'lumotlarini olishda xatolik</b>\n\n"
+                "💡 <b>Qayta urinib ko'ring</b>",
                 parse_mode="HTML"
             )
 
-            # Video ma'lumotlarini olish
-            video_info = await self.downloader.get_video_info(video_url, api_format)
-            if not video_info.success:
-                await callback.message.edit_text(f"❌ {video_info.error_message}")
+    async def download_without_callback(self, message: Message, video_url: str, 
+                                      video_title: str, format_choice: str):
+        """Callback timeout muammosisiz yuklab olish - faqat message bilan ishlash"""
+        temp_dir = None
+        try:
+            # Document format alohida handle qilish
+            if format_choice == "document":
+                format_choice = "720"
+                send_as_document = True
+            else:
+                send_as_document = False
+            
+            # Format ma'lumotlarini olish
+            format_info = next((f for f in VideoFormat if f.value[0] == format_choice), VideoFormat.P720)
+            api_format = format_info.value[2]
+            
+            # Progress update
+            try:
+                await message.edit_text(
+                    f"⚡ <b>API ga so'rov yuborilmoqda...</b>\n\n"
+                    f"🎥 <b>{video_title[:50]}...</b>\n"
+                    f"🎯 <b>Format:</b> {format_choice}{'📄 Document' if send_as_document else ''}",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+            
+            download_url = None
+            
+            # 1-usul: To'g'ridan-to'g'ri download URL olish
+            download_url = await self.downloader.get_direct_download_url(video_url, api_format)
+            
+            # 2-usul: Agar to'g'ridan-to'g'ri ishlamasa, eski usulni ishlatish
+            if not download_url:
+                video_info = await self.downloader.get_video_info(video_url, api_format)
+                if not video_info.success:
+                    try:
+                        await message.edit_text(f"❌ {video_info.error_message}", parse_mode="HTML")
+                    except Exception:
+                        await message.answer(f"❌ {video_info.error_message}")
+                    return
+                
+                if video_info.progress_url:
+                    progress_data = await self.downloader.check_download_progress(video_info.progress_url)
+                    if progress_data and progress_data.get('download_url'):
+                        download_url = progress_data['download_url']
+            
+            if not download_url:
+                try:
+                    await message.edit_text(
+                        "❌ <b>Video hozir mavjud emas</b>\n\n"
+                        "💡 <b>Biroz kutib qayta urinib ko'ring</b>",
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    await message.answer("❌ Video hozir mavjud emas")
                 return
-
-            # Progress tekshirish
-            progress_data = await self.downloader.check_download_progress(video_info.progress_url)
-            if not progress_data or not progress_data.get('download_url'):
-                await callback.message.edit_text("⏰ Video 3 daqiqada tayyor bo'lmadi")
-                return
-
+            
             # Temp directory yaratish
-            temp_dir = tempfile.mkdtemp(prefix='yt_api_')
+            temp_dir = tempfile.mkdtemp(prefix='yt_nocallback_')
             file_ext = self.downloader._get_file_extension(format_choice)
             filename = f"{self.downloader._sanitize_filename(video_title)}.{file_ext}"
             filepath = os.path.join(temp_dir, filename)
-
-            # Progress callback funksiyasi
-            async def progress_callback(percent, downloaded_bytes, total_bytes):
-                downloaded_mb = downloaded_bytes / (1024 * 1024)
-                await callback.message.edit_text(
-                    f"⏬ <b>Yuklanmoqda: {percent:.0f}%</b>\n\n"
-                    f"🎥 <b>{video_title[:50]}...</b>\n"
-                    f"📦 <b>Yuklab olingan:</b> {downloaded_mb:.1f} MB",
+            
+            try:
+                await message.edit_text(
+                    f"⏬ <b>Yuklanmoqda...</b>\n\n"
+                    f"🎥 <b>{video_title[:50]}...</b>",
                     parse_mode="HTML"
                 )
-
-            # Faylni yuklab olish
-            success, message = await self.downloader.download_file(
-                progress_data['download_url'],
-                filepath,
-                progress_callback
-            )
-
+            except Exception:
+                pass
+            
+            # Faylni tez yuklab olish
+            success, message_text = await self.downloader.download_file(download_url, filepath)
+            
             if not success:
-                await callback.message.edit_text(f"❌ {message}")
+                try:
+                    await message.edit_text(f"❌ {message_text}", parse_mode="HTML")
+                except Exception:
+                    await message.answer(f"❌ {message_text}")
                 return
-
-            # Telegram ga yuborish
-            await self._send_to_telegram(callback, filepath, video_title, format_choice, file_ext)
-
+            
+            # Telegram ga yuborish - message orqali
+            if send_as_document:
+                await self._send_as_document_message(message, filepath, video_title, format_choice, file_ext)
+            else:
+                await self._send_to_telegram_message(message, filepath, video_title, format_choice, file_ext)
+            
+        except Exception as e:
+            self.logger.error(f"Download without callback error: {e}")
+            try:
+                await message.edit_text(
+                    "❌ <b>Yuklab olishda xatolik</b>\n\n"
+                    "💡 <b>Qayta urinib ko'ring</b>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                await message.answer("❌ Yuklab olishda xatolik")
         finally:
-            # Temp fayllarni tozalash
             if temp_dir and os.path.exists(temp_dir):
                 try:
                     shutil.rmtree(temp_dir)
                 except Exception as e:
                     self.logger.warning(f"Temp cleanup error: {e}")
 
-    async def _send_to_telegram(self, callback: CallbackQuery, filepath: str,
-                                video_title: str, format_choice: str, file_ext: str):
-        """Faylni Telegram ga yuborish"""
+    async def _send_to_telegram_message(self, message: Message, filepath: str, 
+                                      video_title: str, format_choice: str, file_ext: str):
+        """Message orqali Telegram ga yuborish - callback yo'q"""
         try:
             file_size = os.path.getsize(filepath)
             file_size_mb = file_size / (1024 * 1024)
-
+            
             caption = (
-                f"🎥 {video_title}\n"
-                f"📦 Hajmi: {file_size_mb:.1f} MB\n"
-                f"🎯 {format_choice} sifatida yuklab olindi"
+                f"✅ <b>Yuklab olish tugallandi!</b>\n\n"
+                f"🎥 <b>{video_title[:50]}...</b>\n"
+                f"🎯 <b>Sifat:</b> {format_choice}\n"
+                f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB\n"
+                f"📱 <b>iPhone optimize qilindi</b>\n"
+                f"🚀 <b>YouTube API orqali</b>"
             )
-
-            await callback.message.edit_text(
-                f"📤 <b>Telegram ga yubormoqda...</b>\n\n🎥 <b>{video_title[:50]}...</b>",
-                parse_mode="HTML"
-            )
-
+            
+            try:
+                await message.edit_text(
+                    f"📤 <b>Telegram ga yubormoqda...</b>\n\n🎥 <b>{video_title[:50]}...</b>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+            
             file_input = FSInputFile(filepath)
-
-            # Fayl turini aniqlash va yuborish
+            
+            # Bot orqali yuborish
             if file_ext == "mp3":
-                await callback.bot.send_audio(
-                    chat_id=callback.message.chat.id,
+                await message.bot.send_audio(
+                    chat_id=message.chat.id,
                     audio=file_input,
                     caption=caption,
                     title=video_title,
+                    parse_mode="HTML",
                     request_timeout=300
                 )
             else:
-                await callback.bot.send_video(
-                    chat_id=callback.message.chat.id,
+                await message.bot.send_video(
+                    chat_id=message.chat.id,
                     video=file_input,
                     caption=caption,
                     parse_mode="HTML",
-                    supports_streaming=True,  # iPhone uchun streaming
-                    width=None,  # Auto detect
-                    height=None,  # Auto detect
-                    duration=None,  # Auto detect
+                    supports_streaming=True,
                     request_timeout=300
                 )
-
-            await callback.message.delete()
-            self.logger.info("✅ File sent successfully!")
-
-        except Exception as e:
-            self.logger.error(f"Send error: {e}")
-            # Document sifatida yuborishga harakat
+            
+            # Muvaffaqiyatli yuborilgandan keyin eski xabarni o'chirish
             try:
-                await callback.bot.send_document(
-                    chat_id=callback.message.chat.id,
+                await message.delete()
+            except Exception:
+                pass
+            
+            self.logger.info("✅ File sent via message without callback!")
+            
+        except Exception as e:
+            self.logger.error(f"Message send error: {e}")
+            try:
+                await message.bot.send_document(
+                    chat_id=message.chat.id,
                     document=FSInputFile(filepath),
-                    caption=caption
+                    caption=caption,
+                    parse_mode="HTML"
                 )
-                await callback.message.delete()
-            except Exception as doc_error:
-                self.logger.error(f"Document send error: {doc_error}")
-                await callback.message.edit_text("❌ Faylni yuborishda xatolik")
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
+            except Exception:
+                try:
+                    await message.edit_text("❌ Faylni yuborishda xatolik", parse_mode="HTML")
+                except Exception:
+                    pass
+
+    async def _send_as_document_message(self, message: Message, filepath: str, 
+                                      video_title: str, format_choice: str, file_ext: str):
+        """Message orqali Document formatda yuborish"""
+        try:
+            file_size = os.path.getsize(filepath)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            caption = (
+                f"📄 <b>Document format (iPhone uchun)</b>\n\n"
+                f"🎥 <b>{video_title[:50]}...</b>\n"
+                f"🎯 <b>Sifat:</b> {format_choice}\n"
+                f"📦 <b>Hajmi:</b> {file_size_mb:.1f} MB\n\n"
+                f"📱 <b>iPhone da saqlash:</b>\n"
+                f"• Download tugmasini bosing\n"
+                f"• Share > Save to Photos\n"
+                f"• Yoki Files app ga saqlang\n\n"
+                f"✅ <b>Siqilmasdan original sifat</b>"
+            )
+            
+            try:
+                await message.edit_text(
+                    f"📄 <b>Document formatda yubormoqda...</b>\n\n"
+                    f"🎥 <b>{video_title[:50]}...</b>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+            
+            await message.bot.send_document(
+                chat_id=message.chat.id,
+                document=FSInputFile(filepath),
+                caption=caption,
+                parse_mode="HTML"
+            )
+            
+            try:
+                await message.delete()
+            except Exception:
+                pass
+                
+            self.logger.info("✅ Document sent via message without callback!")
+            
+        except Exception as e:
+            self.logger.error(f"Document message send error: {e}")
+            try:
+                await message.edit_text("❌ Document yuborishda xatolik", parse_mode="HTML")
+            except Exception:
+                pass
 
 
 # Main handlers - TEZKOR VERSIYA
