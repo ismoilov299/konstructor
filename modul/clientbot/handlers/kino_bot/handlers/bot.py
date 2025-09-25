@@ -3218,11 +3218,66 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
 @client_bot_router.callback_query(F.data.startswith("yt_api_"))
 async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text(
-        "⚡ Yuklab olish boshlandi...\n\n⏳ Iltimos, biroz kuting...",
-        parse_mode="HTML"
+    """YouTube download callback handler - CALLBACK TIMEOUT FIXED"""
+
+    # 1. DARHOL callback answer berish - timeout oldini olish
+    try:
+        await callback.answer()
+    except Exception as e:
+        logger.warning(f"Callback answer timeout (ignoring): {e}")
+
+    # 2. Format va state ma'lumotlarini olish
+    format_choice = callback.data.replace("yt_api_", "")
+    data = await state.get_data()
+
+    video_url = data.get('youtube_url')
+    video_title = data.get('video_title', 'Video')
+
+    # 3. Darhol user ga feedback berish
+    if format_choice == "document":
+        feedback_text = (
+            "📄 <b>iPhone uchun Document format</b>\n\n"
+            "⚡ <b>Siqilmasdan yuklab olish boshlandi...</b>\n"
+            "📱 <b>iPhone da qisilmaydi!</b>"
+        )
+    else:
+        feedback_text = (
+            f"⚡ <b>Yuklab olish boshlandi</b>\n\n"
+            f"🎯 <b>Sifat:</b> {format_choice}\n"
+            f"📱 <b>iPhone optimize qilindi</b>\n"
+            f"⏳ <b>Biroz kuting...</b>"
+        )
+
+    try:
+        await callback.message.edit_text(feedback_text, parse_mode="HTML")
+    except Exception as e:
+        logger.warning(f"Message edit error: {e}")
+        try:
+            await callback.message.answer(feedback_text, parse_mode="HTML")
+        except Exception:
+            pass
+
+    # 4. Video URL tekshirish
+    if not video_url:
+        error_msg = (
+            "❌ <b>Video ma'lumotlari topilmadi</b>\n\n"
+            "💡 <b>Qayta URL yuboring</b>"
+        )
+        try:
+            await callback.message.edit_text(error_msg, parse_mode="HTML")
+        except Exception:
+            await callback.message.answer(error_msg, parse_mode="HTML")
+        return
+
+    # 5. BACKGROUND TASK - callback obyektini pass qilmaslik
+    asyncio.create_task(
+        bot_handler.download_without_callback(
+            callback.message,
+            video_url,
+            video_title,
+            format_choice
+        )
     )
-    await bot_handler.process_download_callback(callback, state)
 
 
 config = Config()
