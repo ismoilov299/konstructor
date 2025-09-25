@@ -316,25 +316,16 @@ async def start_message(message: types.Message, state: FSMContext, bot: Bot):
             return
 
     print(f"✅ User {user_id} subscribed to all channels or no channels found")
-
-    # Foydalanuvchi mavjudligini tekshirish va ro'yxatdan o'tkazish
     try:
         result = await get_info_db(user_id)
         print(f"User {user_id} found in database: {result}")
-
         await message.answer(f'Привет {message.from_user.username}\nВаш баланс - {result[0][2]}',
                              reply_markup=bt.first_buttons())
     except:
         print(f"User {user_id} not found, creating new user")
-
-        # Yangi foydalanuvchini yaratish
         new_link = await create_start_link(message.bot, str(message.from_user.id), encode=True)
         link_for_db = new_link[new_link.index("=") + 1:]
-
-        # Referral bilan save qilish
         await save_user(u=message.from_user, bot=bot, link=link_for_db, referrer_id=referral)
-
-        # Referral bonusini ishlatish
         if referral and referral.isdigit():
             ref_id = int(referral)
             if ref_id != user_id:
@@ -396,13 +387,10 @@ async def check_channels_chatgpt_callback(callback: CallbackQuery, state: FSMCon
             if member.status in ['left', 'kicked']:
                 subscribed_all = False
                 break
-
         except Exception as e:
             logger.error(f"Error checking channel {channel_id} (type: {channel_type}): {e}")
-
             if channel_type == 'sponsor':
                 invalid_channels_to_remove.append(channel_id)
-
             subscribed_all = False
             break
 
@@ -416,19 +404,14 @@ async def check_channels_chatgpt_callback(callback: CallbackQuery, state: FSMCon
 
     print(f"✅ User {user_id} subscribed to all channels")
 
-    # Foydalanuvchini ro'yxatdan o'tkazish
     try:
         result = await get_info_db(user_id)
         print(f"User {user_id} already exists")
     except:
         print(f"Creating new user {user_id}")
-
         new_link = await create_start_link(bot, str(user_id), encode=True)
         link_for_db = new_link[new_link.index("=") + 1:]
-
         await save_user(u=callback.from_user, bot=bot, link=link_for_db, referrer_id=referral)
-
-        # Referral bonusini ishlatish
         if referral and referral.isdigit():
             ref_id = int(referral)
             if ref_id != user_id:
@@ -649,8 +632,6 @@ async def handle_text_input(message: Message, state: FSMContext):
     await state.clear()
 
 
-# ... (Similar callback handlers for other buttons)
-
 @client_bot_router.message(AiState.gpt3, ChatGptFilter())
 async def gpt3(message: Message, state: FSMContext):
     context_data = await state.get_data()
@@ -709,3 +690,65 @@ async def gpt4(message: Message, state: FSMContext):
                 await message.answer('GPT4 Недоступен', parse_mode='Markdown')
         else:
             await message.answer('Я могу обрабатывать только текст ! /start')
+
+
+@client_bot_router.callback_query(F.data == "show_balance")
+async def show_balance_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    try:
+        user_balance = await get_user_balance_db(user_id)
+        await callback.message.edit_text(
+            f"💰 <b>Ваш баланс:</b> {user_balance}₽\n\n"
+            f"📊 <b>Тарифы:</b>\n"
+            f"• GPT-3.5 без контекста: 1₽\n"
+            f"• GPT-3.5 с контекстом: 2₽\n"
+            f"• GPT-4 без контекста: 3₽\n"
+            f"• GPT-4 с контекстом: 4₽",
+            reply_markup=bt.balance_menu(),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"Error showing balance: {e}")
+        await callback.message.edit_text(
+            "❌ Ошибка при получении баланса",
+            reply_markup=bt.back()
+        )
+
+    await callback.answer()
+
+@client_bot_router.callback_query(F.data == "top_up_balance")
+async def top_up_balance_callback(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "💳 <b>Выберите сумму для пополнения:</b>\n\n"
+        "⭐️ <i>Оплата через Telegram Stars</i>\n"
+        "🔒 <i>Безопасно и мгновенно</i>",
+        reply_markup= bt.top_up_options(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@client_bot_router.callback_query(F.data.startswith("topup_"))
+async def topup_redirect_callback(callback: types.CallbackQuery):
+    stars_amount = callback.data.replace("topup_", "").replace("_stars", "")
+    stars_to_rubles = {
+        "10": "50",
+        "25": "150",
+        "50": "350",
+        "100": "750",
+        "200": "1500"
+    }
+    rubles = stars_to_rubles.get(stars_amount, "50")
+    main_bot_username = "YOUR_MAIN_BOT_USERNAME"  # Bu yerni o'zgartiring
+
+    await callback.message.edit_text(
+        f"💎 <b>Пополнение на {stars_amount} Stars ({rubles}₽)</b>\n\n"
+        f"🔄 Переходите в основной бот для оплаты:\n"
+        f"👇 Нажмите кнопку ниже",
+        reply_markup=InlineKeyboardBuilder().button(
+            text=f"💳 Перейти к оплате ({stars_amount} ⭐️)",
+            url=f"https://t.me/{main_bot_username}?start=gptbot_{callback.from_user.id}_{stars_amount}"
+        ).as_markup(),
+        parse_mode="HTML"
+    )
+
+    await callback.answer("🔄 Переходите в основной бот для завершения оплаты")
