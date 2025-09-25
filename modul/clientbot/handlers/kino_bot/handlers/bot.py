@@ -2473,6 +2473,19 @@ class FastYouTubeDownloader:
                 return match.group(1)
         return None
 
+    def _sanitize_filename(self, filename: str, max_length: int = 50) -> str:
+        """Очистить имя файла от недопустимых символов"""
+        # Удаляем опасные символы для файловой системы
+        safe_chars = re.sub(r'[<>:"/\\|?*]', '', filename)
+        # Удаляем лишние пробелы и точки
+        safe_chars = re.sub(r'\s+', ' ', safe_chars).strip('. ')
+        # Ограничиваем длину
+        return safe_chars[:max_length] if safe_chars else 'video'
+
+    def _get_file_extension(self, format_choice: str) -> str:
+        """Определить расширение файла по формату"""
+        return "mp3" if format_choice == "audio" else "mp4"
+
     @asynccontextmanager
     async def _get_optimized_session(self):
         connector = aiohttp.TCPConnector(
