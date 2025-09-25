@@ -1,14 +1,32 @@
 import glob
 import asyncio
 import json
-import subprocess
 import tempfile
 import time
 import traceback
 from contextlib import suppress, asynccontextmanager
 import shutil
 from dataclasses import dataclass
-from datetime import timedelta, datetime
+
+import os
+import re
+import time
+import asyncio
+import aiohttp
+import tempfile
+import shutil
+from typing import Optional, Dict, Any, Tuple
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from enum import Enum
+
+from aiogram import Bot, F
+from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.fsm.context import FSMContext
+import logging
+
+
 
 import requests
 from aiogram import Bot, F, html
@@ -26,7 +44,6 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 import re
-# from modul.clientbot.handlers.davinci_bot import *
 from yt_dlp import YoutubeDL
 
 from modul import models
