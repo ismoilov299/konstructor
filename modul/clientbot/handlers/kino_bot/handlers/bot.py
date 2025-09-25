@@ -2358,23 +2358,41 @@ def update_download_analytics(bot_username, domain):
     DownloadAnalyticsModel.objects.filter(id=analytics.id).update(count=F('count') + 1)
 
 
-
-@client_bot_router.callback_query(F.data == "too_large")
-async def handle_too_large_file(callback: CallbackQuery):
-    """Katta fayl tanlanganda"""
-    await callback.answer(
-        "⚠️ Bu fayl Telegram uchun juda katta (50MB+). "
-        "Kichikroq sifatli formatni tanlang.",
-        show_alert=True
-    )
-
-
-
-
 class DownloaderBotFilter(Filter):
     async def __call__(self, message: types.Message, bot: Bot) -> bool:
         bot_db = await shortcuts.get_bot(bot)
         return shortcuts.have_one_module(bot_db, "download")
+
+
+import asyncio
+import tempfile
+import shutil
+import os
+import re
+import time
+import logging
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, Optional, Any, Tuple, List
+from contextlib import asynccontextmanager
+
+import aiohttp
+from aiogram import Bot, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, FSInputFile
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.fsm.context import FSMContext
+
+# Настройка детального логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('youtube_bot.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -2382,20 +2400,21 @@ class Config:
     RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "532d0e9edemsh5566c31aceb7163p1343e7jsn11577b0723dd")
     RAPIDAPI_HOST: str = "youtube-info-download-api.p.rapidapi.com"
     MAX_FILE_SIZE_MB: float = 50.0
-    MAX_WAIT_MINUTES: int = 5  # УВЕЛИЧЕНО до 5 минут
-    PROGRESS_CHECK_INTERVAL: int = 5  # Проверка каждые 5 секунд
-    CHUNK_SIZE: int = 32768  # Больший chunk для быстрой загрузки
-    PROGRESS_UPDATE_THRESHOLD: int = 1 * 1024 * 1024  # Обновлять каждый 1MB
-    CONNECTION_TIMEOUT: int = 60  # УВЕЛИЧЕН timeout до 60 секунд
-    MAX_RETRIES: int = 3  # Количество попыток retry
+    MAX_WAIT_MINUTES: int = 2  # Уменьшено для скорости
+    PROGRESS_CHECK_INTERVAL: int = 3  # Чаще проверяем
+    CHUNK_SIZE: int = 65536  # Больший chunk для скорости
+    PROGRESS_UPDATE_THRESHOLD: int = 512 * 1024  # Реже обновляем UI
+    CONNECTION_TIMEOUT: int = 30  # Компромисс между скоростью и надежностью
+    MAX_RETRIES: int = 2  # Меньше попыток для скорости
+    CONCURRENT_REQUESTS: int = 3  # Параллельные запросы
 
 
 class VideoFormat(Enum):
-    P1080 = ("1080", "📹 1080p (Лучшее качество)", "1080")
-    P720 = ("720", "📹 720p (Хорошее)", "720")
-    P480 = ("480", "📹 480p (Среднее)", "480")
-    P360 = ("360", "📹 360p (Низкое)", "360")
-    AUDIO = ("audio", "🎵 Только аудио", "mp3")
+    P720 = ("720", "720p (Быстро)", "720")
+    P480 = ("480", "480p (Очень быстро)", "480")
+    P360 = ("360", "360p (Максимально быстро)", "360")
+    AUDIO = ("audio", "Только аудио (Быстро)", "mp3")
+    P1080 = ("1080", "1080p (Медленнее)", "1080")
 
 
 @dataclass
@@ -2404,16 +2423,18 @@ class DownloadInfo:
     title: str = ""
     thumbnail_url: str = ""
     progress_url: str = ""
+    direct_url: str = ""  # Добавлена прямая ссылка
     error_message: str = ""
 
 
-class YouTubeDownloader:
+class FastYouTubeDownloader:
     def __init__(self, config: Config):
         self.config = config
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.session_pool = []
+        self.cache = {}  # Простой кэш
 
     def _get_headers(self) -> Dict[str, str]:
-        """API headers"""
         return {
             "x-rapidapi-key": self.config.RAPIDAPI_KEY,
             "x-rapidapi-host": self.config.RAPIDAPI_HOST,
@@ -2421,76 +2442,174 @@ class YouTubeDownloader:
         }
 
     def _validate_youtube_url(self, url: str) -> bool:
-        """YouTube URL validation"""
         patterns = [
-            r'youtube\.com/watch\?v=',
-            r'youtu\.be/',
-            r'youtube\.com/embed/',
-            r'youtube\.com/v/',
-            r'youtube\.com/shorts/'
+            r'youtube\.com/watch\?v=([^&]+)',
+            r'youtu\.be/([^?]+)',
+            r'youtube\.com/embed/([^?]+)',
+            r'youtube\.com/v/([^?]+)',
+            r'youtube\.com/shorts/([^?]+)'
         ]
-        return any(re.search(pattern, url) for pattern in patterns)
 
-    def _get_file_extension(self, format_choice: str) -> str:
-        """Определить расширение файла"""
-        return "mp3" if format_choice == "audio" else "mp4"
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                video_id = match.group(1)
+                self.logger.info(f"Extracted video ID: {video_id}")
+                return True
+        return False
 
-    def _sanitize_filename(self, filename: str, max_length: int = 50) -> str:
-        """Очистить имя файла"""
-        safe_chars = re.sub(r'[^\w\s\-_.]', '', filename)
-        return safe_chars[:max_length].strip()
+    def _extract_video_id(self, url: str) -> Optional[str]:
+        patterns = [
+            r'youtube\.com/watch\?v=([^&]+)',
+            r'youtu\.be/([^?]+)',
+            r'youtube\.com/embed/([^?]+)',
+            r'youtube\.com/v/([^?]+)',
+            r'youtube\.com/shorts/([^?]+)'
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
 
     @asynccontextmanager
-    async def _session_context(self):
-        """Async session с увеличенным timeout"""
+    async def _get_optimized_session(self):
         connector = aiohttp.TCPConnector(
-            limit=100,
+            limit=50,
+            limit_per_host=10,
             ttl_dns_cache=300,
-            use_dns_cache=True
+            use_dns_cache=True,
+            keepalive_timeout=30,
+            enable_cleanup_closed=True
         )
+
         timeout = aiohttp.ClientTimeout(
             total=self.config.CONNECTION_TIMEOUT,
-            connect=15,
-            sock_read=30
+            connect=10,
+            sock_read=20
         )
+
         async with aiohttp.ClientSession(
                 timeout=timeout,
-                connector=connector
+                connector=connector,
+                headers=self._get_headers()
         ) as session:
             yield session
 
-    async def get_video_info_with_retry(self, url: str, format_quality: str = "720") -> DownloadInfo:
-        """Получить информацию о видео с retry механизмом"""
-        last_error = None
+    async def _try_direct_download_urls(self, url: str, format_quality: str) -> List[str]:
+        """Попробовать получить прямые ссылки разными способами"""
+        direct_urls = []
 
-        for attempt in range(1, self.config.MAX_RETRIES + 1):
-            try:
-                self.logger.info(f"🔄 Attempt {attempt}/{self.config.MAX_RETRIES} for video info")
-                result = await self._get_video_info_single(url, format_quality)
+        endpoints = [
+            "/ajax/get_download.php",
+            "/ajax/download.php",
+            "/download",
+            "/instant"
+        ]
 
-                if result.success:
-                    self.logger.info(f"✅ Success on attempt {attempt}")
-                    return result
-                else:
-                    last_error = result.error_message
-                    self.logger.warning(f"❌ Attempt {attempt} failed: {last_error}")
+        params_variants = [
+            {
+                "format": format_quality,
+                "url": url,
+                "quality": format_quality,
+                "instant": "true"
+            },
+            {
+                "format": format_quality,
+                "url": url,
+                "audio_quality": "128" if format_quality == "mp3" else "192",
+                "no_merge": "false",
+                "instant": "1"
+            }
+        ]
 
-            except Exception as e:
-                last_error = str(e)
-                self.logger.error(f"❌ Attempt {attempt} error: {e}")
+        async with self._get_optimized_session() as session:
+            tasks = []
 
-            if attempt < self.config.MAX_RETRIES:
-                wait_time = attempt * 2  # Экспоненциальная задержка
-                self.logger.info(f"⏳ Waiting {wait_time}s before retry...")
-                await asyncio.sleep(wait_time)
+            for endpoint in endpoints:
+                for params in params_variants:
+                    api_url = f"https://{self.config.RAPIDAPI_HOST}{endpoint}"
+                    task = self._fetch_direct_url(session, api_url, params)
+                    tasks.append(task)
 
-        return DownloadInfo(False, error_message=f"Все попытки неудачны: {last_error}")
+            # Выполняем все запросы параллельно
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _get_video_info_single(self, url: str, format_quality: str = "720") -> DownloadInfo:
-        """Одна попытка получения информации о видео"""
+            for result in results:
+                if isinstance(result, str) and result.startswith('http'):
+                    direct_urls.append(result)
+
+        self.logger.info(f"Found {len(direct_urls)} direct URLs")
+        return direct_urls
+
+    async def _fetch_direct_url(self, session: aiohttp.ClientSession, api_url: str, params: dict) -> Optional[str]:
+        try:
+            async with session.get(api_url, params=params, timeout=15) as response:
+                if response.status == 200:
+                    data = await response.json()
+
+                    # Проверяем разные поля для URL
+                    url_fields = ['download_url', 'url', 'link', 'file_url', 'media_url', 'direct_url']
+                    for field in url_fields:
+                        if data.get(field):
+                            return data[field]
+
+        except Exception as e:
+            self.logger.debug(f"Direct URL fetch failed: {e}")
+
+        return None
+
+    async def get_video_info_fast(self, url: str, format_quality: str = "720") -> DownloadInfo:
+        """Быстрое получение информации о видео"""
+        start_time = time.time()
+
         if not self._validate_youtube_url(url):
             return DownloadInfo(False, error_message="Неправильная YouTube ссылка")
 
+        video_id = self._extract_video_id(url)
+        cache_key = f"{video_id}_{format_quality}"
+
+        # Проверяем кэш
+        if cache_key in self.cache:
+            cached_result = self.cache[cache_key]
+            if time.time() - cached_result['timestamp'] < 300:  # 5 минут
+                self.logger.info(f"Using cached result for {video_id}")
+                return cached_result['data']
+
+        self.logger.info(f"Starting fast video info retrieval for: {video_id}")
+
+        # Параллельно пробуем получить прямые ссылки и обычную информацию
+        tasks = [
+            self._get_video_info_standard(url, format_quality),
+            self._try_direct_download_urls(url, format_quality)
+        ]
+
+        try:
+            info_result, direct_urls = await asyncio.gather(*tasks)
+
+            # Если есть прямые ссылки, используем их
+            if direct_urls and info_result.success:
+                info_result.direct_url = direct_urls[0]
+                self.logger.info(f"Got direct URL: {direct_urls[0][:50]}...")
+
+            # Кэшируем результат
+            if info_result.success:
+                self.cache[cache_key] = {
+                    'data': info_result,
+                    'timestamp': time.time()
+                }
+
+            elapsed = time.time() - start_time
+            self.logger.info(f"Video info retrieved in {elapsed:.2f}s")
+            return info_result
+
+        except Exception as e:
+            self.logger.error(f"Fast video info error: {e}")
+            return DownloadInfo(False, error_message=f"Ошибка получения информации: {str(e)}")
+
+    async def _get_video_info_standard(self, url: str, format_quality: str) -> DownloadInfo:
+        """Стандартное получение информации о видео"""
         api_url = f"https://{self.config.RAPIDAPI_HOST}/ajax/download.php"
 
         params = {
@@ -2503,444 +2622,429 @@ class YouTubeDownloader:
             "audio_language": "en"
         }
 
-        async with self._session_context() as session:
-            self.logger.info(f"🌐 API Request: {api_url} with format {format_quality}")
-
-            async with session.get(
-                    api_url,
-                    headers=self._get_headers(),
-                    params=params
-            ) as response:
-
-                self.logger.info(f"📡 Response status: {response.status}")
-
-                if response.status != 200:
-                    error_text = await response.text()
-                    self.logger.error(f"API error {response.status}: {error_text[:200]}")
-                    return DownloadInfo(False, error_message=f"API ошибка: {response.status}")
-
-                try:
-                    data = await response.json()
-                    self.logger.info(f"📊 API Response: {data}")
-                except Exception as e:
-                    self.logger.error(f"JSON parse error: {e}")
-                    return DownloadInfo(False, error_message="Ошибка разбора ответа API")
-
-                if not data.get('success'):
-                    error_msg = data.get('error', 'Видео не найдено или недоступно')
-                    return DownloadInfo(False, error_message=error_msg)
-
-                return DownloadInfo(
-                    success=True,
-                    title=data.get('title', 'Video')[:100],  # Ограничить длину
-                    thumbnail_url=data.get('info', {}).get('image', ''),
-                    progress_url=data.get('progress_url', '')
-                )
-
-    async def check_download_progress_extended(self, progress_url: str) -> Optional[Dict[str, Any]]:
-        """Расширенная проверка прогресса с несколькими попытками"""
-        if not progress_url:
-            self.logger.error("❌ Progress URL is empty")
-            return None
-
-        self.logger.info(f"⏳ Starting extended progress check: {progress_url}")
-
-        start_time = time.time()
-        max_wait_seconds = self.config.MAX_WAIT_MINUTES * 60
-        attempt = 1
-
-        while time.time() - start_time < max_wait_seconds:
+        async with self._get_optimized_session() as session:
             try:
-                self.logger.info(f"🔄 Progress check attempt #{attempt}")
+                self.logger.info(f"Standard API request to: {api_url}")
 
-                async with self._session_context() as session:
-                    async with session.get(progress_url) as response:
-                        if response.status == 200:
-                            try:
-                                progress_data = await response.json()
-                                self.logger.info(f"📊 Progress data: {progress_data}")
+                async with session.get(api_url, params=params) as response:
+                    self.logger.info(f"API response status: {response.status}")
 
-                                # Проверить статус завершения
-                                status = progress_data.get('status', '')
-                                download_url = progress_data.get('download_url', '')
+                    if response.status != 200:
+                        error_text = await response.text()
+                        self.logger.error(f"API error {response.status}: {error_text[:200]}")
+                        return DownloadInfo(False, error_message=f"API ошибка: {response.status}")
 
-                                if status == 'completed' or download_url:
-                                    self.logger.info("✅ Download completed!")
-                                    return progress_data
+                    data = await response.json()
+                    self.logger.info(f"API response data keys: {list(data.keys())}")
 
-                                elif status == 'error':
-                                    self.logger.error(f"❌ Download error: {progress_data}")
-                                    return None
+                    if not data.get('success'):
+                        error_msg = data.get('error', 'Видео недоступно')
+                        self.logger.warning(f"API returned success=false: {error_msg}")
+                        return DownloadInfo(False, error_message=error_msg)
 
-                                elif status in ['processing', 'pending', 'in_progress']:
-                                    self.logger.info(f"⏳ Still processing... Status: {status}")
-
-                                else:
-                                    self.logger.info(f"⚠️ Unknown status: {status}, checking other fields...")
-                                    # Проверить альтернативные поля
-                                    for field in ['url', 'link', 'file_url', 'media_url']:
-                                        if progress_data.get(field):
-                                            progress_data['download_url'] = progress_data[field]
-                                            return progress_data
-
-                            except Exception as json_error:
-                                self.logger.error(f"Progress JSON error: {json_error}")
-                                response_text = await response.text()
-                                self.logger.error(f"Raw response: {response_text[:200]}")
-
-                        else:
-                            self.logger.warning(f"Progress check HTTP {response.status}")
+                    return DownloadInfo(
+                        success=True,
+                        title=data.get('title', 'Video')[:80],
+                        thumbnail_url=data.get('info', {}).get('image', ''),
+                        progress_url=data.get('progress_url', '')
+                    )
 
             except Exception as e:
-                self.logger.error(f"Progress check error: {e}")
+                self.logger.error(f"Standard API request error: {e}")
+                return DownloadInfo(False, error_message=f"Сетевая ошибка: {str(e)}")
 
-            # Подождать перед следующей попыткой
-            elapsed = time.time() - start_time
-            remaining = max_wait_seconds - elapsed
+    async def check_progress_fast(self, progress_url: str, direct_url: str = "") -> Optional[Dict[str, Any]]:
+        """Быстрая проверка прогресса с fallback на прямую ссылку"""
+        if not progress_url:
+            self.logger.warning("No progress URL provided")
+            if direct_url:
+                return {'download_url': direct_url, 'status': 'completed'}
+            return None
 
-            if remaining > self.config.PROGRESS_CHECK_INTERVAL:
+        self.logger.info(f"Starting fast progress check: {progress_url}")
+        start_time = time.time()
+        max_wait = self.config.MAX_WAIT_MINUTES * 60
+
+        attempt = 1
+        while time.time() - start_time < max_wait:
+            try:
+                self.logger.info(f"Progress check attempt {attempt}")
+
+                async with self._get_optimized_session() as session:
+                    async with session.get(progress_url, timeout=10) as response:
+                        if response.status == 200:
+                            progress_data = await response.json()
+                            self.logger.info(f"Progress data: {progress_data}")
+
+                            status = progress_data.get('status', '')
+                            download_url = progress_data.get('download_url', '')
+
+                            if status == 'completed' or download_url:
+                                elapsed = time.time() - start_time
+                                self.logger.info(f"Progress completed in {elapsed:.2f}s")
+                                return progress_data
+
+                            if status == 'error':
+                                self.logger.error(f"Progress error: {progress_data}")
+                                # Используем прямую ссылку если есть
+                                if direct_url:
+                                    return {'download_url': direct_url, 'status': 'completed'}
+                                return None
+
+                            # Проверяем альтернативные поля
+                            for field in ['url', 'link', 'file_url', 'media_url']:
+                                if progress_data.get(field):
+                                    progress_data['download_url'] = progress_data[field]
+                                    return progress_data
+
+            except Exception as e:
+                self.logger.warning(f"Progress check error: {e}")
+
+            # Если прогресс не готов слишком долго, используем прямую ссылку
+            if time.time() - start_time > 30 and direct_url:
+                self.logger.info("Using direct URL due to slow progress")
+                return {'download_url': direct_url, 'status': 'completed'}
+
+            if time.time() - start_time < max_wait:
                 await asyncio.sleep(self.config.PROGRESS_CHECK_INTERVAL)
                 attempt += 1
-            else:
-                break
 
-        self.logger.error(f"⏰ Progress check timeout after {self.config.MAX_WAIT_MINUTES} minutes")
+        self.logger.warning(f"Progress check timeout after {max_wait}s")
+
+        # Последняя попытка с прямой ссылкой
+        if direct_url:
+            self.logger.info("Using direct URL as fallback")
+            return {'download_url': direct_url, 'status': 'completed'}
+
         return None
 
-    async def download_file(self, download_url: str, filepath: str,
-                            progress_callback=None) -> Tuple[bool, str]:
-        """Загрузка файла с прогрессом"""
-        try:
-            self.logger.info(f"📥 Starting download: {download_url}")
+    async def download_file_fast(self, download_url: str, filepath: str,
+                                 progress_callback=None) -> Tuple[bool, str]:
+        """Быстрая загрузка файла"""
+        self.logger.info(f"Starting fast download: {download_url}")
+        start_time = time.time()
 
-            async with self._session_context() as session:
+        try:
+            async with self._get_optimized_session() as session:
                 async with session.get(download_url) as response:
                     if response.status != 200:
+                        self.logger.error(f"Download failed: HTTP {response.status}")
                         return False, f"Download failed: HTTP {response.status}"
 
                     total_size = int(response.headers.get('content-length', 0))
                     total_size_mb = total_size / (1024 * 1024) if total_size else 0
 
-                    self.logger.info(f"📦 File size: {total_size_mb:.1f} MB")
+                    self.logger.info(f"File size: {total_size_mb:.1f} MB")
 
                     if total_size_mb > self.config.MAX_FILE_SIZE_MB:
                         return False, f"Файл слишком большой: {total_size_mb:.1f} MB"
 
                     downloaded = 0
-                    last_progress_update = 0
+                    last_progress_time = 0
 
                     with open(filepath, 'wb') as file:
                         async for chunk in response.content.iter_chunked(self.config.CHUNK_SIZE):
                             file.write(chunk)
                             downloaded += len(chunk)
 
-                            # Обновить прогресс
+                            # Обновляем прогресс реже для скорости
+                            current_time = time.time()
                             if (progress_callback and total_size > 0 and
-                                    downloaded - last_progress_update >= self.config.PROGRESS_UPDATE_THRESHOLD):
+                                    current_time - last_progress_time > 2):  # Каждые 2 секунды
+
                                 progress_percent = (downloaded / total_size) * 100
                                 await progress_callback(progress_percent, downloaded, total_size)
-                                last_progress_update = downloaded
+                                last_progress_time = current_time
 
-                    self.logger.info(f"✅ Download completed: {downloaded} bytes")
-                    return True, "Загрузка успешно завершена"
+                    elapsed = time.time() - start_time
+                    speed_mbps = (downloaded / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+                    self.logger.info(f"Download completed in {elapsed:.2f}s at {speed_mbps:.1f} MB/s")
+
+                    return True, "Загрузка завершена успешно"
 
         except Exception as e:
-            self.logger.error(f"Download error: {e}")
+            self.logger.error(f"Fast download error: {e}")
             return False, f"Ошибка загрузки: {str(e)}"
 
 
-class YouTubeBotHandler:
-    def __init__(self, downloader: YouTubeDownloader):
+class FastYouTubeBotHandler:
+    def __init__(self, downloader: FastYouTubeDownloader):
         self.downloader = downloader
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def create_format_keyboard(self) -> InlineKeyboardBuilder:
-        """Клавиатура выбора формата"""
         keyboard = InlineKeyboardBuilder()
 
+        # Сначала быстрые форматы
         for format_enum in VideoFormat:
             keyboard.row(InlineKeyboardButton(
                 text=format_enum.value[1],
-                callback_data=f"yt_api_{format_enum.value[0]}"
+                callback_data=f"yt_fast_{format_enum.value[0]}"
             ))
 
-        keyboard.row(InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_download"))
+        keyboard.row(InlineKeyboardButton(text="Отмена", callback_data="cancel_download"))
         return keyboard
 
     async def handle_youtube_url(self, message: Message, url: str, state: FSMContext):
-        """Обработка YouTube URL"""
-        progress_msg = await message.answer("🔍 Проверяю YouTube видео...")
+        self.logger.info(f"Handling YouTube URL: {url}")
+        progress_msg = await message.answer("Проверяю видео...")
 
         try:
-            # Получить информацию о видео с retry
-            video_info = await self.downloader.get_video_info_with_retry(url, "720")
+            start_time = time.time()
+
+            # Быстрое получение информации
+            video_info = await self.downloader.get_video_info_fast(url, "720")
+
+            elapsed = time.time() - start_time
+            self.logger.info(f"Video info retrieved in {elapsed:.2f}s")
 
             if not video_info.success:
-                await progress_msg.edit_text(
-                    f"❌ <b>Ошибка:</b> {video_info.error_message}",
-                    parse_mode="HTML"
-                )
+                await progress_msg.edit_text(f"Ошибка: {video_info.error_message}")
                 return
 
-            # Сохранить в state
             await state.update_data(
                 youtube_url=url,
                 video_title=video_info.title,
-                progress_url=video_info.progress_url
+                progress_url=video_info.progress_url,
+                direct_url=video_info.direct_url
             )
 
             info_text = (
-                f"✅ <b>YouTube видео найдено!</b>\n\n"
-                f"🎥 <b>{video_info.title}</b>\n"
-                f"🔗 <b>URL:</b> {url[:50]}...\n\n"
-                f"📥 <b>Выберите формат:</b>"
+                f"Видео найдено!\n\n"
+                f"Название: {video_info.title}\n"
+                f"URL: {url[:50]}...\n\n"
+                f"Выберите качество (рекомендуется быстрые варианты):"
             )
 
             keyboard = self.create_format_keyboard()
-            await progress_msg.edit_text(
-                info_text,
-                reply_markup=keyboard.as_markup(),
-                parse_mode="HTML"
-            )
+            await progress_msg.edit_text(info_text, reply_markup=keyboard.as_markup())
 
         except Exception as e:
-            self.logger.error(f"Handle YouTube URL error: {e}")
-            await progress_msg.edit_text("❌ Ошибка при получении информации о видео")
+            self.logger.error(f"Handle URL error: {e}")
+            await progress_msg.edit_text("Ошибка при обработке ссылки")
 
     async def process_download_callback(self, callback: CallbackQuery, state: FSMContext):
-        """Обработка callback загрузки - ИСПРАВЛЕНО"""
+        """Максимально быстрая обработка callback"""
+        callback_start = time.time()
+
         try:
-            # КРИТИЧНО: Сразу ответить на callback
+            # Немедленный ответ
             await callback.answer()
 
-            format_choice = callback.data.replace("yt_api_", "")
+            format_choice = callback.data.replace("yt_fast_", "")
             data = await state.get_data()
 
             video_url = data.get('youtube_url')
             video_title = data.get('video_title', 'Video')
+            direct_url = data.get('direct_url', '')
 
             if not video_url:
-                await callback.message.edit_text("❌ Информация о видео не найдена")
+                await callback.message.edit_text("Информация о видео потеряна")
                 return
 
-            # Немедленно показать начало процесса
+            self.logger.info(f"Processing download: format={format_choice}, direct_url_available={bool(direct_url)}")
+
+            # Немедленно показываем начало
             await callback.message.edit_text(
-                f"⚡ <b>Загрузка начата!</b>\n\n"
-                f"🎥 <b>{video_title[:50]}...</b>\n"
-                f"🎯 <b>Формат:</b> {format_choice}\n\n"
-                f"⏳ <b>Статус:</b> Подготовка видео...",
-                parse_mode="HTML"
+                f"Загрузка начата!\n\n"
+                f"Видео: {video_title[:50]}...\n"
+                f"Качество: {format_choice}\n\n"
+                f"Статус: Получаю файл..."
             )
 
-            # Запустить загрузку в background
+            # Быстрый download в background
             asyncio.create_task(
-                self._download_and_send_background(callback, video_url, video_title, format_choice)
+                self._super_fast_download(callback, video_url, video_title, format_choice, direct_url)
             )
+
+            elapsed = time.time() - callback_start
+            self.logger.info(f"Callback processed in {elapsed:.2f}s")
 
         except Exception as e:
-            self.logger.error(f"Download callback error: {e}")
+            self.logger.error(f"Callback error: {e}")
             try:
-                await callback.message.edit_text("❌ Ошибка при загрузке")
+                await callback.message.edit_text("Ошибка обработки")
             except:
-                await callback.message.answer("❌ Ошибка при загрузке")
+                pass
 
-    async def _download_and_send_background(self, callback: CallbackQuery, video_url: str,
-                                            video_title: str, format_choice: str):
-        """Background загрузка"""
+    async def _super_fast_download(self, callback: CallbackQuery, video_url: str,
+                                   video_title: str, format_choice: str, direct_url: str = ""):
+        """Сверхбыстрая загрузка"""
         temp_dir = None
+        total_start = time.time()
+
         try:
-            # Получить формат
-            format_info = next((f for f in VideoFormat if f.value[0] == format_choice), VideoFormat.P720)
-            api_format = format_info.value[2]
+            self.logger.info(f"Super fast download started for format: {format_choice}")
 
-            # Обновить статус
-            await self._safe_edit_message(
-                callback.message,
-                f"⏳ <b>Отправляю API запрос...</b>\n\n"
-                f"🎥 <b>{video_title[:50]}...</b>\n"
-                f"🎯 <b>Качество:</b> {format_choice}"
-            )
-
-            # Получить информацию о видео
-            video_info = await self.downloader.get_video_info_with_retry(video_url, api_format)
-            if not video_info.success:
-                await self._safe_edit_message(callback.message, f"❌ {video_info.error_message}")
-                return
-
-            # Проверить прогресс
-            await self._safe_edit_message(
-                callback.message,
-                f"⏳ <b>Видео готовится...</b>\n\n"
-                f"🎥 <b>{video_title[:50]}...</b>\n"
-                f"🎯 <b>Качество:</b> {format_choice}\n"
-                f"⏱ <b>Максимальное время:</b> {self.downloader.config.MAX_WAIT_MINUTES} мин"
-            )
-
-            progress_data = await self.downloader.check_download_progress_extended(video_info.progress_url)
-            if not progress_data or not progress_data.get('download_url'):
-                await self._safe_edit_message(
-                    callback.message,
-                    f"⏰ Видео не готово за {self.downloader.config.MAX_WAIT_MINUTES} минут.\n\n"
-                    f"💡 Попробуйте позже или выберите другое качество."
-                )
-                return
-
-            # Создать временную папку
-            temp_dir = tempfile.mkdtemp(prefix='yt_api_')
-            file_ext = self.downloader._get_file_extension(format_choice)
+            # Создаем временную папку
+            temp_dir = tempfile.mkdtemp(prefix='yt_fast_')
+            file_ext = "mp3" if format_choice == "audio" else "mp4"
             filename = f"{self.downloader._sanitize_filename(video_title)}.{file_ext}"
             filepath = os.path.join(temp_dir, filename)
 
-            # Callback для прогресса
-            async def safe_progress_callback(percent, downloaded_bytes, total_bytes):
-                try:
-                    downloaded_mb = downloaded_bytes / (1024 * 1024)
-                    await callback.message.edit_text(
-                        f"⏬ <b>Загружается: {percent:.0f}%</b>\n\n"
-                        f"🎥 <b>{video_title[:50]}...</b>\n"
-                        f"📦 <b>Загружено:</b> {downloaded_mb:.1f} MB",
-                        parse_mode="HTML"
-                    )
-                except:
-                    pass  # Игнорировать ошибки обновления прогресса
+            # Определяем API формат
+            format_info = next((f for f in VideoFormat if f.value[0] == format_choice), VideoFormat.P720)
+            api_format = format_info.value[2]
 
-            # Загрузить файл
-            success, message = await self.downloader.download_file(
-                progress_data['download_url'],
-                filepath,
-                safe_progress_callback
-            )
+            # Если есть прямая ссылка, пропускаем API запросы
+            if direct_url:
+                self.logger.info("Using direct URL, skipping API calls")
+                download_url = direct_url
+            else:
+                # Быстрое получение информации
+                await self._safe_edit(callback.message,
+                                      f"Получаю ссылку для загрузки...\n\n"
+                                      f"Видео: {video_title[:50]}...")
+
+                video_info = await self.downloader.get_video_info_fast(video_url, api_format)
+                if not video_info.success:
+                    await self._safe_edit(callback.message, f"Ошибка: {video_info.error_message}")
+                    return
+
+                # Быстрая проверка прогресса
+                progress_data = await self.downloader.check_progress_fast(
+                    video_info.progress_url, video_info.direct_url)
+
+                if not progress_data or not progress_data.get('download_url'):
+                    await self._safe_edit(callback.message,
+                                          f"Видео не готово за {self.downloader.config.MAX_WAIT_MINUTES} мин")
+                    return
+
+                download_url = progress_data['download_url']
+
+            # Быстрая загрузка
+            await self._safe_edit(callback.message,
+                                  f"Загружаю файл...\n\n"
+                                  f"Видео: {video_title[:50]}...")
+
+            # Progress callback (вызываем реже)
+            async def fast_progress(percent, downloaded_bytes, total_bytes):
+                try:
+                    if percent % 25 == 0:  # Только каждые 25%
+                        downloaded_mb = downloaded_bytes / (1024 * 1024)
+                        await callback.message.edit_text(
+                            f"Загружается: {percent:.0f}%\n\n"
+                            f"Видео: {video_title[:50]}...\n"
+                            f"Загружено: {downloaded_mb:.1f} MB"
+                        )
+                except:
+                    pass
+
+            success, message = await self.downloader.download_file_fast(
+                download_url, filepath, fast_progress)
 
             if not success:
-                await self._safe_edit_message(callback.message, f"❌ {message}")
+                await self._safe_edit(callback.message, f"Ошибка: {message}")
                 return
 
-            # Отправить в Telegram
-            await self._send_to_telegram_safe(callback, filepath, video_title, format_choice, file_ext)
+            # Отправка в Telegram
+            await self._send_to_telegram_ultra_fast(callback, filepath, video_title, format_choice, file_ext)
+
+            total_elapsed = time.time() - total_start
+            self.logger.info(f"Total process completed in {total_elapsed:.2f}s")
 
         except Exception as e:
-            self.logger.error(f"Background download error: {e}")
-            await self._safe_edit_message(callback.message, "❌ Ошибка при загрузке")
+            self.logger.error(f"Super fast download error: {e}")
+            await self._safe_edit(callback.message, "Критическая ошибка загрузки")
         finally:
-            # Очистить временные файлы
             if temp_dir and os.path.exists(temp_dir):
                 try:
                     shutil.rmtree(temp_dir)
-                except Exception as e:
-                    self.logger.warning(f"Temp cleanup error: {e}")
+                except:
+                    pass
 
-    async def _safe_edit_message(self, message, text: str):
-        """Безопасное редактирование сообщения"""
+    async def _safe_edit(self, message, text: str):
         try:
-            await message.edit_text(text, parse_mode="HTML")
-        except Exception:
-            try:
-                await message.answer(text, parse_mode="HTML")
-            except Exception as e:
-                self.logger.error(f"Could not send message: {e}")
+            await message.edit_text(text)
+        except:
+            pass
 
-    async def _send_to_telegram_safe(self, callback: CallbackQuery, filepath: str,
-                                     video_title: str, format_choice: str, file_ext: str):
-        """Безопасная отправка в Telegram"""
+    async def _send_to_telegram_ultra_fast(self, callback: CallbackQuery, filepath: str,
+                                           video_title: str, format_choice: str, file_ext: str):
+        send_start = time.time()
+
         try:
             file_size = os.path.getsize(filepath)
             file_size_mb = file_size / (1024 * 1024)
 
-            caption = (
-                f"🎥 {video_title}\n"
-                f"📦 Размер: {file_size_mb:.1f} MB\n"
-                f"🎯 Качество: {format_choice}\n"
-                f"🚀 Загружено через YouTube API"
-            )
+            caption = f"Видео: {video_title}\nРазмер: {file_size_mb:.1f} MB\nКачество: {format_choice}"
 
-            await self._safe_edit_message(
-                callback.message,
-                f"📤 <b>Отправляю в Telegram...</b>\n\n🎥 <b>{video_title[:50]}...</b>"
-            )
+            await self._safe_edit(callback.message, f"Отправляю в Telegram...\n\nВидео: {video_title[:50]}...")
 
             file_input = FSInputFile(filepath)
 
-            # Отправить файл
+            # Отправляем без лишних параметров для скорости
             if file_ext == "mp3":
                 await callback.bot.send_audio(
                     chat_id=callback.message.chat.id,
                     audio=file_input,
                     caption=caption,
-                    title=video_title,
-                    request_timeout=300
+                    request_timeout=120
                 )
             else:
                 await callback.bot.send_video(
                     chat_id=callback.message.chat.id,
                     video=file_input,
                     caption=caption,
-                    supports_streaming=True,
-                    request_timeout=300
+                    request_timeout=120
                 )
 
-            # Удалить исходное сообщение
             try:
                 await callback.message.delete()
             except:
-                await callback.message.edit_text("✅ Файл успешно отправлен!")
+                await callback.message.edit_text("Файл отправлен!")
 
-            self.logger.info("✅ File sent successfully!")
+            send_elapsed = time.time() - send_start
+            self.logger.info(f"File sent in {send_elapsed:.2f}s")
 
         except Exception as e:
             self.logger.error(f"Send error: {e}")
-            # Попробовать отправить как документ
+            # Быстрый fallback на документ
             try:
                 await callback.bot.send_document(
                     chat_id=callback.message.chat.id,
-                    document=FSInputFile(filepath),
+                    document=file_input,
                     caption=caption
                 )
-                try:
-                    await callback.message.delete()
-                except:
-                    await callback.message.edit_text("✅ Файл отправлен как документ!")
+                await callback.message.delete()
             except Exception as doc_error:
                 self.logger.error(f"Document send error: {doc_error}")
-                await self._safe_edit_message(callback.message, "❌ Ошибка при отправке файла")
+                await self._safe_edit(callback.message, "Ошибка отправки файла")
 
 
-# === MAIN HANDLERS ===
+# Инициализация оптимизированных компонентов
 config = Config()
-downloader = YouTubeDownloader(config)
-bot_handler = YouTubeBotHandler(downloader)
+fast_downloader = FastYouTubeDownloader(config)
+fast_handler = FastYouTubeBotHandler(fast_downloader)
 
 
 @client_bot_router.message(DownloaderBotFilter())
 @client_bot_router.message(Download.download)
-async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
-    """Основной обработчик YouTube загрузки"""
+async def youtube_fast_handler(message: Message, state: FSMContext, bot: Bot):
     if not message.text:
-        await message.answer("❗ Отправьте ссылку на видео")
+        await message.answer("Отправьте ссылку на видео")
         return
 
     url = message.text.strip()
 
     if 'youtube.com' in url or 'youtu.be' in url:
-        await bot_handler.handle_youtube_url(message, url, state)
+        logger.info(f"Processing YouTube URL: {url}")
+        await fast_handler.handle_youtube_url(message, url, state)
     else:
-        await message.answer("❗ Пожалуйста, отправьте ссылку на YouTube")
+        await message.answer("Отправьте ссылку на YouTube")
 
 
-@client_bot_router.callback_query(F.data.startswith("yt_api_"))
-async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
-    """Обработчик callback загрузки YouTube"""
-    await bot_handler.process_download_callback(callback, state)
+@client_bot_router.callback_query(F.data.startswith("yt_fast_"))
+async def process_fast_download(callback: CallbackQuery, state: FSMContext):
+    logger.info(f"Fast download callback: {callback.data}")
+    await fast_handler.process_download_callback(callback, state)
 
 
 @client_bot_router.callback_query(F.data == "cancel_download")
-async def cancel_download_callback(callback: CallbackQuery, state: FSMContext):
-    """Отмена загрузки"""
+async def cancel_fast_download(callback: CallbackQuery, state: FSMContext):
     try:
         await callback.answer("Отменено")
-        await callback.message.edit_text("❌ <b>Загрузка отменена</b>", parse_mode="HTML")
+        await callback.message.edit_text("Загрузка отменена")
         await state.clear()
-    except Exception:
-        try:
-            await callback.message.answer("❌ Отменено")
-        except:
-            pass
+    except:
+        pass
