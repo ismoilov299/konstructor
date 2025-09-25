@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import time
 import traceback
-from contextlib import suppress
+from contextlib import suppress, asynccontextmanager
 import shutil
 from dataclasses import dataclass
 from datetime import timedelta, datetime
