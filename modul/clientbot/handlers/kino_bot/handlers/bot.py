@@ -3214,6 +3214,32 @@ async def handle_youtube(message: Message, url: str, me, bot, state: FSMContext)
 
 @client_bot_router.callback_query(F.data.startswith("yt_api_"))
 async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
+    await bot_handler.process_download_callback(callback, state)
+
+
+config = Config()
+downloader = YouTubeDownloader(config)
+bot_handler = YouTubeBotHandler(downloader)
+
+
+@client_bot_router.message(DownloaderBotFilter())
+@client_bot_router.message(Download.download)
+async def youtube_download_handler(message: Message, state: FSMContext, bot: Bot):
+    """Asosiy YouTube download handler - TEZKOR"""
+    if not message.text:
+        await message.answer("❗ Video havolasini yuboring")
+        return
+
+    url = message.text.strip()
+
+    if 'youtube.com' in url or 'youtu.be' in url:
+        await bot_handler.handle_youtube_url(message, url, state)
+    else:
+        await message.answer("❗ Iltimos, YouTube havolasini yuboring")
+
+
+@client_bot_router.callback_query(F.data.startswith("yt_api_"))
+async def process_youtube_api_download(callback: CallbackQuery, state: FSMContext):
     """YouTube download callback handler - TEZKOR"""
     await bot_handler.process_download_callback(callback, state)
 
