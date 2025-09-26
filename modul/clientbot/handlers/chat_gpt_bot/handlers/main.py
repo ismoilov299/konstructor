@@ -727,18 +727,16 @@ async def top_up_balance_callback(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+
 @client_bot_router.callback_query(F.data.startswith("topup_"))
 async def topup_redirect_callback(callback: types.CallbackQuery):
-    stars_amount = callback.data.replace("topup_", "").replace("_stars", "")
+    stars_amount = callback.data.replace("topup_", "").replace("_star", "").replace("_stars", "")
     stars_to_rubles = {
-        "10": "50",
-        "25": "150",
-        "50": "350",
-        "100": "750",
-        "200": "1500"
+        "1": "5",
+        "5": "25"
     }
-    rubles = stars_to_rubles.get(stars_amount, "50")
-    main_bot_username = "YOUR_MAIN_BOT_USERNAME"  # Bu yerni o'zgartiring
+    rubles = stars_to_rubles.get(stars_amount, "5")
+    main_bot_username = "test_new_my_robot"  # Bu yerni o'zgartiring
 
     await callback.message.edit_text(
         f"💎 <b>Пополнение на {stars_amount} Stars ({rubles}₽)</b>\n\n"
