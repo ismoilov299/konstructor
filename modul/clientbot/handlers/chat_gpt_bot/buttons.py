@@ -22,13 +22,10 @@ def balance_menu():
 
 def top_up_options():
     builder = InlineKeyboardBuilder()
-    builder.button(text='💎 10 Stars = 50₽', callback_data='topup_10_stars')
-    builder.button(text='💎 25 Stars = 150₽', callback_data='topup_25_stars')
-    builder.button(text='💎 50 Stars = 350₽', callback_data='topup_50_stars')
-    builder.button(text='💎 100 Stars = 750₽', callback_data='topup_100_stars')
-    builder.button(text='💎 200 Stars = 1500₽', callback_data='topup_200_stars')
+    builder.button(text='💎 1 Star = 5₽', callback_data='topup_1_star')
+    builder.button(text='💎 5 Stars = 25₽', callback_data='topup_5_stars')
     builder.button(text='🔙 Назад', callback_data='show_balance')
-    builder.adjust(1, 1, 1, 1, 1, 1)
+    builder.adjust(1, 1, 1)
     return builder.as_markup()
 
 
@@ -143,10 +140,4 @@ def back_in_faq():
     return builder.as_markup()
 
 
-def faqs():
-    builder = InlineKeyboardBuilder()
-    builder.button(text='🤖 Что умеет бот?', callback_data='what')
-    builder.button(text='💲 Почему это платно?', callback_data='why')
-    builder.button(text='💳 Как пополнить', callback_data='how')
-    builder.button(text='🔙 Назад', callback_data='helper')
-    return builder.as_markup()
+
