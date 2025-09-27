@@ -427,3 +427,16 @@ class Rating_overall(models.Model):
     user_id = models.IntegerField()
     amount = models.IntegerField()
     reg_date = models.DateTimeField(auto_now_add=True)
+
+
+class PaymentTransaction(models.Model):
+    user_id = models.BigIntegerField()
+    bot_id = models.IntegerField()
+    amount_rubles = models.FloatField()
+    amount_stars = models.IntegerField()
+    payment_id = models.CharField(max_length=255)
+    status = models.CharField(max_length=50, default='completed')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'payment_transactions'
