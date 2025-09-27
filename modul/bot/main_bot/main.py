@@ -1,11 +1,14 @@
-# modul/bot/main_bot/main.py (tozalangan versiya)
+# modul/bot/main_bot/main.py (to'g'irlangan versiya)
 
 import asyncio
+from datetime import datetime
+
 from aiogram import Router, Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from asgiref.sync import sync_to_async
+from django.db.models import F as DjangoF
 
 from modul.config import settings_conf
 from modul.loader import main_bot_router, client_bot_router
@@ -13,29 +16,18 @@ from modul.models import User
 from modul.bot.main_bot.services.user_service import get_user_by_uid, create_user_directly
 from modul.bot.main_bot.handlers.create_bot import create_bot_router
 from modul.bot.main_bot.handlers.manage_bots import manage_bots_router
-
+from aiogram.types import LabeledPrice
 import requests
 import logging
 
 logger = logging.getLogger(__name__)
 
+ADMIN_CHAT_ID = 1161180912
+MAIN_BOT_USERNAME = "test_new_my_robot"
+
 webhook_url = 'https://ismoilov299.uz/login/'
 
 
-# def init_bot_handlers():
-#     """Инициализация всех хендлеров главного бота"""
-#     try:
-#         # Импорт всех хендлеров главного бота
-#         from modul.bot.main_bot.handlers import admin_panel
-#
-#         logger.info("✅ Main bot handlers loaded successfully")
-#         logger.info("✅ Admin panel handlers loaded")
-#
-#     except ImportError as e:
-#         logger.error(f"❌ Error importing main bot handlers: {e}")
-#     except Exception as e:
-#         logger.error(f"❌ Unexpected error in init_bot_handlers: {e}")
-# Keyboard funksiyalari
 async def main_menu():
     """Asosiy menyu klaviaturasi - yangilangan"""
     buttons = [
@@ -69,6 +61,14 @@ def init_bot_handlers():
         logger.info(f"Start command from user {message.from_user.id}")
         user = message.from_user
 
+        # Start komandaning argumentlarini tekshirish
+        args = message.text.split()
+
+        # Agar to'lov parametrlari bo'lsa
+        if len(args) > 1 and args[1].startswith("gptbot_"):
+            await handle_payment_start(message, args[1])
+            return
+
         try:
             # Foydalanuvchi mavjudligini async tekshirish
             db_user = await get_user_by_uid(user.id)
@@ -95,7 +95,6 @@ def init_bot_handlers():
                     await message.answer(
                         f"👋 <b>Добро пожаловать, {user.first_name}!</b>\n\n"
                         f"🤖 <b>Конструктор ботов</b> - создавайте и управляйте своими Telegram ботами!\n\n"
-                        # f"🎉 <b>Вы успешно зарегистрированы!</b>\n\n"
                         f"🔧 <b>Возможности:</b>\n"
                         f"• Создание ботов за 2-3 минуты\n"
                         f"• 6 профессиональных ботов\n"
@@ -121,6 +120,147 @@ def init_bot_handlers():
             await message.answer(
                 "❌ Произошла ошибка. Попробуйте еще раз.\n"
                 "/start",
+                parse_mode="HTML"
+            )
+
+    async def handle_payment_start(message: Message, payment_args: str):
+        """To'lov parametrlarini qayta ishlash"""
+        try:
+            parts = payment_args.split("_")
+            if len(parts) >= 4:  # gptbot_user_id_stars_bot_id
+                client_user_id = int(parts[1])
+                stars_amount = int(parts[2])
+                bot_id = int(parts[3])
+
+                stars_to_rubles = {
+                    1: 5,
+                    5: 25
+                }
+
+                if stars_amount not in stars_to_rubles:
+                    await message.answer(
+                        "❌ Неверная сумма для пополнения.\n"
+                        "Доступные варианты: 1 или 5 звезд",
+                        parse_mode="HTML"
+                    )
+                    return
+
+                rubles_amount = stars_to_rubles[stars_amount]
+
+                await message.answer_invoice(
+                    title=f"Пополнение баланса ChatGPT бота",
+                    description=f"Пополнение баланса на {rubles_amount}₽ для ChatGPT бота",
+                    payload=f"gptbot_topup_{client_user_id}_{stars_amount}_{rubles_amount}_{bot_id}",
+                    currency="XTR",  # Telegram Stars currency
+                    prices=[LabeledPrice(label=f"{stars_amount} ⭐️", amount=stars_amount)],
+                    provider_token="",  # Bo'sh string Stars uchun
+                )
+
+                logger.info(
+                    f"Invoice sent to user {message.from_user.id} for {stars_amount} stars ({rubles_amount} rubles) for client {client_user_id}, bot_id {bot_id}")
+
+            else:
+                await message.answer(
+                    "❌ Неверные параметры платежа.\n"
+                    "Попробуйте перейти по ссылке еще раз.",
+                    parse_mode="HTML"
+                )
+
+        except (ValueError, IndexError) as e:
+            logger.error(f"Error parsing payment args {payment_args}: {e}")
+            await message.answer(
+                "❌ Ошибка обработки параметров платежа.\n"
+                "Попробуйте перейти по ссылке еще раз.",
+                parse_mode="HTML"
+            )
+
+    @main_bot_router.pre_checkout_query()
+    async def pre_checkout_query_handler(pre_checkout_query):
+        """To'lovdan oldin tekshirish"""
+        try:
+            payload = pre_checkout_query.invoice_payload
+            if payload.startswith("gptbot_topup_"):
+                parts = payload.split("_")
+                client_user_id = int(parts[2])
+                stars_amount = int(parts[3])
+                rubles_amount = int(parts[4])
+                bot_id = int(parts[5])  # Bot ID ni to'g'ri parse qilish
+
+                logger.info(
+                    f"Pre-checkout query for {stars_amount} stars ({rubles_amount} rubles) for client {client_user_id}, bot_id {bot_id}")
+
+                # To'lovni tasdiqlash
+                await pre_checkout_query.answer(ok=True)
+            else:
+                await pre_checkout_query.answer(ok=False, error_message="Неверный платеж")
+
+        except Exception as e:
+            logger.error(f"Error in pre_checkout_query: {e}")
+            await pre_checkout_query.answer(ok=False, error_message="Ошибка обработки платежа")
+
+    @main_bot_router.message(F.successful_payment)
+    async def successful_payment_handler(message: Message):
+        """Muvaffaqiyatli to'lov handleri"""
+        try:
+            payment = message.successful_payment
+            payload = payment.invoice_payload
+
+            if payload.startswith("gptbot_topup_"):
+                parts = payload.split("_")
+                client_user_id = int(parts[2])
+                stars_amount = int(parts[3])
+                rubles_amount = float(parts[4])
+                bot_id = int(parts[5])  # Bot ID ni to'g'ri parse qilish
+
+                # Telegram payment ID
+                payment_id = payment.telegram_payment_charge_id
+
+                # SIZNING FUNKSIYANGIZNI ISHLATISH
+                success = await User.add_user_balance(client_user_id, bot_id, rubles_amount)
+
+                if success:
+                    # Admin ga xabar yuborish
+                    await send_admin_notification(
+                        message.bot, client_user_id, bot_id,
+                        stars_amount, rubles_amount, payment_id
+                    )
+
+                    # Foydalanuvchiga xabar yuborish (agar kerak bo'lsa)
+                    await send_user_notification(client_user_id, bot_id, rubles_amount)
+
+                    await message.answer(
+                        f"✅ <b>Оплата прошла успешно!</b>\n\n"
+                        f"💎 Оплачено: {stars_amount} ⭐️\n"
+                        f"💰 Зачислено: {rubles_amount}₽\n"
+                        f"👤 Пользователь: <code>{client_user_id}</code>\n"
+                        f"🤖 Бот ID: {bot_id}\n"
+                        f"🔗 ID платежа: <code>{payment_id}</code>\n\n"
+                        f"🔄 Баланс обновлен автоматически!\n"
+                        f"📬 Уведомления отправлены!",
+                        parse_mode="HTML"
+                    )
+
+                    logger.info(
+                        f"Successfully added {rubles_amount} rubles to user {client_user_id} balance for bot {bot_id}")
+
+                else:
+                    await message.answer(
+                        f"⚠️ <b>Оплата получена, но возникла ошибка при зачислении!</b>\n\n"
+                        f"💎 Оплачено: {stars_amount} ⭐️\n"
+                        f"💰 Сумма: {rubles_amount}₽\n"
+                        f"👤 Пользователь: <code>{client_user_id}</code>\n"
+                        f"🤖 Бот ID: {bot_id}\n"
+                        f"🔗 ID платежа: <code>{payment_id}</code>\n\n"
+                        f"📞 Требуется ручная проверка!",
+                        parse_mode="HTML"
+                    )
+                    logger.error(f"Payment received but failed to add balance for user {client_user_id}, bot {bot_id}")
+
+        except Exception as e:
+            logger.error(f"Error in successful_payment_handler: {e}")
+            await message.answer(
+                "❌ Критическая ошибка при обработке оплаты.\n"
+                "Администратор будет уведомлен.",
                 parse_mode="HTML"
             )
 
@@ -193,7 +333,7 @@ def init_bot_handlers():
             f"💬 <b>ChatGPT</b> - ИИ помощник\n"
             f"❤️ <b>Знакомства</b> - система знакомств Leo Match\n"
             f"👤 <b>Анонимный чат</b> - анонимное общение\n"
-            
+
             f"💡 <b>Преимущества:</b>\n"
             f"• Без кодирования\n"
             f"• Мгновенный запуск\n"
@@ -288,6 +428,92 @@ def init_bot_handlers():
     main_bot_router.include_router(manage_bots_router)
 
     logger.info("Main bot handlers initialized successfully!")
+
+
+# ==== YORDAMCHI FUNKSIYALAR ====
+
+@sync_to_async
+def get_user_info(user_id: int, bot_id: int):
+    """Foydalanuvchi ma'lumotlarini olish"""
+    try:
+        user = User.objects.filter(tg_id=user_id, bot_id=bot_id).first()
+        if user:
+            return {
+                'username': getattr(user, 'username', 'Не указан'),
+                'first_name': getattr(user, 'first_name', 'Не указан'),
+                'balance': getattr(user, 'balance', 0)
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Error getting user info: {e}")
+        return None
+
+
+async def send_admin_notification(bot, user_id: int, bot_id: int, stars_amount: int, rubles_amount: float,
+                                  payment_id: str):
+    """Admin ga xabar yuborish"""
+    try:
+        # Foydalanuvchi ma'lumotlarini olish
+        user_info = await get_user_info(user_id, bot_id)
+
+        if user_info:
+            username = user_info.get('username', 'Не указан')
+            first_name = user_info.get('first_name', 'Не указан')
+            balance = user_info.get('balance', 0)
+        else:
+            username = 'Не найден'
+            first_name = 'Не найден'
+            balance = 0
+
+        message = (
+            f"💰 <b>НОВОЕ ПОПОЛНЕНИЕ</b>\n\n"
+            f"👤 <b>Пользователь:</b>\n"
+            f"• ID: <code>{user_id}</code>\n"
+            f"• Имя: {first_name}\n"
+            f"• Username: @{username}\n\n"
+            f"💎 <b>Детали платежа:</b>\n"
+            f"• Звезды: {stars_amount} ⭐️\n"
+            f"• Зачислено: {rubles_amount}₽\n"
+            f"• Бот ID: {bot_id}\n"
+            f"• Payment ID: <code>{payment_id}</code>\n\n"
+            f"💳 <b>Текущий баланс:</b> {balance}₽\n\n"
+            f"🕐 <b>Время:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+        )
+
+        await bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            text=message,
+            parse_mode="HTML"
+        )
+
+        logger.info(f"Admin notification sent for payment {payment_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error sending admin notification: {e}")
+        return False
+
+
+async def send_user_notification(user_id: int, bot_id: int, amount: float):
+    """Foydalanuvchiga xabar yuborish (client bot orqali)"""
+    try:
+        # Bu yerda client bot instancesini olish kerak
+        # Hozircha faqat log qilamiz
+        logger.info(f"Should send notification to user {user_id} about {amount}₽ top-up")
+
+        # Agar client bot token'lari ma'lum bo'lsa:
+        # client_bot = await get_client_bot_by_id(bot_id)
+        # if client_bot:
+        #     await client_bot.send_message(
+        #         chat_id=user_id,
+        #         text=f"✅ Баланс пополнен на {amount}₽!"
+        #     )
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error sending user notification: {e}")
+        return False
 
 
 # Test uchun alohida funksiya
